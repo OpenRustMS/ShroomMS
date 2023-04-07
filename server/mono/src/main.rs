@@ -4,9 +4,8 @@ use std::{
     time::Duration,
 };
 
-use data::services::{
-    meta::meta_service::MetaService, server_info::ServerInfo, Services, SharedServices,
-};
+use data::services::{meta::meta_service::MetaService, server_info::ServerInfo, SharedServices};
+use dotenv::dotenv;
 use login::{config::LoginConfig, LoginHandler};
 use shroom_net::net::{
     crypto::{ig_cipher::IgCipher, CryptoContext},
@@ -20,6 +19,8 @@ use shroom_net::net::{
 use tokio::{net::TcpStream, task::JoinSet};
 
 use shrooming::{FileIndex, FileSvr};
+
+use crate::config::Environment;
 
 mod config;
 
@@ -103,6 +104,7 @@ async fn srv_shrooming(addr: SocketAddr) -> anyhow::Result<()> {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     pretty_env_logger::init();
+    dotenv().ok();
     // Load configuration
     let settings = config::get_configuration().expect("Failed to load configuration");
     log::info!("{0} - Mono - {1}", settings.server_name, settings.version);
@@ -136,18 +138,28 @@ async fn main() -> anyhow::Result<()> {
     // Create login server
     let handshake_gen = match settings.client_version {
         83 => BasicHandshakeGenerator::v83(),
-        _ => BasicHandshakeGenerator::v95(),
+        95 => BasicHandshakeGenerator::v95(),
+        _ => anyhow::bail!("unexpected client version"),
     };
 
-    let meta = Box::new(MetaService::load_from_dir("../../game_data/rbin")?);
     // Meta will be available all the time
-    let static_meta = Box::leak(meta);
+    let meta = Box::new(MetaService::load_from_dir("../../game_data/rbin")?);
 
-    let services = Services::seeded_in_memory(servers, static_meta)
-        .await?
-        .as_shared();
-    let (acc_id, char_id) = services.seed_acc_char().await?;
-    log::info!("Created test account {acc_id} - char: {char_id}");
+    let services = match config::get_environment() {
+        Environment::Local => data::services::Services::seeded_in_memory(servers, Box::leak(meta))
+            .await?
+            .as_shared(),
+        _ => data::services::Services::seeded_in_db(servers, Box::leak(meta))
+            .await?
+            .as_shared(),
+    };
+    match config::get_environment() {
+        Environment::Local => {
+            let (acc_id, char_id) = services.seed_acc_char().await?;
+            log::info!("Created test account {acc_id} - char: {char_id}");
+        }
+        _ => {}
+    }
 
     let mut set = JoinSet::new();
     set.spawn(srv_login_server(
