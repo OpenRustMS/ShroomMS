@@ -431,7 +431,7 @@ impl GameHandler {
             })
             .collect();
 
-        let char_stat: &character::Model = &char.model.clone().into();
+        let char_stat: &character::Model = &char.model.clone();
 
         let char_data = CharDataAll {
             stat: CharDataStat {
@@ -556,7 +556,7 @@ impl GameHandler {
             pw.write_opcode(UserChatMsgResp::OPCODE)?;
             resp.encode_packet(&mut pw)?;
 
-            self.sess_handle.tx.try_send(&pw.into_packet().as_ref())?;
+            self.sess_handle.tx.try_send(pw.into_packet().as_ref())?;
         } else {
             self.field.add_chat(UserChatMsgResp {
                 char: self.session.char.model.id as u32,

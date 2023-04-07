@@ -228,7 +228,7 @@ mod tests {
         let meta = MetaService::load_from_dir("../../game_data/rbin")?;
         let field_1 = meta.get_field_data(MapId::SOUTHPERRY).unwrap();
 
-        let fh_tree = FhTree::from_meta(&field_1);
+        let fh_tree = FhTree::from_meta(field_1);
         dbg!(&fh_tree.bounds);
         let line0 = geo::Point::new(0., 0.);
         let mut svg = line0.to_svg();
