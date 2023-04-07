@@ -1,13 +1,21 @@
-use std::net::{IpAddr, SocketAddr};
+use std::{
+    net::{IpAddr, SocketAddr},
+    sync::Arc,
+    time::Duration,
+};
 
 use data::services::{
     meta::meta_service::MetaService, server_info::ServerInfo, Services, SharedServices,
 };
 use login::{config::LoginConfig, LoginHandler};
-use moople_net::service::{
-    handler::{BroadcastSender, MakeServerSessionHandler},
-    session_svc::{MapleServer, SharedSessionHandle},
-    BasicHandshakeGenerator, HandshakeGenerator,
+use shroom_net::net::{
+    crypto::{ig_cipher::IgCipher, CryptoContext},
+    service::{
+        handler::MakeServerSessionHandler,
+        server_sess::{SharedSessionHandle, ShroomServer, ShroomServerConfig},
+        BasicHandshakeGenerator, HandshakeGenerator,
+    },
+    ShroomSession,
 };
 use tokio::{net::TcpStream, task::JoinSet};
 
@@ -38,7 +46,7 @@ impl MakeServerSessionHandler for MakeLoginHandler {
 
     async fn make_handler(
         &mut self,
-        sess: &mut moople_net::MapleSession<Self::Transport>,
+        sess: &mut ShroomSession<Self::Transport>,
         _broadcast_tx: SharedSessionHandle,
     ) -> Result<Self::Handler, Self::Error> {
         Ok(LoginHandler::new(
@@ -50,23 +58,26 @@ impl MakeServerSessionHandler for MakeLoginHandler {
 }
 
 async fn srv_login_server(
+    cfg: ShroomServerConfig,
     addr: impl tokio::net::ToSocketAddrs,
     handshake_gen: impl HandshakeGenerator,
     services: SharedServices,
 ) -> anyhow::Result<()> {
-    let mut login_server = MapleServer::new(handshake_gen, MakeLoginHandler { services });
+    let mut login_server = ShroomServer::new(cfg, handshake_gen, MakeLoginHandler { services });
     login_server.serve_tcp(addr).await?;
     Ok(())
 }
 
 async fn srv_game_server(
+    cfg: ShroomServerConfig,
     addr: impl tokio::net::ToSocketAddrs,
     handshake_gen: impl HandshakeGenerator,
     services: SharedServices,
     world_id: u32,
     channel_id: u16,
 ) -> anyhow::Result<()> {
-    let mut game_server = MapleServer::new(
+    let mut game_server = ShroomServer::new(
+        cfg,
         handshake_gen,
         game::MakeGameHandler::new(services, channel_id, world_id),
     );
@@ -78,8 +89,8 @@ async fn srv_shrooming(addr: SocketAddr) -> anyhow::Result<()> {
     let file_ix = FileIndex::build_index(
         [
             "notes.txt",
-            "../../client/moople_hook/target/i686-pc-windows-gnu/release/dinput8.dll",
-            "../../target/i686-pc-windows-gnu/release/moople_launchar.exe",
+            "../../client/shroom_hook/target/i686-pc-windows-gnu/release/dinput8.dll",
+            "../../target/i686-pc-windows-gnu/release/shroom_launchar.exe",
         ]
         .iter(),
     )?;
@@ -95,6 +106,17 @@ async fn main() -> anyhow::Result<()> {
     // Load configuration
     let settings = config::get_configuration().expect("Failed to load configuration");
     log::info!("{0} - Mono - {1}", settings.server_name, settings.version);
+
+    //TODO add crypto keys to config
+    let crypto_ctx = CryptoContext {
+        aes_key: *include_bytes!("../../../keys/net/aes_key.bin"),
+        ig_cipher: IgCipher::new(
+            *include_bytes!("../../../keys/net/round_shifting_key.bin"),
+            u32::from_le_bytes(*include_bytes!("../../../keys/net/initial_round_key.bin")),
+        ),
+    };
+
+    let shared_ctx = Arc::new(crypto_ctx);
 
     let server_addr: IpAddr = settings.external_ip.parse()?;
     let bind_addr: IpAddr = settings.bind_ip.parse()?;
@@ -129,12 +151,20 @@ async fn main() -> anyhow::Result<()> {
 
     let mut set = JoinSet::new();
     set.spawn(srv_login_server(
+        ShroomServerConfig {
+            crypto_ctx: shared_ctx.clone(),
+            migrate_delay: Duration::from_millis(7500),
+        },
         SocketAddr::new(bind_addr, settings.base_port),
         handshake_gen.clone(),
         services.clone(),
     ));
     for ch in 0..settings.num_channels {
         set.spawn(srv_game_server(
+            ShroomServerConfig {
+                crypto_ctx: shared_ctx.clone(),
+                migrate_delay: Duration::from_millis(7500),
+            },
             SocketAddr::new(bind_addr, settings.base_port + 1 + ch as u16),
             handshake_gen.clone(),
             services.clone(),

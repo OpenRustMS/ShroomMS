@@ -1,8 +1,7 @@
-use moople_derive::MooplePacket;
-use moople_packet::{
-    packet_opcode,
-    proto::{conditional::CondOption, MapleList16, MapleList8},
-};
+use shroom_net_derive::ShroomPacket;
+use shroom_net::{packet::{
+    proto::{conditional::CondOption, ShroomList16, ShroomList8},
+}, packet_opcode};
 
 use crate::{recv_opcodes::RecvOpcodes, send_opcodes::SendOpcodes, shared::Vec2};
 
@@ -12,25 +11,25 @@ pub type WorldId = u32;
 pub type WorldId16 = u16;
 pub type ChannelId = u16;
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct LogoutWorldReq;
 packet_opcode!(LogoutWorldReq, RecvOpcodes::LogoutWorld);
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct WorldInfoReq;
 packet_opcode!(WorldInfoReq, RecvOpcodes::WorldInfoRequest);
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct WorldReq;
 packet_opcode!(WorldReq, RecvOpcodes::WorldRequest);
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct WorldCheckUserLimitReq {
     pub world: WorldId16,
 }
 packet_opcode!(WorldCheckUserLimitReq, RecvOpcodes::CheckUserLimit);
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct WorldCheckUserLimitResp {
     pub over_user_limit: bool,
     //TODO seems like a bool
@@ -38,28 +37,28 @@ pub struct WorldCheckUserLimitResp {
 }
 packet_opcode!(WorldCheckUserLimitResp, SendOpcodes::CheckUserLimitResult);
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct RecommendWorldMessage {
     world_id: WorldId,
     message: String,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct RecommendWorldMessageResp {
-    messages: MapleList8<RecommendWorldMessage>,
+    messages: ShroomList8<RecommendWorldMessage>,
 }
 packet_opcode!(
     RecommendWorldMessageResp,
     SendOpcodes::RecommendWorldMessage
 );
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct LastConnectedWorldResp {
     last_world: WorldId,
 }
 packet_opcode!(LastConnectedWorldResp, SendOpcodes::LatestConnectedWorld);
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct ChannelItem {
     pub name: String,
     pub user_number: u32,
@@ -68,13 +67,13 @@ pub struct ChannelItem {
     pub adult_channel: bool,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct WorldBalloon {
     pub pos: Vec2,
     pub message: String,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct WorldItem {
     pub name: String,
     pub state: u8, // 0 = normal, 1 = hot?, 2 = new
@@ -82,15 +81,15 @@ pub struct WorldItem {
     pub event_exp: u16,
     pub event_drop_rate: u16,
     pub block_char_creation: bool,
-    pub channels: MapleList8<ChannelItem>,
-    pub balloons: MapleList16<WorldBalloon>,
+    pub channels: ShroomList8<ChannelItem>,
+    pub balloons: ShroomList16<WorldBalloon>,
 }
 
 fn has_world_info(world_id: &u8) -> bool {
     *world_id != 0xff
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct WorldInfoResp {
     pub world_id: u8,
     #[pkt(if(field = "world_id", cond = "has_world_info"))]
@@ -114,7 +113,7 @@ impl WorldInfoResp {
     }
 }
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct SelectWorldReq {
     pub start_mode: StartModeInfo,
     pub world_id: u8,

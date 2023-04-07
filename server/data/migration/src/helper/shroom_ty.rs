@@ -8,14 +8,14 @@ pub enum Gender {
     Male,
 }
 
-pub fn moople_gender_ty() -> TypeCreateStatement {
+pub fn shroom_gender_ty() -> TypeCreateStatement {
     Type::create()
         .as_enum(Gender::GenderTy)
         .values([Gender::Male, Gender::Female])
         .to_owned()
 }
 
-pub fn moople_skill_points(id: impl IntoIden) -> ColumnDef {
+pub fn shroom_skill_points(id: impl IntoIden) -> ColumnDef {
     const PAGES: u32 = 10;
     ColumnDef::new(id)
         .binary()
@@ -24,41 +24,41 @@ pub fn moople_skill_points(id: impl IntoIden) -> ColumnDef {
         .to_owned()
 }
 
-pub fn moople_gender_col(id: impl IntoIden) -> ColumnDef {
+pub fn shroom_gender_col(id: impl IntoIden) -> ColumnDef {
     ColumnDef::new(id)
         .enumeration(Gender::GenderTy, [Gender::Male, Gender::Female])
         .to_owned()
 }
 
-pub fn moople_id(name: impl IntoIden) -> ColumnDef {
+pub fn shroom_id(name: impl IntoIden) -> ColumnDef {
     ColumnDef::new(name).integer().not_null().to_owned()
 }
 
-pub fn moople_opt_id(name: impl IntoIden) -> ColumnDef {
+pub fn shroom_opt_id(name: impl IntoIden) -> ColumnDef {
     ColumnDef::new(name).integer().null().to_owned()
 }
 
-pub fn moople_id_pkey(name: impl IntoIden) -> ColumnDef {
-    moople_id(name).auto_increment().primary_key().to_owned()
+pub fn shroom_id_pkey(name: impl IntoIden) -> ColumnDef {
+    shroom_id(name).auto_increment().primary_key().to_owned()
 }
 
-pub fn moople_int(id: impl IntoIden) -> ColumnDef {
+pub fn shroom_int(id: impl IntoIden) -> ColumnDef {
     ColumnDef::new(id).integer().default(0).not_null().to_owned()
 }
 
-pub fn moople_size(id: impl IntoIden) -> ColumnDef {
+pub fn shroom_size(id: impl IntoIden) -> ColumnDef {
     ColumnDef::new(id).integer().default(0).not_null().to_owned()
 }
 
-pub fn moople_bool(id: impl IntoIden) -> ColumnDef {
+pub fn shroom_bool(id: impl IntoIden) -> ColumnDef {
     ColumnDef::new(id).boolean().not_null().default(false).to_owned()
 }
 
-pub fn moople_str(id: impl IntoIden) -> ColumnDef {
+pub fn shroom_str(id: impl IntoIden) -> ColumnDef {
     ColumnDef::new(id).string().to_owned()
 }
 
-pub fn moople_small_str(id: impl IntoIden) -> ColumnDef {
+pub fn shroom_small_str(id: impl IntoIden) -> ColumnDef {
     ColumnDef::new(id).string().string_len(16).to_owned()
 }
 
@@ -77,11 +77,11 @@ pub fn created_at(id: impl IntoIden) -> ColumnDef {
         .to_owned()
 }
 
-pub fn moople_name(id: impl IntoIden) -> ColumnDef {
+pub fn shroom_name(id: impl IntoIden) -> ColumnDef {
     ColumnDef::new(id).string_len(13).not_null().to_owned()
 }
 
-pub fn moople_stat(id: impl IntoIden) -> ColumnDef {
+pub fn shroom_stat(id: impl IntoIden) -> ColumnDef {
     ColumnDef::new(id).integer().not_null().default(0).to_owned()
 }
 

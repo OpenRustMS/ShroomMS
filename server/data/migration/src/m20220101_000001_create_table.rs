@@ -4,7 +4,7 @@ use sea_orm_migration::{prelude::*, sea_query::extension::postgres::Type};
 
 use crate::{
     helper::{stats::with_equip_stats, *},
-    moople::with_char_stats,
+    shroom::with_char_stats,
 };
 
 #[derive(Iden)]
@@ -25,7 +25,7 @@ enum Account {
     CharacterSlots,
     NxCredit,
     NxPrepaid,
-    MaplePoints,
+    ShroomPoints,
     Tester
 }
 
@@ -119,19 +119,19 @@ enum Skill {
 
 #[derive(DeriveMigrationName)]
 pub struct Migration {
-    acc_table: MoopleTbl,
-    char_table: MoopleTbl,
-    ban_table: MoopleTbl,
-    eq_table: MoopleTbl,
-    stack_item_table: MoopleTbl,
-    pet_item_table: MoopleTbl,
-    inv_slot_table: MoopleTbl,
-    skill_table: MoopleTbl,
+    acc_table: ShroomTbl,
+    char_table: ShroomTbl,
+    ban_table: ShroomTbl,
+    eq_table: ShroomTbl,
+    stack_item_table: ShroomTbl,
+    pet_item_table: ShroomTbl,
+    inv_slot_table: ShroomTbl,
+    skill_table: ShroomTbl,
 }
 
 impl Default for Migration {
     fn default() -> Self {
-        let acc_table = MoopleTbl::new(
+        let acc_table = ShroomTbl::new(
             Account::Table,
             Account::Id,
             [
@@ -144,99 +144,99 @@ impl Default for Migration {
                     .string()
                     .not_null()
                     .to_owned(),
-                moople_bool(Account::AcceptedTos),
-                moople_gender_col(Account::Gender).null().to_owned(),
+                shroom_bool(Account::AcceptedTos),
+                shroom_gender_col(Account::Gender).null().to_owned(),
                 date_time(Account::LastLoginAt),
                 created_at(Account::CreatedAt),
-                moople_small_str(Account::Pin),
-                moople_small_str(Account::Pic),
-                moople_id(Account::Country),
-                moople_int(Account::GmLevel),
-                moople_id(Account::LastSelectedWorld),
-                moople_size(Account::CharacterSlots),
-                moople_size(Account::NxCredit),
-                moople_size(Account::NxPrepaid),
-                moople_size(Account::MaplePoints),
-                moople_bool(Account::Tester)
+                shroom_small_str(Account::Pin),
+                shroom_small_str(Account::Pic),
+                shroom_id(Account::Country),
+                shroom_int(Account::GmLevel),
+                shroom_id(Account::LastSelectedWorld),
+                shroom_size(Account::CharacterSlots),
+                shroom_size(Account::NxCredit),
+                shroom_size(Account::NxPrepaid),
+                shroom_size(Account::ShroomPoints),
+                shroom_bool(Account::Tester)
             ],
             [],
         );
 
-        let char_table = MoopleTbl::new(
+        let char_table = ShroomTbl::new(
             Character::Table,
             Character::Id,
             with_char_stats([
-                moople_name(Character::Name),
+                shroom_name(Character::Name),
                 created_at(Character::CreatedAt),
                 date_time(Character::LastLoginAt),
-                moople_gender_col(Character::Gender).not_null().to_owned(),
-                moople_skill_points(Character::SkillPoints),
-                moople_int(Character::PlayTime)
+                shroom_gender_col(Character::Gender).not_null().to_owned(),
+                shroom_skill_points(Character::SkillPoints),
+                shroom_int(Character::PlayTime)
             ]),
             [Ref::ownership(Character::AccId, &acc_table)],
         );
 
-        let ban_table = MoopleTbl::new(
+        let ban_table = ShroomTbl::new(
             Ban::Table,
             Ban::Id,
-            [moople_str(Ban::BanReason), date_time(Ban::BanTime)],
+            [shroom_str(Ban::BanReason), date_time(Ban::BanTime)],
             [Ref::ownership(Ban::AccId, &acc_table)],
         );
 
-        let item_stack_table = MoopleTbl::new(
+        let item_stack_table = ShroomTbl::new(
             ItemStack::Table,
             ItemStack::Id,
             [
                 date_time(ItemStack::ExpiresAt),
                 mopple_cash_id(ItemStack::CashId),
-                moople_id(ItemStack::ItemId),
-                moople_int(ItemStack::Flags),
-                moople_size(ItemStack::Quantity),
+                shroom_id(ItemStack::ItemId),
+                shroom_int(ItemStack::Flags),
+                shroom_size(ItemStack::Quantity),
             ],
             [],
         );
 
-        let item_equip_table = MoopleTbl::new(
+        let item_equip_table = ShroomTbl::new(
             EquipItem::Table,
             EquipItem::Id,
             with_equip_stats([
                 date_time(EquipItem::ExpiresAt),
                 mopple_cash_id(EquipItem::CashId),
-                moople_id(EquipItem::ItemId),
-                moople_int(EquipItem::Flags),
-                moople_size(EquipItem::ItemLevel),
-                moople_size(EquipItem::ItemExp),
-                moople_size(EquipItem::ViciousHammers),
-                moople_name(EquipItem::OwnerTag),
+                shroom_id(EquipItem::ItemId),
+                shroom_int(EquipItem::Flags),
+                shroom_size(EquipItem::ItemLevel),
+                shroom_size(EquipItem::ItemExp),
+                shroom_size(EquipItem::ViciousHammers),
+                shroom_name(EquipItem::OwnerTag),
             ]),
             [],
         );
 
-        let item_pet_table = MoopleTbl::new(
+        let item_pet_table = ShroomTbl::new(
             PetItem::Table,
             PetItem::Id,
             [
                 date_time(PetItem::ExpiresAt),
                 mopple_cash_id(PetItem::CashId),
-                moople_id(PetItem::ItemId),
-                moople_int(PetItem::Flags),
-                moople_name(PetItem::Name),
-                moople_stat(PetItem::Level),
-                moople_stat(PetItem::Tameness),
-                moople_stat(PetItem::Fullness),
-                moople_stat(PetItem::Skill),
-                moople_stat(PetItem::RemainingLife),
-                moople_bool(PetItem::Summoned),
+                shroom_id(PetItem::ItemId),
+                shroom_int(PetItem::Flags),
+                shroom_name(PetItem::Name),
+                shroom_stat(PetItem::Level),
+                shroom_stat(PetItem::Tameness),
+                shroom_stat(PetItem::Fullness),
+                shroom_stat(PetItem::Skill),
+                shroom_stat(PetItem::RemainingLife),
+                shroom_bool(PetItem::Summoned),
             ],
             [],
         );
 
-        let inv_slot_table = MoopleTbl::new(
+        let inv_slot_table = ShroomTbl::new(
             InventorySlot::Table,
             InventorySlot::Id,
             [
-                moople_int(InventorySlot::InvType),
-                moople_int(InventorySlot::Slot),
+                shroom_int(InventorySlot::InvType),
+                shroom_int(InventorySlot::Slot),
             ],
             [
                 Ref::ownership(InventorySlot::CharId, &char_table),
@@ -246,13 +246,13 @@ impl Default for Migration {
             ],
         );
 
-        let skill_table = MoopleTbl::new(
+        let skill_table = ShroomTbl::new(
             Skill::Table,
             Skill::Id,
             [
-                moople_id(Skill::SkillId),
-                moople_int(Skill::SkillLevel),
-                moople_int(Skill::MasterLevel),
+                shroom_id(Skill::SkillId),
+                shroom_int(Skill::SkillLevel),
+                shroom_int(Skill::MasterLevel),
                 date_time(Skill::ExpiresAt),
                 date_time(Skill::Cooldown),
             ],
@@ -273,7 +273,7 @@ impl Default for Migration {
 }
 
 impl Migration {
-    fn table_iter(&self) -> impl Iterator<Item = &'_ MoopleTbl> {
+    fn table_iter(&self) -> impl Iterator<Item = &'_ ShroomTbl> {
         [
             &self.acc_table,
             &self.char_table,
@@ -291,7 +291,7 @@ impl Migration {
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager.create_type(moople_gender_ty()).await?;
+        manager.create_type(shroom_gender_ty()).await?;
 
         for tbl in self.table_iter() {
             tbl.create_table(manager).await?;

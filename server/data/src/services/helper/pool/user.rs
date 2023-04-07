@@ -1,4 +1,4 @@
-use moople_packet::proto::list::MapleIndexListZ;
+use shroom_net::packet::proto::list::ShroomIndexListZ;
 use proto95::{
     game::user::{
         remote::{
@@ -14,7 +14,7 @@ use proto95::{
     },
 };
 
-use crate::services::{data::character::CharacterID, session::MoopleSessionSet};
+use crate::services::{data::character::CharacterID, session::ShroomSessionSet};
 
 use super::{Pool, PoolItem};
 
@@ -67,7 +67,7 @@ impl PoolItem for User {
                 pos: self.pos,
                 fh: self.fh,
                 show_admin_effects: false,
-                pet_infos: MapleIndexListZ::default(),
+                pet_infos: ShroomIndexListZ::default(),
                 taming_mob: TamingMobData::default(),
                 mini_room: None.into(),
                 ad_board: None.into(),
@@ -97,7 +97,7 @@ impl Pool<User> {
         &self,
         id: CharacterID,
         req: UserMoveReq,
-        sessions: &MoopleSessionSet,
+        sessions: &ShroomSessionSet,
     ) -> anyhow::Result<()> {
         let pkt = UserMoveResp {
             char_id: id as u32,

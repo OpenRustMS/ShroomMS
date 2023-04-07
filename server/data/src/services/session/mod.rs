@@ -4,7 +4,8 @@ pub mod session_manager;
 use std::net::IpAddr;
 use std::time::Duration;
 
-use moople_net::service::session_set::SessionSet;
+
+use shroom_net::net::service::session_set::SessionSet;
 
 use self::{
     migration::MigrationManager,
@@ -13,18 +14,18 @@ use self::{
 
 use super::data::character::CharacterID;
 
-pub type MoopleSessionSet = SessionSet<CharacterID>;
+pub type ShroomSessionSet = SessionSet<CharacterID>;
 
 // Client uses a 8 byte session id
 pub type ClientKey = [u8; 8];
 
 #[derive(Debug, Hash, PartialEq, Eq, Copy, Clone)]
-pub struct MoopleMigrationKey {
+pub struct ShroomMigrationKey {
     client_key: ClientKey,
     peer_addr: IpAddr,
 }
 
-impl MoopleMigrationKey {
+impl ShroomMigrationKey {
     pub fn new(client_key: ClientKey, peer_addr: IpAddr) -> Self {
         Self {
             client_key,
@@ -36,7 +37,7 @@ impl MoopleMigrationKey {
 #[derive(Debug)]
 pub struct GameSessionManager<Backend: SessionBackend> {
     session_man: SessionManager<uuid::Uuid, Backend>,
-    migration: MigrationManager<MoopleMigrationKey, OwnedSession<uuid::Uuid, Backend::SessionData>>,
+    migration: MigrationManager<ShroomMigrationKey, OwnedSession<uuid::Uuid, Backend::SessionData>>,
 }
 
 impl<Backend> GameSessionManager<Backend>
@@ -56,7 +57,7 @@ where
 
     pub async fn create_migration_session(
         &self,
-        migration_key: MoopleMigrationKey,
+        migration_key: ShroomMigrationKey,
         param: Backend::SessionLoadParam,
     ) -> anyhow::Result<()> {
         let session = self
@@ -69,7 +70,7 @@ where
 
     pub fn migrate_session(
         &self,
-        migration_key: MoopleMigrationKey,
+        migration_key: ShroomMigrationKey,
         session: OwnedSession<uuid::Uuid, Backend::SessionData>,
     ) -> anyhow::Result<()> {
         self.migration.push(migration_key, session);
@@ -78,7 +79,7 @@ where
 
     pub async fn claim_migration_session(
         &self,
-        migration_key: MoopleMigrationKey,
+        migration_key: ShroomMigrationKey,
     ) -> anyhow::Result<OwnedSession<uuid::Uuid, Backend::SessionData>> {
         self.migration.take_timeout(&migration_key).await
     }

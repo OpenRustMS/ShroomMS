@@ -1,13 +1,7 @@
 [workspace]
 members = [
-    # net
-    "net/moople_net",
-    "net/moople_derive",
-    "net/moople_packet",
-
     # Data
     "data/re-wz",
-    "data/re-wz-ui",
     "data/game_data",
 
     # client
@@ -21,8 +15,10 @@ members = [
     "server/mono",
     "server/data",
     "server/data/migration",
-
-    # util
-    "util/packet_tracer"
 ]
 exclude = ["client/moople_hook","client/moople_ffi"]
+
+# Shroom crates for now
+[patch.crates-io]
+shroom_net = { git = "https://github.com/OpenRustMS/net" }
+shroom_net_derive = { git = "https://github.com/OpenRustMS/net" }

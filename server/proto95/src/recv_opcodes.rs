@@ -1,5 +1,5 @@
-use moople_packet::opcode::NetOpcode;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use shroom_net::NetOpcode;
 
 impl NetOpcode for RecvOpcodes {}
 
@@ -192,7 +192,7 @@ pub enum RecvOpcodes {
     RandomMorphRequest = 0xB8,
     CashItemGachaponRequest = 0xB9,
     CashGachaponOpenRequest = 0xBA,
-    ChangeMaplePointRequest = 0xBB,
+    ChangeShroomPointRequest = 0xBB,
     TalkToTutor = 0xBC,
     RequestIncCombo = 0xBD,
     MobCrcKeyChangedReply = 0xBE,
@@ -308,8 +308,8 @@ pub enum RecvOpcodes {
     BattleRecordOnOffRequest = 0x12B,
     //END_BATTLERECORD = 0x12C,
     //BEGIN_MAPLETV = 0x12D,
-    MapleTVSendMessageRequest = 0x12E,
-    MapleTVUpdateViewCount = 0x12F,
+    ShroomTVSendMessageRequest = 0x12E,
+    ShroomTVUpdateViewCount = 0x12F,
     //END_MAPLETV = 0x130,
     //BEGIN_ITC = 0x131,
     ITCChargeParamRequest = 0x132,

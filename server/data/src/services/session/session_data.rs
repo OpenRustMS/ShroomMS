@@ -14,23 +14,23 @@ use crate::{
 use super::session_manager::{OwnedSession, SessionBackend};
 
 #[derive(Debug, Clone)]
-pub struct MoopleSessionData {
+pub struct ShroomSessionData {
     pub acc: entities::account::Model,
     pub char: Character,
     pub inv: InventorySet,
     pub skills: BTreeMap<SkillId, skill::Model>,
 }
 
-pub type OwnedMoopleSession = OwnedSession<uuid::Uuid, MoopleSessionData>;
+pub type OwnedShroomSession = OwnedSession<uuid::Uuid, ShroomSessionData>;
 
 #[derive(Debug)]
-pub struct MoopleSessionBackend {
+pub struct ShroomSessionBackend {
     pub(crate) data: Arc<DataServices>,
 }
 
 #[async_trait::async_trait]
-impl SessionBackend for MoopleSessionBackend {
-    type SessionData = MoopleSessionData;
+impl SessionBackend for ShroomSessionBackend {
+    type SessionData = ShroomSessionData;
     type SessionLoadParam = (entities::account::Model, CharacterID);
 
     async fn load(&self, param: Self::SessionLoadParam) -> anyhow::Result<Self::SessionData> {
@@ -47,7 +47,7 @@ impl SessionBackend for MoopleSessionBackend {
             .into_iter()
             .map(|skill| (SkillId(skill.id as u32), skill))
             .collect();
-        Ok(MoopleSessionData {
+        Ok(ShroomSessionData {
             acc,
             char,
             inv,

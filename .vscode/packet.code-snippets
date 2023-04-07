@@ -3,24 +3,24 @@
 		"scope": "rust",
 		"prefix": "packet",
 		"body":  [
-			"#[derive(MooplePacket, Debug)]",
+			"#[derive(ShroomPacket, Debug)]",
 			"pub struct $1 {",
 			"\t$0",
 			"}"
 		],
-		"description": "Maple Packet"
+		"description": "Shroom Packet"
 	},
 	"MaplePacketOpcode": {
 		"scope": "rust",
 		"prefix": "packet_with_opcode",
 		"body":  [
-			"#[derive(MooplePacket, Debug)]",
+			"#[derive(ShroomPacket, Debug)]",
 			"pub struct $1 {",
 			"\t$0",
 			"}",
 			"packet_opcode!($1, $2);"
 		],
-		"description": "Maple Packet"
+		"description": "Shroom Packet"
 	},
 	"MapleEnumCode": {
 		"scope": "rust",
@@ -31,8 +31,8 @@
 			"pub enum $1 {",
 			"\t$0",
 			"}",
-			"mark_maple_enum!($1);"
+			"mark_shroom_enum!($1);"
 		],
-		"description": "Maple Packet"
+		"description": "Shroom Packet"
 	}
 }

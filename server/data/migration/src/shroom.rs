@@ -1,6 +1,6 @@
 use sea_orm_migration::prelude::*;
 
-use crate::helper::moople_ty::char_stat;
+use crate::helper::shroom_ty::char_stat;
 
 pub const CHAR_STATS: [&str; 28] = [
     "level",

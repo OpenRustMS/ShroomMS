@@ -1,6 +1,6 @@
 pub mod stats;
-pub mod moople_tbl;
-pub mod moople_ty;
+pub mod shroom_tbl;
+pub mod shroom_ty;
 
-pub use moople_ty::*;
-pub use moople_tbl::*;
+pub use shroom_ty::*;
+pub use shroom_tbl::*;

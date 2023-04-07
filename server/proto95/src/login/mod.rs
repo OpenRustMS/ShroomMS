@@ -1,6 +1,6 @@
 pub mod pin;
-use moople_derive::MooplePacket;
-use moople_packet::{maple_enum_code, packet_opcode, proto::conditional::CondOption};
+use shroom_net::{shroom_enum_code, packet_opcode, packet::CondOption};
+use shroom_net_derive::ShroomPacket;
 
 use crate::recv_opcodes::RecvOpcodes;
 
@@ -8,15 +8,15 @@ pub mod account;
 pub mod char;
 pub mod world;
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct MachineId(pub [u8; 0x10]);
 pub type ClientKey = [u8; 8];
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct CreateSecurityHandleReq;
 packet_opcode!(CreateSecurityHandleReq, RecvOpcodes::CreateSecurityHandle);
 
-maple_enum_code!(StartMode, u8, WebStart = 0, Unknown1 = 1, GameLaunching = 2);
+shroom_enum_code!(StartMode, u8, WebStart = 0, Unknown1 = 1, GameLaunching = 2);
 
 impl StartMode {
     pub fn has_system_info(&self) -> bool {
@@ -24,14 +24,14 @@ impl StartMode {
     }
 }
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct StartModeInfo {
     start_mode: StartMode,
     #[pkt(if(field = "start_mode", cond = "StartMode::has_system_info"))]
     system_info: CondOption<SystemInfo>,
 }
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct SystemInfo {
     // SupportID?
     unknown: String,
@@ -40,7 +40,7 @@ pub struct SystemInfo {
     start_mode: u8,
 }
 
-maple_enum_code!(
+shroom_enum_code!(
     RegStateId,
     u8,
     // Both work `Registered` fine as success codes
@@ -51,14 +51,14 @@ maple_enum_code!(
     Verify3 = 3,
 );
 
-#[derive(Debug, MooplePacket, Default)]
+#[derive(Debug, ShroomPacket, Default)]
 pub struct LoginResultHeader {
     pub reg: RegStateId,
     // Unused variable
     pub unknown: u32,
 }
 
-maple_enum_code!(
+shroom_enum_code!(
     LoginOpt,
     u8,
     EnableSecondPassword = 0,
@@ -73,13 +73,13 @@ maple_enum_code!(
 */
 pub type BanReason = u8;
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct HardwareInfo {
     mac: String,
     hdd_serial_no: String,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct SSOErrorLog {
     unknown1: u8,
     auth_reply_code: u32,

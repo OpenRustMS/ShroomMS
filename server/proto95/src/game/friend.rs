@@ -1,8 +1,7 @@
-use moople_derive::MooplePacket;
-use moople_packet::{
-    maple_packet_enum, packet_opcode,
-    proto::{option::MapleOption8, string::FixedPacketString},
-};
+use shroom_net_derive::ShroomPacket;
+use shroom_net::{packet::{
+    proto::{option::ShroomOption8, string::FixedPacketString},
+}, shroom_packet_enum, packet_opcode};
 
 use crate::{
     send_opcodes::SendOpcodes,
@@ -11,7 +10,7 @@ use crate::{
 
 //TODO in_shop is an u8 idk
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct FriendRecord {
     pub id: CharacterId,
     pub name: NameStr,
@@ -20,7 +19,7 @@ pub struct FriendRecord {
     pub friend_group: FixedPacketString<0x11>,
 }
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct FriendList {
     pub len: u8,
     #[pkt(size = "len")]
@@ -39,28 +38,28 @@ impl FriendList {
     }
 }
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct FriendUpdate {
     pub friend_id: CharacterId,
     pub record: FriendRecord,
     pub in_shop: bool,
 }
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct FriendChangeChannel {
     pub friend_id: CharacterId,
     pub in_shop: bool,
     pub channel: u32,
 }
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct FriendUnknown9 {
     pub friend_id: CharacterId,
     pub in_shop: bool,
     pub channel_id: u32,
 }
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct FriendReq {
     pub friend_id: CharacterId,
     pub friend_name: String,
@@ -68,7 +67,7 @@ pub struct FriendReq {
     pub job_code: u32, //TODO: job id?
 }
 
-maple_packet_enum!(
+shroom_packet_enum!(
     FriendResultResp,
     u8,
     Reset(FriendList) => 0,
@@ -80,13 +79,13 @@ maple_packet_enum!(
     Unknown6(()) => 6,
     Unknown7(()) => 7,
     Unknown8(()) => 8,
-    Unknown9(MapleOption8<String>) => 9,
-    UnknownA(MapleOption8<String>) => 0xa,
+    Unknown9(ShroomOption8<String>) => 9,
+    UnknownA(ShroomOption8<String>) => 0xa,
     // Blocked is alwayws true for this
     ResetB(FriendList) => 0xb,
-    UnknownC(MapleOption8<String>) => 0xc,
+    UnknownC(ShroomOption8<String>) => 0xc,
     ChangeChannel(FriendChangeChannel) => 0xd,
     MaxFriends(u8) => 0xe,
-    UnknownF(MapleOption8<String>) => 0xf,
+    UnknownF(ShroomOption8<String>) => 0xf,
 );
 packet_opcode!(FriendResultResp, SendOpcodes::FriendResult);

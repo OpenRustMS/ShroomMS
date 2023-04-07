@@ -54,7 +54,7 @@ impl DownloadProgressWatcher for DownloadProgressWatcherBar {
     }
 }
 
-fn launch_moople(addr: &str, port: u16) -> anyhow::Result<()> {
+fn launch_shroom(addr: &str, port: u16) -> anyhow::Result<()> {
     Command::new("GMSv95_.exe")
         .arg(addr)
         .arg(port.to_string())
@@ -65,20 +65,20 @@ fn launch_moople(addr: &str, port: u16) -> anyhow::Result<()> {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    println!("Moople Launchar v1.0");
+    println!("Shroom Launchar v1.0");
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     let updater = FileClient::from_url_str("http://192.168.124.1:8490");
 
     let progress = DownloadProgressWatcherBar::new();
     let local_ix = FileIndex::build_index(
-        ["dinput8.dll", "moople_launchar.exe", "notes.txt"]
+        ["dinput8.dll", "shroom_launchar.exe", "notes.txt"]
             .as_slice()
             .iter(),
     )?;
 
     updater.update_files(&local_ix, progress).await?;
-    launch_moople("192.168.124.1", 8484)?;
+    launch_shroom("192.168.124.1", 8484)?;
 
     Ok(())
 }

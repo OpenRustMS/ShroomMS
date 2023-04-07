@@ -2,7 +2,6 @@ pub mod repl;
 pub mod state;
 
 use std::ops::Neg;
-use std::sync::Arc;
 
 use std::{net::IpAddr, time::Duration};
 
@@ -11,41 +10,28 @@ use async_trait::async_trait;
 use data::entities::character;
 use data::services::field::FieldJoinHandle;
 use data::services::helper::pool::drop::{DropLeaveParam, DropTypeValue};
-use data::services::session::session_data::OwnedMoopleSession;
-use data::services::session::{ClientKey, MoopleMigrationKey};
+use data::services::session::session_data::OwnedShroomSession;
+use data::services::session::{ClientKey, ShroomMigrationKey};
 use data::services::SharedServices;
-use moople_net::service::handler::BroadcastSender;
-use moople_net::service::packet_buffer::PacketBuffer;
-use moople_net::service::resp::PacketOpcodeExt;
+use shroom_net::net::ShroomSession;
+use shroom_net::net::service::handler::{MakeServerSessionHandler, ShroomSessionHandler, SessionHandleResult, ShroomServerSessionHandler};
+use shroom_net::net::service::resp::{ResponsePacket, PongResponse, MigrateResponse, PacketOpcodeExt};
+use shroom_net::net::service::server_sess::SharedSessionHandle;
+use shroom_net::{shroom_router_handler, HasOpcode};
 
-use moople_net::service::handler::SessionHandleResult;
-use moople_net::service::resp::{PongResponse};
-use moople_net::service::session_svc::SharedSessionHandle;
-use moople_net::SessionTransport;
-use moople_net::{
-    maple_router_handler,
-    service::{
-        handler::{
-            MakeServerSessionHandler, MapleServerSessionHandler, MapleSessionHandler,
-        },
-        resp::{MigrateResponse, ResponsePacket},
-    },
-    MapleSession,
-};
+use shroom_net::packet::EncodePacket;
 
-use moople_packet::EncodePacket;
-
-use moople_packet::proto::list::{MapleIndexList8, MapleIndexListZ};
-use moople_packet::proto::partial::PartialFlag;
-use moople_packet::proto::time::MapleExpiration;
-use moople_packet::proto::CondOption;
-use moople_packet::{
+use shroom_net::packet::proto::list::{ShroomIndexList8, ShroomIndexListZ};
+use shroom_net::packet::proto::partial::PartialFlag;
+use shroom_net::packet::proto::time::ShroomExpiration;
+use shroom_net::packet::proto::CondOption;
+use shroom_net::packet::{
     proto::{
-        list::{MapleIndexListZ16, MapleIndexListZ8},
-        time::MapleTime,
-        MapleList16,
+        list::{ShroomIndexListZ16, ShroomIndexListZ8},
+        time::ShroomTime,
+        ShroomList16,
     },
-    DecodePacket, HasOpcode, MaplePacket, MaplePacketReader, MaplePacketWriter,
+    DecodePacket, PacketReader, PacketWriter, ShroomPacket,
 };
 
 use data::services::helper::pool::Drop;
@@ -58,9 +44,8 @@ use proto95::game::user::{
 
 use proto95::id::{FaceId, HairId, ItemId, Skin};
 use proto95::shared::char::{AvatarData, AvatarEquips, PetIds, SkillInfo, TeleportRockInfo};
-use proto95::shared::movement::Movement;
-use proto95::shared::{FootholdId, PongReq, Vec2};
 use proto95::shared::inventory::InvChangeSlotPosReq;
+use proto95::shared::{FootholdId, PongReq, Vec2};
 use proto95::{
     game::{
         chat::{ChatMsgReq, UserChatMsgResp},
@@ -120,7 +105,7 @@ impl MakeServerSessionHandler for MakeGameHandler {
 
     async fn make_handler(
         &mut self,
-        sess: &mut moople_net::MapleSession<Self::Transport>,
+        sess: &mut ShroomSession<Self::Transport>,
         sess_handle: SharedSessionHandle,
     ) -> Result<Self::Handler, Self::Error> {
         let mut handler = GameHandler::from_session(
@@ -139,7 +124,7 @@ impl MakeServerSessionHandler for MakeGameHandler {
 }
 
 pub struct GameHandler {
-    session: OwnedMoopleSession,
+    session: OwnedShroomSession,
     channel_id: ChannelId,
     world_id: WorldId,
     services: SharedServices,
@@ -150,13 +135,12 @@ pub struct GameHandler {
     fh: FootholdId,
     field: FieldJoinHandle,
     repl: GameRepl,
-    packet_buf: PacketBuffer,
     avatar_data: AvatarData,
 }
 
 impl GameHandler {
     pub async fn from_session(
-        net_session: &mut MapleSession<TcpStream>,
+        net_session: &mut ShroomSession<TcpStream>,
         services: SharedServices,
         channel_id: ChannelId,
         world_id: WorldId,
@@ -178,11 +162,11 @@ impl GameHandler {
         let req = MigrateInGameReq::decode_packet(&mut pr)?;
         let addr = net_session.peer_addr()?.ip();
 
-        dbg!(MoopleMigrationKey::new(req.client_key, addr));
+        dbg!(ShroomMigrationKey::new(req.client_key, addr));
 
         let session = services
             .session_manager
-            .claim_migration_session(MoopleMigrationKey::new(req.client_key, addr))
+            .claim_migration_session(ShroomMigrationKey::new(req.client_key, addr))
             .await?;
 
         log::info!(
@@ -216,25 +200,24 @@ impl GameHandler {
             field: join_field,
             repl: GameRepl::new(),
             avatar_data,
-            packet_buf: PacketBuffer::new(),
         })
     }
 }
 
 #[async_trait]
-impl MapleSessionHandler for GameHandler {
+impl ShroomSessionHandler for GameHandler {
     type Transport = TcpStream;
     type Error = anyhow::Error;
 
     async fn handle_packet(
         &mut self,
-        packet: MaplePacket,
-        session: &mut moople_net::MapleSession<Self::Transport>,
+        packet: ShroomPacket,
+        session: &mut ShroomSession<Self::Transport>,
     ) -> Result<SessionHandleResult, Self::Error> {
-        maple_router_handler!(
+        shroom_router_handler!(
             handler,
             GameHandler,
-            MapleSession<TcpStream>,
+            ShroomSession<TcpStream>,
             anyhow::Error,
             GameHandler::handle_default,
             PongReq => GameHandler::handle_pong,
@@ -260,12 +243,10 @@ impl MapleSessionHandler for GameHandler {
     async fn finish(self, is_migrating: bool) -> Result<(), Self::Error> {
         log::info!("Finishing game session...");
         if is_migrating {
-            self.services
-                .session_manager
-                .migrate_session(
-                    MoopleMigrationKey::new(self.client_key, self.addr),
-                    self.session,
-                )?;
+            self.services.session_manager.migrate_session(
+                ShroomMigrationKey::new(self.client_key, self.addr),
+                self.session,
+            )?;
         } else {
             self.services
                 .session_manager
@@ -277,14 +258,14 @@ impl MapleSessionHandler for GameHandler {
     }
 }
 
-impl MapleServerSessionHandler for GameHandler {
+impl ShroomServerSessionHandler for GameHandler {
     fn get_ping_interval() -> std::time::Duration {
         Duration::from_secs(30)
     }
 
-    fn get_ping_packet(&mut self) -> Result<MaplePacket, Self::Error> {
-        let mut pw = MaplePacketWriter::default();
-        pw.write_opcode(SendOpcodes::AliveReq);
+    fn get_ping_packet(&mut self) -> Result<ShroomPacket, Self::Error> {
+        let mut pw = PacketWriter::default();
+        pw.write_opcode(SendOpcodes::AliveReq)?;
         Ok(pw.into_packet())
     }
 }
@@ -341,7 +322,7 @@ impl GameHandler {
         .into())
     }
 
-    async fn handle_inv_change_slot(&mut self, req: InvChangeSlotPosReq) -> anyhow::Result<()>  {
+    async fn handle_inv_change_slot(&mut self, _req: InvChangeSlotPosReq) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -356,7 +337,7 @@ impl GameHandler {
                 id: req.skill_id,
                 level: 1,
                 master_level: 0,
-                expiration: MapleExpiration::never(),
+                expiration: ShroomExpiration::never(),
             }]
             .into(),
             updated_secondary_stat: false,
@@ -381,13 +362,13 @@ impl GameHandler {
     pub async fn handle_default(
         &mut self,
         _op: RecvOpcodes,
-        pr: MaplePacketReader<'_>,
+        pr: PacketReader<'_>,
     ) -> anyhow::Result<SessionHandleResult> {
         log::info!("Unhandled packet: {:?}", pr.into_inner());
         Ok(SessionHandleResult::Ok)
     }
 
-    async fn init_char(&mut self, sess: &mut MapleSession<TcpStream>) -> anyhow::Result<()> {
+    async fn init_char(&mut self, sess: &mut ShroomSession<TcpStream>) -> anyhow::Result<()> {
         sess.send_packet(FriendResultResp::Reset3(FriendList::empty()))
             .await?;
         sess.send_packet(FuncKeyMapInitResp::default_map()).await?;
@@ -409,7 +390,7 @@ impl GameHandler {
     fn set_field(&mut self) -> SetFieldResp {
         let char = &self.session.char;
 
-        let equipped: MapleIndexListZ16<Item> = self
+        let equipped: ShroomIndexListZ16<Item> = self
             .session
             .inv
             .equipped
@@ -417,7 +398,7 @@ impl GameHandler {
             .map(|(slot, item)| (slot as u16, Item::Equip(item.item.as_ref().into())))
             .collect();
 
-        let etc: MapleIndexListZ8<Item> = self
+        let etc: ShroomIndexListZ8<Item> = self
             .session
             .inv
             .etc
@@ -438,7 +419,7 @@ impl GameHandler {
             ..Default::default()
         };
 
-        let skill_records: MapleList16<SkillInfo> = self
+        let skill_records: ShroomList16<SkillInfo> = self
             .session
             .skills
             .iter()
@@ -450,7 +431,7 @@ impl GameHandler {
             })
             .collect();
 
-        let char_stat: &character::Model = &char.model.clone().into();
+        let char_stat: &character::Model = &char.model.clone();
 
         let char_data = CharDataAll {
             stat: CharDataStat {
@@ -460,23 +441,23 @@ impl GameHandler {
             },
             money: char.model.mesos as u32,
             invsize,
-            equipextslotexpiration: MapleExpiration::never(),
+            equipextslotexpiration: ShroomExpiration::never(),
             equipped: char_equipped,
-            useinv: MapleIndexListZ::default(),
-            setupinv: MapleIndexListZ::default(),
+            useinv: ShroomIndexListZ::default(),
+            setupinv: ShroomIndexListZ::default(),
             etcinv: etc,
-            cashinv: MapleIndexListZ::default(),
+            cashinv: ShroomIndexListZ::default(),
             skillrecords: skill_records,
-            skllcooltime: MapleList16::default(),
-            quests: MapleList16::default(),
-            questscompleted: MapleList16::default(),
-            minigamerecords: MapleList16::default(),
-            socialrecords: MapleList16::default(),
+            skllcooltime: ShroomList16::default(),
+            quests: ShroomList16::default(),
+            questscompleted: ShroomList16::default(),
+            minigamerecords: ShroomList16::default(),
+            socialrecords: ShroomList16::default(),
             teleportrockinfo: TeleportRockInfo::default(),
-            newyearcards: MapleList16::default(),
-            questrecordsexpired: MapleList16::default(),
-            questcompleteold: MapleList16::default(),
-            visitorquestloginfo: MapleList16::default(),
+            newyearcards: ShroomList16::default(),
+            questrecordsexpired: ShroomList16::default(),
+            questcompleteold: ShroomList16::default(),
+            visitorquestloginfo: ShroomList16::default(),
         };
 
         let char_data = SetFieldCharData {
@@ -499,12 +480,12 @@ impl GameHandler {
         };
 
         SetFieldResp {
-            client_option: MapleList16::default(),
+            client_option: ShroomList16::default(),
             channel_id: self.channel_id as u32,
             old_driver_id: 0,
             unknown_flag_1: 0,
             set_field_result: SetFieldResult::CharData(char_data),
-            timestamp: MapleTime::utc_now(),
+            timestamp: ShroomTime::utc_now(),
             extra: 0,
         }
     }
@@ -537,11 +518,10 @@ impl GameHandler {
         req: UserDropPickUpReq,
     ) -> GameResult<CharStatChangedResp> {
         dbg!(&req);
-        self.field
-            .remove_drop(
-                req.drop_id,
-                DropLeaveParam::UserPickup(self.session.char.model.id as u32),
-            )?;
+        self.field.remove_drop(
+            req.drop_id,
+            DropLeaveParam::UserPickup(self.session.char.model.id as u32),
+        )?;
         Ok(self.enable_char().into())
     }
 
@@ -549,14 +529,13 @@ impl GameHandler {
         &mut self,
         req: UserDropMoneyReq,
     ) -> GameResult<CharStatChangedResp> {
-        self.field
-            .add_drop(Drop {
-                owner: proto95::game::drop::DropOwner::User(self.session.char.model.id as u32),
-                pos: self.pos,
-                start_pos: self.pos,
-                value: DropTypeValue::Mesos(req.money),
-                quantity: 1,
-            })?;
+        self.field.add_drop(Drop {
+            owner: proto95::game::drop::DropOwner::User(self.session.char.model.id as u32),
+            pos: self.pos,
+            start_pos: self.pos,
+            value: DropTypeValue::Mesos(req.money),
+            quantity: 1,
+        })?;
         Ok(self.enable_char().into())
     }
 
@@ -573,11 +552,11 @@ impl GameHandler {
                 msg,
                 only_balloon: false,
             };
-            let mut pw = MaplePacketWriter::default();
-            pw.write_opcode(UserChatMsgResp::OPCODE);
+            let mut pw = PacketWriter::default();
+            pw.write_opcode(UserChatMsgResp::OPCODE)?;
             resp.encode_packet(&mut pw)?;
 
-            self.sess_handle.tx.try_send(&pw.into_packet().data)?;
+            self.sess_handle.tx.try_send(pw.into_packet().as_ref())?;
         } else {
             self.field.add_chat(UserChatMsgResp {
                 char: self.session.char.model.id as u32,
@@ -634,16 +613,16 @@ impl GameHandler {
                 .map(|(k, _)| *k)
                 .unwrap_or_default() as i32;
 
-        self.field = self
-            .services
-            .field
-            .join_field(
-                self.session.char.model.id,
-                self.avatar_data.clone(),
-                self.sess_handle.clone(),
-                MapId(self.session.char.model.map_id as u32),
-            )
-            .await?;
+            self.field = self
+                .services
+                .field
+                .join_field(
+                    self.session.char.model.id,
+                    self.avatar_data.clone(),
+                    self.sess_handle.clone(),
+                    MapId(self.session.char.model.map_id as u32),
+                )
+                .await?;
 
             self.field = self
                 .services
@@ -738,13 +717,13 @@ pub fn map_char_to_avatar(char: &character::Model) -> AvatarData {
         face: FaceId(char.face as u32),
         hair: HairId(char.hair as u32),
         equips: AvatarEquips {
-            equips: MapleIndexList8::from(vec![
+            equips: ShroomIndexList8::from(vec![
                 (5, ItemId(1040006)),
                 (6, ItemId(1060006)),
                 (7, ItemId(1072005)),
                 (11, ItemId(1322005)),
             ]),
-            masked_equips: MapleIndexList8::from(vec![]),
+            masked_equips: ShroomIndexList8::from(vec![]),
             weapon_sticker_id: ItemId(0),
         },
         pets: PetIds::default(),

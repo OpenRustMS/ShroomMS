@@ -8,43 +8,42 @@ pub mod movement;
 use std::net::{Ipv4Addr, SocketAddr};
 
 use geo::Coord;
-use moople_derive::MooplePacket;
-use moople_packet::{
-    mark_maple_enum, packet_opcode,
-    proto::{wrapped::PacketWrapped, MapleList16, string::FixedPacketString},
-};
+use shroom_net_derive::ShroomPacket;
+use shroom_net::{packet::{
+    proto::{wrapped::PacketWrapped, ShroomList16, string::FixedPacketString},
+}, packet_opcode, mark_shroom_enum};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use crate::{recv_opcodes::RecvOpcodes, send_opcodes::SendOpcodes};
 
 pub type NameStr = FixedPacketString<13>;
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct ClientDumpLogReq {
     call_type: u32,
     error_code: u32,
-    data: MapleList16<u8>,
+    data: ShroomList16<u8>,
 }
 packet_opcode!(ClientDumpLogReq, RecvOpcodes::ClientDumpLog);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct ExceptionLogReq {
     pub log: String,
 }
 packet_opcode!(ExceptionLogReq, RecvOpcodes::ExceptionLog);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct UpdateScreenSettingReq {
     large_screen: bool,
     window_mode: bool,
 }
 packet_opcode!(UpdateScreenSettingReq, RecvOpcodes::UpdateScreenSetting);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct PongReq;
 packet_opcode!(PongReq, RecvOpcodes::AliveAck);
 
-#[derive(MooplePacket, Debug, Clone)]
+#[derive(ShroomPacket, Debug, Clone)]
 pub struct PingResp;
 packet_opcode!(PingResp, SendOpcodes::AliveReq);
 
@@ -55,7 +54,7 @@ pub enum Gender {
     Male = 0,
     Female = 1,
 }
-mark_maple_enum!(Gender);
+mark_shroom_enum!(Gender);
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone, TryFromPrimitive, IntoPrimitive, Default)]
 #[repr(u8)]
@@ -98,20 +97,20 @@ impl From<OptionGender> for Option<Gender> {
         }
     }
 }
-mark_maple_enum!(OptionGender);
+mark_shroom_enum!(OptionGender);
 
 pub type Vec2 = Coord<i16>;
 pub type TagPoint = Coord<i32>;
 
 pub type FootholdId = u16;
 
-#[derive(Debug, MooplePacket, Copy, Clone)]
+#[derive(Debug, ShroomPacket, Copy, Clone)]
 pub struct Range2 {
     pub low: i16,
     pub high: i16,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct Rect {
     left: i16,
     top: i16,
@@ -122,7 +121,7 @@ pub struct Rect {
 #[derive(Debug, Clone)]
 pub struct ServerAddr(pub Ipv4Addr);
 
-#[derive(Debug, Clone, MooplePacket)]
+#[derive(Debug, Clone, ShroomPacket)]
 pub struct ServerSocketAddr {
     pub addr: ServerAddr,
     pub port: u16,

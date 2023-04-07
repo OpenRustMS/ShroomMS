@@ -1,5 +1,5 @@
 pub mod char;
-use moople_packet::proto::time::MapleTime;
+use shroom_net::packet::proto::time::ShroomTime;
 use proto95::{login::account::AccountInfo, shared::Gender};
 
 use crate::entities::{account, sea_orm_active_enums::GenderTy};
@@ -35,8 +35,8 @@ impl From<&account::Model> for AccountInfo {
             name: model.username.clone(),
             purchase_exp: 0,
             chat_block_reason: 0,
-            chat_block_date: MapleTime::zero(),
-            registration_date: MapleTime::try_from(model.created_at).unwrap(),
+            chat_block_date: ShroomTime::zero(),
+            registration_date: ShroomTime::try_from(model.created_at).unwrap(),
             num_chars: model.character_slots as u32,
         }
     }

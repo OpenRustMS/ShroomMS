@@ -1,5 +1,5 @@
-use moople_packet::opcode::NetOpcode;
 use num_enum::{TryFromPrimitive, IntoPrimitive};
+use shroom_net::NetOpcode;
 
 impl NetOpcode for SendOpcodes {}
 
@@ -119,7 +119,7 @@ pub enum SendOpcodes {
     NotifyWedding = 0x6e,
     NotifyJobChange = 0x6f,
     IncRateChanged = 0x70,
-    MapleTVUseRes = 0x71,
+    ShroomTVUseRes = 0x71,
     AvatarMegaphoneRes = 0x72,
     AvatarMegaphoneUpdateMessage = 0x73,
     AvatarMegaphoneClearMessage = 0x74,
@@ -397,7 +397,7 @@ pub enum SendOpcodes {
     CashShopGachaponStampItemResult = 0x187,
     CashShopCashItemGachaponResult = 0x188,
     CashShopCashGachaponOpenResult = 0x189,
-    ChangeMaplePointResult = 0x18a,
+    ChangeShroomPointResult = 0x18a,
     CashShopOneADay = 0x18b,
     CashShopNoticeFreeCashItem = 0x18c,
     CashShopMemberShopResult = 0x18d,
@@ -407,9 +407,9 @@ pub enum SendOpcodes {
     CheckSSN2OnCreateNewCharacterResult = 0x191,
     CheckSPWOnCreateNewCharacterResult = 0x192,
     FirstSSNOnCreateNewCharacterResult = 0x193,
-    MapleTVUpdateMessage = 0x195,
-    MapleTVClearMessage = 0x196,
-    MapleTVSendMessageResult = 0x197,
+    ShroomTVUpdateMessage = 0x195,
+    ShroomTVClearMessage = 0x196,
+    ShroomTVSendMessageResult = 0x197,
     BroadSetFlashChangeEvent = 0x198,
     ITCChargeParamResult = 0x19a,
     ITCQueryCashResult = 0x19b,

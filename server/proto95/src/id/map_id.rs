@@ -1,11 +1,11 @@
 use std::ops::RangeInclusive;
 
-use crate::moople_id;
+use crate::shroom_id;
 
-moople_id!(MapId, u32);
+shroom_id!(MapId, u32);
 
 impl MapId {
-    pub fn is_maple_island(&self) -> bool {
+    pub fn is_shroom_island(&self) -> bool {
         Self::MAPLE_ISLAND_RANGE.contains(self)
     }
 

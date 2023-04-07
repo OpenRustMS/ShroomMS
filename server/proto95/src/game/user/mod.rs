@@ -1,16 +1,15 @@
 pub mod remote;
 
 use bitflags::bitflags;
-use moople_derive::{MooplePacket, MoopleEncodePacket};
-use moople_packet::{
-    maple_packet_enum, mark_maple_bit_flags, packet_opcode,
+use shroom_net_derive::{ShroomPacket, ShroomEncodePacket};
+use shroom_net::{packet::{
     proto::{
-        option::MapleOption8,
-        time::{MapleDurationMs16, MapleExpiration, Ticks},
-        CondOption, MapleList16, MapleList8, PacketWrapped,
+        option::ShroomOption8,
+        time::{ShroomDurationMs16, ShroomExpiration, Ticks},
+        CondOption, ShroomList16, ShroomList8, PacketWrapped,
     },
-    DecodePacket, MaplePacketReader, NetError, NetResult,
-};
+    DecodePacket, PacketReader
+}, packet_opcode, mark_shroom_bit_flags, NetError, NetResult, shroom_packet_enum};
 
 use crate::{
     id::{ItemId, MapId, SkillId},
@@ -21,14 +20,14 @@ use crate::{
 
 use super::{mob::MobId, ObjectId};
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct UserDropMoneyReq {
     pub ticks: Ticks,
     pub money: u32,
 }
 packet_opcode!(UserDropMoneyReq, RecvOpcodes::UserDropMoneyRequest);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct UserDropPickUpReq {
     pub field_key: u8,
     pub ticks: Ticks,
@@ -38,7 +37,7 @@ pub struct UserDropPickUpReq {
 }
 packet_opcode!(UserDropPickUpReq, RecvOpcodes::DropPickUpRequest);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct UserPortalScriptReq {
     pub field_key: u8,
     pub portal: String,
@@ -50,7 +49,7 @@ fn is_not_empty(s: &str) -> bool {
     !s.is_empty()
 }
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct UserTransferFieldReq {
     pub field_key: u8,
     pub target_field: MapId,
@@ -59,11 +58,11 @@ pub struct UserTransferFieldReq {
     pub target_pos: CondOption<Vec2>,
     pub unknown: u8,
     pub premium: bool,
-    pub chase_target_pos: MapleOption8<TagPoint>,
+    pub chase_target_pos: ShroomOption8<TagPoint>,
 }
 packet_opcode!(UserTransferFieldReq, RecvOpcodes::UserTransferFieldRequest);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct UserMoveReq {
     // DR 1-4?
     pub u1: u32,
@@ -78,7 +77,7 @@ pub struct UserMoveReq {
 }
 packet_opcode!(UserMoveReq, RecvOpcodes::UserMove);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct UserStatChangeReq {
     pub ticks: Ticks,
     // Constant 5120
@@ -89,7 +88,7 @@ pub struct UserStatChangeReq {
 }
 packet_opcode!(UserStatChangeReq, RecvOpcodes::UserChangeStatRequest);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct UserHitKnockback {
     pub powerguard: bool,
     pub mob_id: ObjectId,
@@ -98,7 +97,7 @@ pub struct UserHitKnockback {
     pub user_pos: Vec2,
 }
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct UserHitReq {
     pub damaged_ticks: Ticks,
     pub mob_atk_idx: u8, //todo: 0xfe is no atk => 1,4,2
@@ -126,9 +125,9 @@ bitflags! {
     }
 }
 
-mark_maple_bit_flags!(AttackFlags);
+mark_shroom_bit_flags!(AttackFlags);
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct DrCheckData {
     data: [u8; 8],
 }
@@ -204,7 +203,7 @@ pub struct HitTargetCount {
 }*/
 
 
-#[derive(Debug, MoopleEncodePacket)]
+#[derive(Debug, ShroomEncodePacket)]
 pub struct AttackTargetInfo {
     pub mob_id: ObjectId,
     pub hit_action: u8,
@@ -220,7 +219,7 @@ pub struct AttackTargetInfo {
 
 impl AttackTargetInfo {
     pub fn decode(
-        pr: &mut MaplePacketReader<'_>,
+        pr: &mut PacketReader<'_>,
         targets: usize,
         hits: usize,
     ) -> Result<Vec<Self>, NetError> {
@@ -263,7 +262,7 @@ where
     Info: AttackInfo + DecodePacket<'de>,
     Extra: DecodePacket<'de>,
 {
-    fn decode_packet(pr: &mut MaplePacketReader<'de>) -> NetResult<Self> {
+    fn decode_packet(pr: &mut PacketReader<'de>) -> NetResult<Self> {
         let info = Info::decode_packet(pr)?;
         let targets = AttackTargetInfo::decode(pr, info.targets(), info.hits())?;
         let extra = Extra::decode_packet(pr)?;
@@ -275,7 +274,7 @@ where
     }
 }
 
-#[derive(Debug, MoopleEncodePacket)]
+#[derive(Debug, ShroomEncodePacket)]
 pub struct AttackReq<Info: AttackInfo, Extra> {
     pub info: Info,
     pub targets: Vec<AttackTargetInfo>,
@@ -283,7 +282,7 @@ pub struct AttackReq<Info: AttackInfo, Extra> {
 }
 
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct MeleeAttackInfo {
     pub portal: u8,            // Field key
     pub hit_target_count: DrHitTargetCount,
@@ -304,14 +303,14 @@ pub struct MeleeAttackInfo {
 }
 
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct MeleeAttackTail {
     pub pos: Vec2,
     // If skillid == 14111006
-    //pub grenade_pos: MapleOption8<Vec2>
+    //pub grenade_pos: ShroomOption8<Vec2>
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct DrCtx {
     pub dr0: u32,
     pub dr1: u32,
@@ -354,21 +353,21 @@ impl PacketWrapped for DrHitTargetCount {
 pub type UserMeleeAttackReq = AttackReq<MeleeAttackInfo, MeleeAttackTail>;
 packet_opcode!(UserMeleeAttackReq, RecvOpcodes::UserMeleeAttack);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct SkillInfoCrc {
     pub crc1: u32,
     pub crc2: u32
 }
 
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct ValWithCrc {
     pub val: u32,
     pub crc: u32
 }
 
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct MagicAttackInfo {
     pub portal: u8,            // Field key
     pub hit_target_count: DrHitTargetCount,
@@ -389,10 +388,10 @@ pub struct MagicAttackInfo {
     pub phase: u32,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct MagicAttackTail {
     pub pos: Vec2,
-    pub dragon_pos: MapleOption8<Vec2>,
+    pub dragon_pos: ShroomOption8<Vec2>,
 }
 
 impl AttackInfo for MagicAttackInfo {
@@ -408,7 +407,7 @@ impl AttackInfo for MagicAttackInfo {
 pub type UserMagicAttackReq = AttackReq<MagicAttackInfo, MagicAttackTail>;
 packet_opcode!(UserMagicAttackReq, RecvOpcodes::UserMagicAttack);
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct BodyAttackInfo {
     pub portal: u8,            // Field key
     pub hit_target_count: DrHitTargetCount,
@@ -427,7 +426,7 @@ pub struct BodyAttackInfo {
     pub id: u32,// dwid?
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct BodyAttackTail {
     pub pos: Vec2,
 }
@@ -456,9 +455,9 @@ bitflags! {
         const SPARK = 0x80;
     }
 }
-mark_maple_bit_flags!(ShotAttackFlags);
+mark_shroom_bit_flags!(ShotAttackFlags);
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct ShotAttackInfo {
     pub portal: u8,            // Field key
     pub hit_target_count: DrHitTargetCount,
@@ -485,7 +484,7 @@ pub struct ShotAttackInfo {
     pub spirit_javelin_bullet_id: ItemId,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct ShootAttackTail {
     pub pos: Vec2,
     // If wildhunter
@@ -510,14 +509,14 @@ packet_opcode!(UserShotAttackReq, RecvOpcodes::UserShootAttack);
 
 
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct UserSkillUpReq {
     pub ticks: Ticks,
     pub skill_id: SkillId,
 }
 packet_opcode!(UserSkillUpReq, RecvOpcodes::UserSkillUpRequest);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct UserSkillUseReq {
     pub ticks: Ticks,
     pub skill_id: SkillId,
@@ -528,28 +527,28 @@ pub struct UserSkillUseReq {
     // If has affected -> u8 affectedMemberBitmap, this is tricky
     // cause no way to detect if affectedMemberBitmap is not encoded
     // if skill id == 2311001 -> dispel => Delay
-    pub affected_mobs: MapleList8<ObjectId>,
-    pub delay: MapleDurationMs16,
+    pub affected_mobs: ShroomList8<ObjectId>,
+    pub delay: ShroomDurationMs16,
 }
 packet_opcode!(UserSkillUseReq, RecvOpcodes::UserSkillUseRequest);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct UpdatedSkillRecord {
     pub id: SkillId,
     pub level: u32,
     pub master_level: u32,
-    pub expiration: MapleExpiration,
+    pub expiration: ShroomExpiration,
 }
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct ChangeSkillRecordResp {
     pub reset_excl: bool,
-    pub skill_records: MapleList16<UpdatedSkillRecord>,
+    pub skill_records: ShroomList16<UpdatedSkillRecord>,
     pub updated_secondary_stat: bool,
 }
 packet_opcode!(ChangeSkillRecordResp, SendOpcodes::ChangeSkillRecordResult);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct CharGivePopularityResult {
     pub code: u8,     // Code 0-5, code 0 and 5 are success
     pub name: String, // Code 0,5
@@ -558,7 +557,7 @@ pub struct CharGivePopularityResult {
 }
 packet_opcode!(CharGivePopularityResult, SendOpcodes::GivePopularityResult);
 
-maple_packet_enum!(
+shroom_packet_enum!(
     DropPickUpMsg,
     u8,
     // item, quantity
@@ -567,7 +566,7 @@ maple_packet_enum!(
     PickUpEq(ItemId) => 0,
 );
 
-maple_packet_enum!(
+shroom_packet_enum!(
     MessageResp,
     u8,
     DropPickUp(DropPickUpMsg) => 0,
@@ -577,7 +576,7 @@ packet_opcode!(MessageResp, SendOpcodes::Message);
 
 #[cfg(test)]
 mod tests {
-    use moople_packet::DecodePacket;
+    use shroom_net::packet::DecodePacket;
 
     use crate::game::user::{UserMagicAttackReq, UserMeleeAttackReq};
 

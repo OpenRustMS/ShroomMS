@@ -9,8 +9,8 @@ pub mod keymaps;
 pub mod macros;
 pub mod mob;
 pub mod user;
-use moople_derive::MooplePacket;
-use moople_packet::{maple_packet_enum, packet_opcode, proto::time::Ticks};
+use shroom_net_derive::ShroomPacket;
+use shroom_net::{packet::{proto::time::Ticks}, packet_opcode, shroom_packet_enum};
 
 use crate::{
     id::job_id::JobId,
@@ -24,7 +24,7 @@ use super::login::ClientKey;
 
 pub type ObjectId = u32;
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct CharacterInfoReq {
     pub ticks: Ticks,
     pub char_id: CharacterId,
@@ -32,7 +32,7 @@ pub struct CharacterInfoReq {
 }
 packet_opcode!(CharacterInfoReq, RecvOpcodes::UserCharacterInfoRequest);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct CharacterInfoResp {
     pub char_id: CharacterId,
     pub level: u8,
@@ -40,7 +40,7 @@ pub struct CharacterInfoResp {
 }
 packet_opcode!(CharacterInfoResp, SendOpcodes::CharacterInfo);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MigrateInGameReq {
     pub char_id: CharacterId,
     pub machine_id: MachineId,
@@ -50,27 +50,27 @@ pub struct MigrateInGameReq {
 }
 packet_opcode!(MigrateInGameReq, RecvOpcodes::MigrateIn);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct TransferChannelReq {
     pub channel_id: u8,
     pub ticks: Ticks,
 }
 packet_opcode!(TransferChannelReq, RecvOpcodes::UserTransferChannelRequest);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MigrateCommandResp {
     pub unknown: bool, //always true?
     pub addr: ServerSocketAddr,
 }
 packet_opcode!(MigrateCommandResp, SendOpcodes::MigrateCommand);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct UpdateGMBoardReq {
     board_id: u32,
 }
 packet_opcode!(UpdateGMBoardReq, RecvOpcodes::UpdateGMBoard);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct UserPortalScriptReq {
     field_key: u8,
     portal_name: String,
@@ -78,18 +78,18 @@ pub struct UserPortalScriptReq {
 }
 packet_opcode!(UserPortalScriptReq, RecvOpcodes::UserPortalScriptRequest);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct ResetNLCPQ;
 //TODO opcode name??
 packet_opcode!(ResetNLCPQ, RecvOpcodes::RequireFieldObstacleStatus);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct CtxSetGenderResp {
     pub gender: Gender,
 }
 packet_opcode!(CtxSetGenderResp, SendOpcodes::SetGender);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct ClaimSvrStatusChangedResp {
     pub connected: bool,
 }
@@ -98,13 +98,13 @@ packet_opcode!(
     SendOpcodes::ClaimSvrStatusChanged
 );
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct ServerMessage {
     pub flag: bool,
     pub msg: String,
 }
 
-maple_packet_enum!(
+shroom_packet_enum!(
     BroadcastMessageResp,
     u8,
     ServerMessage(ServerMessage) => 4,

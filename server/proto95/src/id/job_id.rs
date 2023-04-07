@@ -1,5 +1,5 @@
-use moople_packet::mark_maple_enum;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use shroom_net::mark_shroom_enum;
 
 //TODO model sub job for dual blade
 // Which is actually a beginner but sub job is set to 1
@@ -70,7 +70,7 @@ pub enum JobId {
     Corsair = 522,
 
     //What's that?
-    MapleLeafBrigadier = 800,
+    ShroomLeafBrigadier = 800,
     GM = 900,
     SuperGM = 910,
 
@@ -136,7 +136,7 @@ pub enum JobId {
     Mechanic3 = 3511,
     Mechanic4 = 3512,
 }
-mark_maple_enum!(JobId);
+mark_shroom_enum!(JobId);
 
 impl JobId {
     pub fn job_group(&self) -> JobGroup {
@@ -227,7 +227,7 @@ pub enum JobGroup {
     Evan = 4,
 }
 
-mark_maple_enum!(JobGroup);
+mark_shroom_enum!(JobGroup);
 
 impl JobGroup {
     pub fn get_noob_job_id(&self) -> JobId {

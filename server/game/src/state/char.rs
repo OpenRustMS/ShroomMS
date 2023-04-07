@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use data::entities::skill;
-use moople_packet::proto::partial::PartialFlag;
+use shroom_net::packet::proto::partial::PartialFlag;
 use proto95::{id::SkillId, shared::char::CharStatPartial};
 
 pub type PartialCharStats = PartialFlag<(), CharStatPartial>;

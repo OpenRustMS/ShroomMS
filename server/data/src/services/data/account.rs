@@ -100,7 +100,7 @@ impl AccountService {
             last_selected_world: Set(0),
             character_slots: Set(3),
             nx_credit: Set(0),
-            maple_points: Set(0),
+            shroom_points: Set(0),
             nx_prepaid: Set(0),
             gender: Set(gender),
             tester: Set(false),
@@ -242,7 +242,7 @@ mod tests {
         assert_eq!(acc.gender, Some(GenderTy::Female));
 
         let acc = svc.accept_tos(acc).await?;
-        assert_eq!(acc.accepted_tos, true);
+        assert!(acc.accepted_tos);
 
         //Login must work
         svc.try_login(USERNAME, PW).await?;

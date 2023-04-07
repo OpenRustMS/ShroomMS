@@ -23,7 +23,7 @@ pub struct Model {
     pub character_slots: i32,
     pub nx_credit: i32,
     pub nx_prepaid: i32,
-    pub maple_points: i32,
+    pub shroom_points: i32,
     pub tester: bool,
 }
 

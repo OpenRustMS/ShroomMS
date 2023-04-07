@@ -1,12 +1,12 @@
-use moople_derive::MooplePacket;
-use moople_packet::{
-    maple_enum_code, maple_packet_enum, packet_opcode,
+use shroom_net_derive::ShroomPacket;
+use shroom_net::{packet::{
+    
     proto::{
-        option::MapleOption8,
-        time::{MapleDurationMs16, MapleDurationMs32},
-        CondOption, MapleList32, PacketWrapped, partial::PartialFlag,
-    }, partial_data,
-};
+        option::ShroomOption8,
+        time::{ShroomDurationMs16, ShroomDurationMs32},
+        CondOption, ShroomList32, PacketWrapped, partial::PartialFlag,
+    }
+}, partial_data, shroom_enum_code, shroom_packet_enum, packet_opcode};
 
 use crate::{
     id::{ItemId, SkillId},
@@ -19,20 +19,20 @@ use super::ObjectId;
 
 pub type MobId = u32;
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct TempStatValue {
     pub n: u16,
     pub r: u32,
-    pub t: MapleDurationMs16,
+    pub t: ShroomDurationMs16,
 }
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct BurnedInfo {
     pub char_id: CharacterId,
     pub skill_id: SkillId,
     pub n_dmg: u32,
-    pub interval: MapleDurationMs32,
-    pub end: MapleDurationMs32,
+    pub interval: ShroomDurationMs32,
+    pub end: ShroomDurationMs32,
     pub dot_count: u32,
 }
 
@@ -76,10 +76,10 @@ partial_data!(
     MagicCrash(TempStatValue) => 1 << 36,
     DamagedElemAttr(TempStatValue) => 1 << 23,
     HealByDamage(TempStatValue) => 1 << 37,
-    Burned(MapleList32<BurnedInfo>) => 1 << 27,
+    Burned(ShroomList32<BurnedInfo>) => 1 << 27,
 );
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MobTemporaryStatTail {
     // If PCounter is set
     pub w_pcounter: u32,
@@ -96,7 +96,7 @@ pub type PartialMobTemporaryStat = PartialFlag<(), MobTemporaryStatPartial>;
 
 //TODO figure out what the u32 is, summon id?
 
-maple_packet_enum!(
+shroom_packet_enum!(
     MobSummonType,
     i8,
     Effect(u32) => 0,
@@ -107,9 +107,9 @@ maple_packet_enum!(
     Delay(()) => -5,
 );
 
-maple_enum_code!(CarnivalTeam, u8, None = 0xff, Blue = 0, Red = 1);
+shroom_enum_code!(CarnivalTeam, u8, None = 0xff, Blue = 0, Red = 1);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MobInitData {
     pub pos: Vec2,
     pub move_action: u8,
@@ -121,7 +121,7 @@ pub struct MobInitData {
     pub phase: u32,
 }
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MobEnterFieldResp {
     pub id: ObjectId,
     pub calc_dmg_index: u8,
@@ -131,7 +131,7 @@ pub struct MobEnterFieldResp {
 }
 packet_opcode!(MobEnterFieldResp, SendOpcodes::MobEnterField);
 
-maple_packet_enum!(
+shroom_packet_enum!(
     MobLeaveType,
     u8,
     RemainHp(()) => 0,
@@ -142,14 +142,14 @@ maple_packet_enum!(
     SummonTimeout(()) => 5
 );
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MobLeaveFieldResp {
     pub id: ObjectId,
     pub leave_type: MobLeaveType,
 }
 packet_opcode!(MobLeaveFieldResp, SendOpcodes::MobLeaveField);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct LocalMobData {
     pub calc_damage_index: u8,
     pub tmpl_id: MobId,
@@ -162,7 +162,7 @@ fn has_local_mob_data(level: &u8) -> bool {
 }
 
 //
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MobChangeControllerResp {
     // // 0 = None | 1 = Control | 2 = Aggro
     pub level: u8,
@@ -197,7 +197,7 @@ impl PacketWrapped for FlyTargetPoint {
     }
 }
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MobMoveResp {
     pub id: ObjectId,
     pub not_force_landing: bool,
@@ -205,21 +205,21 @@ pub struct MobMoveResp {
     pub next_attack_possible: bool,
     pub action_dir: u8,
     pub data: u32,
-    pub multi_target: MapleList32<TagPoint>,
-    pub rand_time: MapleList32<u32>,
+    pub multi_target: ShroomList32<TagPoint>,
+    pub rand_time: ShroomList32<u32>,
     pub move_path: MovePath,
 }
 packet_opcode!(MobMoveResp, SendOpcodes::MobMove);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MobMoveReq {
     pub id: ObjectId,
     pub ctrl_sn: u16,
     pub flag: u8, // bSomeRand | 4 * (bRushMove | 2 * (bRiseByToss | 2 * nMobCtrlState));
     pub action_dir: u8,
     pub data: u32,
-    pub multi_target: MapleList32<TagPoint>,
-    pub rand_time: MapleList32<u32>,
+    pub multi_target: ShroomList32<TagPoint>,
+    pub rand_time: ShroomList32<u32>,
     pub move_flags: u8,
     pub hacked_code: u32,
     pub fly_target_pos: FlyTargetPoint,
@@ -233,7 +233,7 @@ pub struct MobMoveReq {
 }
 packet_opcode!(MobMoveReq, RecvOpcodes::MobMove);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MobMoveCtrlAckResp {
     pub id: ObjectId,
     pub ctrl_sn: u16,
@@ -244,7 +244,7 @@ pub struct MobMoveCtrlAckResp {
 }
 packet_opcode!(MobMoveCtrlAckResp, SendOpcodes::MobCtrlAck);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MobDamagedResp {
     pub id: ObjectId,
     pub ty: u8,
@@ -255,7 +255,7 @@ pub struct MobDamagedResp {
 }
 packet_opcode!(MobDamagedResp, SendOpcodes::MobDamaged);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MobOnStatSet {
     pub id: ObjectId,
     //TODO if (MobStat::IsMovementAffectingStat(uFlag: var_44) != 0 && this->m_bDoomReserved != 0)
@@ -263,48 +263,48 @@ pub struct MobOnStatSet {
 }
 packet_opcode!(MobOnStatSet, SendOpcodes::MobStatSet);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MobOnStatReset {
     pub id: ObjectId,
     //TODO
 }
 packet_opcode!(MobOnStatReset, SendOpcodes::MobStatReset);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MobOnSuspendReset {
     pub id: ObjectId,
     pub suspend_reset: bool,
 }
 packet_opcode!(MobOnSuspendReset, SendOpcodes::MobSuspendReset);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MobAffectedResp {
     pub id: ObjectId,
     pub skill_id: u32,
-    pub start_delay: MapleDurationMs16,
+    pub start_delay: ShroomDurationMs16,
 }
 packet_opcode!(MobAffectedResp, SendOpcodes::MobAffected);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MobSpecialEffectBySkillResp {
     pub id: ObjectId,
     pub skill_id: u32,
     pub char_id: CharacterId,
-    pub start_delay: MapleDurationMs16,
+    pub start_delay: ShroomDurationMs16,
 }
 packet_opcode!(
     MobSpecialEffectBySkillResp,
     SendOpcodes::MobSpecialEffectBySkill
 );
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MobHPIndicatorResp {
     pub id: ObjectId,
     pub hp_perc: u8,
 }
 packet_opcode!(MobHPIndicatorResp, SendOpcodes::MobHPIndicator);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MobCatchEffectResp {
     pub id: ObjectId,
     pub success: bool,
@@ -312,7 +312,7 @@ pub struct MobCatchEffectResp {
 }
 packet_opcode!(MobCatchEffectResp, SendOpcodes::MobCatchEffect);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MobEffectByItem {
     pub id: ObjectId,
     pub item: ItemId,
@@ -320,7 +320,7 @@ pub struct MobEffectByItem {
 }
 packet_opcode!(MobEffectByItem, SendOpcodes::MobEffectByItem);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MobSpeakingResp {
     pub id: ObjectId,
     pub speak_info: u32,
@@ -328,7 +328,7 @@ pub struct MobSpeakingResp {
 }
 packet_opcode!(MobSpeakingResp, SendOpcodes::MobSpeaking);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MobIncChargeCount {
     pub id: ObjectId,
     pub mob_charge_count: u32,
@@ -336,17 +336,17 @@ pub struct MobIncChargeCount {
 }
 packet_opcode!(MobIncChargeCount, SendOpcodes::MobChargeCount);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MobSkillDelayResp {
     pub id: ObjectId,
-    pub skill_delay: MapleDurationMs32,
+    pub skill_delay: ShroomDurationMs32,
     pub skill_id: u32,
     pub slv: u32,
     pub skill_option: u32,
 }
 packet_opcode!(MobSkillDelayResp, SendOpcodes::MobSkillDelay);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MobEscortPathResp {
     pub id: ObjectId,
     pub u1: u32,
@@ -359,33 +359,33 @@ pub struct MobEscortPathResp {
 }
 packet_opcode!(MobEscortPathResp, SendOpcodes::MobRequestResultEscortInfo);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MobEscortStopSayResp {
     pub id: ObjectId,
-    pub stop_escort: MapleDurationMs32,
+    pub stop_escort: ShroomDurationMs32,
     pub chat_ballon: u32,
-    pub chat_msg: MapleOption8<String>,
+    pub chat_msg: ShroomOption8<String>,
 }
 packet_opcode!(
     MobEscortStopSayResp,
     SendOpcodes::MobEscortStopEndPermmision
 );
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MobEscortReturnBeforeResp {
     pub id: ObjectId,
     pub u: u32,
 }
 packet_opcode!(MobEscortReturnBeforeResp, SendOpcodes::MobEscortStopSay);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MobNextAttackResp {
     pub id: ObjectId,
     pub force_atk_id: u32,
 }
 packet_opcode!(MobNextAttackResp, SendOpcodes::MobNextAttack);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MobAttackedByMobResp {
     pub id: ObjectId,
     pub mob_atk_id: u8,
@@ -396,7 +396,7 @@ pub struct MobAttackedByMobResp {
 }
 packet_opcode!(MobAttackedByMobResp, SendOpcodes::MobAttackedByMob);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MobDropPickUpReq {
     pub mob_id: ObjectId,
     pub drop_id: ObjectId,
@@ -405,7 +405,7 @@ packet_opcode!(MobDropPickUpReq, RecvOpcodes::MobDropPickUpRequest);
 
 #[cfg(test)]
 mod tests {
-    use moople_packet::DecodePacket;
+    use shroom_net::packet::DecodePacket;
 
     use super::MobMoveReq;
 

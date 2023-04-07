@@ -1,7 +1,6 @@
 use std::{ops::Deref, sync::Arc};
 
 use dashmap::DashMap;
-use moople_net::service::{packet_buffer::PacketBuffer, session_svc::SharedSessionHandle};
 use proto95::{
     game::{
         chat::UserChatMsgResp,
@@ -14,6 +13,7 @@ use proto95::{
     shared::{char::AvatarData, FootholdId, Range2, Vec2},
 };
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort};
+use shroom_net::net::service::{server_sess::SharedSessionHandle, packet_buffer::PacketBuffer};
 
 use super::{
     data::character::CharacterID,
@@ -22,7 +22,7 @@ use super::{
         fh_tree::FhTree,
         meta_service::{FieldMeta, MetaService},
     },
-    session::MoopleSessionSet,
+    session::ShroomSessionSet,
 };
 
 #[derive(Debug)]
@@ -35,7 +35,7 @@ pub struct FieldData {
     npc_pool: Pool<Npc>,
     reactor_pool: Pool<Reactor>,
     user_pool: Pool<User>,
-    sessions: MoopleSessionSet,
+    sessions: ShroomSessionSet,
 }
 
 pub struct FieldJoinHandle {
@@ -108,7 +108,7 @@ impl FieldData {
             field_meta,
             field_fh: fh_meta,
             drop_pool: Pool::new(meta),
-            sessions: MoopleSessionSet::new(),
+            sessions: ShroomSessionSet::new(),
             mob_pool: Pool::from_elems(meta, mobs),
             npc_pool: Pool::from_elems(meta, npcs),
             reactor_pool: Pool::from_elems(meta, reactors),
@@ -302,8 +302,8 @@ impl Actor for FieldActor {
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match message {
-            FieldMessage::UserEnter(user, reply) => {
-                state.add_user(user);
+            FieldMessage::UserEnter(user, _reply) => {
+                state.add_user(user).unwrap();
             }
             FieldMessage::UserLeave(id) => state.remove_user(id)?,
         }

@@ -7,23 +7,9 @@ use async_trait::async_trait;
 use config::LoginConfig;
 use data::services::data::account::AccountServiceError;
 use data::services::data::character::{CharacterCreateDTO, CharacterID, ItemStarterSet};
-use data::services::session::MoopleMigrationKey;
+use data::services::session::ShroomMigrationKey;
 use data::{entities::character, services};
 use login_state::LoginState;
-use moople_net::service::handler::SessionHandleResult;
-use moople_net::service::resp::PongResponse;
-use moople_net::{
-    maple_router_handler,
-    service::{
-        handler::{MapleServerSessionHandler, MapleSessionHandler},
-        resp::{MigrateResponse, PacketOpcodeExt, ResponsePacket},
-    },
-    MapleSession,
-};
-use moople_packet::{
-    proto::{list::MapleIndexList8, time::MapleTime, MapleList8},
-    HasOpcode, MaplePacket, MaplePacketReader, MaplePacketWriter,
-};
 
 use proto95::shared::char::AvatarEquips;
 use proto95::shared::{ExceptionLogReq, PongReq};
@@ -54,6 +40,13 @@ use proto95::{
         UpdateScreenSettingReq,
     },
 };
+use shroom_net::net::ShroomSession;
+use shroom_net::packet::ShroomList8;
+use shroom_net::packet::list::ShroomIndexList8;
+use shroom_net::packet::time::ShroomTime;
+use shroom_net::{ShroomPacket, shroom_router_handler, PacketWriter, PacketReader, HasOpcode};
+use shroom_net::net::service::handler::{ShroomSessionHandler, SessionHandleResult, ShroomServerSessionHandler};
+use shroom_net::net::service::resp::{ResponsePacket, PongResponse, MigrateResponse, PacketOpcodeExt};
 use tokio::net::TcpStream;
 
 pub type LoginResponse<T> = ResponsePacket<SendOpcodes, T>;
@@ -82,19 +75,19 @@ impl LoginHandler {
 }
 
 #[async_trait]
-impl MapleSessionHandler for LoginHandler {
+impl ShroomSessionHandler for LoginHandler {
     type Transport = TcpStream;
     type Error = anyhow::Error;
 
     async fn handle_packet(
         &mut self,
-        packet: MaplePacket,
-        session: &mut moople_net::MapleSession<Self::Transport>,
+        packet: ShroomPacket,
+        session: &mut ShroomSession<Self::Transport>,
     ) -> Result<SessionHandleResult, Self::Error> {
-        maple_router_handler!(
+        shroom_router_handler!(
             handler,
             LoginHandler,
-            MapleSession<TcpStream>,
+            ShroomSession<TcpStream>,
             anyhow::Error,
             LoginHandler::handle_default,
             PongReq => LoginHandler::handle_pong,
@@ -121,14 +114,14 @@ impl MapleSessionHandler for LoginHandler {
     }
 }
 
-impl MapleServerSessionHandler for LoginHandler {
+impl ShroomServerSessionHandler for LoginHandler {
     fn get_ping_interval() -> std::time::Duration {
         Duration::from_secs(30)
     }
 
-    fn get_ping_packet(&mut self) -> Result<MaplePacket, Self::Error> {
-        let mut pw = MaplePacketWriter::default();
-        pw.write_opcode(SendOpcodes::AliveReq);
+    fn get_ping_packet(&mut self) -> Result<ShroomPacket, Self::Error> {
+        let mut pw = PacketWriter::default();
+        pw.write_opcode(SendOpcodes::AliveReq)?;
         Ok(pw.into_packet())
     }
 }
@@ -137,7 +130,7 @@ impl LoginHandler {
     pub async fn handle_default(
         &mut self,
         _op: RecvOpcodes,
-        pr: MaplePacketReader<'_>,
+        pr: PacketReader<'_>,
     ) -> anyhow::Result<SessionHandleResult> {
         log::info!("Unhandled packet: {:?}", pr.into_inner());
         Ok(SessionHandleResult::Ok)
@@ -296,7 +289,7 @@ impl LoginHandler {
             Err(AccountServiceError::AccountIsBanned) => CheckPasswordResp::BlockedIp(BlockedIp {
                 hdr,
                 reason: 0,
-                ban_time: MapleTime::maple_default(),
+                ban_time: ShroomTime::shroom_default(),
             }),
             Ok(acc) => {
                 let account_info = (&acc).into();
@@ -340,7 +333,7 @@ impl LoginHandler {
             .char
             .get_characters_for_account(acc.id)
             .await?;
-        let characters: MapleList8<_> = char_list.iter().map(map_char_with_rank).collect();
+        let characters: ShroomList8<_> = char_list.iter().map(map_char_with_rank).collect();
 
         let char_list = SelectWorldCharList {
             characters,
@@ -447,7 +440,7 @@ impl LoginHandler {
         self.services
             .session_manager
             .create_migration_session(
-                MoopleMigrationKey::new(client_key, self.addr),
+                ShroomMigrationKey::new(client_key, self.addr),
                 (acc, req.char_id as CharacterID),
             )
             .await?;
@@ -478,13 +471,13 @@ pub fn map_char_to_avatar(char: &character::Model) -> AvatarData {
         face: FaceId(char.face as u32),
         hair: HairId(char.hair as u32),
         equips: AvatarEquips {
-            equips: MapleIndexList8::from(vec![
+            equips: ShroomIndexList8::from(vec![
                 (5, ItemId(1040006)),
                 (6, ItemId(1060006)),
                 (7, ItemId(1072005)),
                 (11, ItemId(1322005)),
             ]),
-            masked_equips: MapleIndexList8::from(vec![]),
+            masked_equips: ShroomIndexList8::from(vec![]),
             weapon_sticker_id: ItemId(0),
         },
         pets: PetIds::default(),
