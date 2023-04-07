@@ -508,7 +508,7 @@ mod tests {
             inv.try_add(i).unwrap();
         }
 
-        assert_eq!(inv.is_full(), true);
+        assert!(inv.is_full());
         itertools::assert_equal(inv.items().cloned(), [1, 2, 3, 4]);
         assert!(inv.items.test_check_sorted());
     }

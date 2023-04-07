@@ -242,7 +242,7 @@ mod tests {
         assert_eq!(acc.gender, Some(GenderTy::Female));
 
         let acc = svc.accept_tos(acc).await?;
-        assert_eq!(acc.accepted_tos, true);
+        assert!(acc.accepted_tos);
 
         //Login must work
         svc.try_login(USERNAME, PW).await?;

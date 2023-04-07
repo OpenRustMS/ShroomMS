@@ -1,10 +1,22 @@
-use std::{net::{IpAddr, SocketAddr}, time::Duration};
+use std::{
+    net::{IpAddr, SocketAddr},
+    sync::Arc,
+    time::Duration,
+};
 
 use data::services::{
     meta::meta_service::MetaService, server_info::ServerInfo, Services, SharedServices,
 };
 use login::{config::LoginConfig, LoginHandler};
-use shroom_net::net::{service::{HandshakeGenerator, server_sess::{ShroomServer, SharedSessionHandle, ShroomServerConfig}, BasicHandshakeGenerator, handler::MakeServerSessionHandler}, ShroomSession, crypto::ShroomCryptoKeys};
+use shroom_net::net::{
+    crypto::{ig_cipher::IgCipher, CryptoContext},
+    service::{
+        handler::MakeServerSessionHandler,
+        server_sess::{SharedSessionHandle, ShroomServer, ShroomServerConfig},
+        BasicHandshakeGenerator, HandshakeGenerator,
+    },
+    ShroomSession,
+};
 use tokio::{net::TcpStream, task::JoinSet};
 
 use shrooming::{FileIndex, FileSvr};
@@ -95,6 +107,17 @@ async fn main() -> anyhow::Result<()> {
     let settings = config::get_configuration().expect("Failed to load configuration");
     log::info!("{0} - Mono - {1}", settings.server_name, settings.version);
 
+    //TODO add crypto keys to config
+    let crypto_ctx = CryptoContext {
+        aes_key: *include_bytes!("../../../keys/net/aes_key.bin"),
+        ig_cipher: IgCipher::new(
+            *include_bytes!("../../../keys/net/round_shifting_key.bin"),
+            u32::from_le_bytes(*include_bytes!("../../../keys/net/initial_round_key.bin")),
+        ),
+    };
+
+    let shared_ctx = Arc::new(crypto_ctx);
+
     let server_addr: IpAddr = settings.external_ip.parse()?;
     let bind_addr: IpAddr = settings.bind_ip.parse()?;
 
@@ -128,14 +151,20 @@ async fn main() -> anyhow::Result<()> {
 
     let mut set = JoinSet::new();
     set.spawn(srv_login_server(
-        ShroomServerConfig { keys: ShroomCryptoKeys::default(), migrate_delay: Duration::from_millis(7500) },
+        ShroomServerConfig {
+            crypto_ctx: shared_ctx.clone(),
+            migrate_delay: Duration::from_millis(7500),
+        },
         SocketAddr::new(bind_addr, settings.base_port),
         handshake_gen.clone(),
         services.clone(),
     ));
     for ch in 0..settings.num_channels {
         set.spawn(srv_game_server(
-            ShroomServerConfig { keys: ShroomCryptoKeys::default(), migrate_delay: Duration::from_millis(7500) },
+            ShroomServerConfig {
+                crypto_ctx: shared_ctx.clone(),
+                migrate_delay: Duration::from_millis(7500),
+            },
             SocketAddr::new(bind_addr, settings.base_port + 1 + ch as u16),
             handshake_gen.clone(),
             services.clone(),
