@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use std::net::{IpAddr, SocketAddr};
 
-use moople_packet::proto::MapleList16;
+use shroom_net::packet::proto::ShroomList16;
 
 use proto95::login::world::{ChannelId, ChannelItem, WorldId, WorldInfoResp, WorldItem};
 
@@ -84,7 +84,7 @@ impl ServerInfo {
             event_drop_rate: 100,
             block_char_creation: false,
             channels,
-            balloons: MapleList16::default(),
+            balloons: ShroomList16::default(),
         }
     }
 }

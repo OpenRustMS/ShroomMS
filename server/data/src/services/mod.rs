@@ -26,7 +26,7 @@ use self::{
     },
     field::FieldService,
     meta::meta_service::MetaService,
-    session::{session_data::MoopleSessionBackend, GameSessionManager},
+    session::{session_data::ShroomSessionBackend, GameSessionManager},
 };
 
 pub type SharedServices = Arc<Services>;
@@ -35,7 +35,7 @@ pub type SharedServices = Arc<Services>;
 pub struct Services {
     pub data: Arc<DataServices>,
     pub server_info: ServerService,
-    pub session_manager: GameSessionManager<MoopleSessionBackend>,
+    pub session_manager: GameSessionManager<ShroomSessionBackend>,
     pub field: FieldService,
     pub meta: &'static MetaService,
 }
@@ -48,7 +48,7 @@ impl Services {
     ) -> Self {
         let data = Arc::new(DataServices::new(db, meta));
 
-        let session_backend = MoopleSessionBackend { data: data.clone() };
+        let session_backend = ShroomSessionBackend { data: data.clone() };
 
         Self {
             data,

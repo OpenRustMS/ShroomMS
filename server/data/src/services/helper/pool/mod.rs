@@ -7,16 +7,15 @@ pub mod user;
 pub use drop::Drop;
 
 pub use mob::Mob;
-use moople_net::service::packet_buffer::PacketBuffer;
 pub use npc::Npc;
 
 use std::{collections::BTreeMap, sync::{atomic::AtomicU32, RwLock}};
 
-use moople_packet::{EncodePacket, HasOpcode};
+use shroom_net::{packet::{EncodePacket}, HasOpcode, net::service::packet_buffer::PacketBuffer};
 use proto95::game::ObjectId;
 use std::fmt::Debug;
 
-use crate::services::{meta::meta_service::MetaService, session::MoopleSessionSet};
+use crate::services::{meta::meta_service::MetaService, session::ShroomSessionSet};
 
 pub fn next_id() -> ObjectId {
     static ID: AtomicU32 = AtomicU32::new(0);
@@ -74,7 +73,7 @@ where
         }
     }
 
-    pub fn add(&self, item: T, sessions: &MoopleSessionSet) -> anyhow::Result<u32> {
+    pub fn add(&self, item: T, sessions: &ShroomSessionSet) -> anyhow::Result<u32> {
         let id = T::get_id(&item);
         let pkt = item.get_enter_pkt(id);
         self.items.write().expect("Pool insert").insert(id, item);
@@ -87,7 +86,7 @@ where
         &self,
         id: T::Id,
         param: T::LeaveParam,
-        sessions: &MoopleSessionSet,
+        sessions: &ShroomSessionSet,
     ) -> anyhow::Result<T> {
         //TODO migrate to actors
         let Some(item) = self.items.try_write().unwrap().remove(&id) else {

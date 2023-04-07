@@ -1,5 +1,4 @@
-use moople_net::service::{packet_buffer::PacketBuffer, session_svc::SharedSessionHandle};
-use moople_packet::{EncodePacket, HasOpcode, MaplePacketWriter};
+use shroom_net::{packet::{EncodePacket, PacketWriter}, net::service::{server_sess::SharedSessionHandle, packet_buffer::PacketBuffer}, HasOpcode};
 use proto95::{
     game::{
         mob::{
@@ -13,7 +12,7 @@ use proto95::{
 };
 
 use crate::services::{
-    data::character::CharacterID, meta::meta_service::MobMeta, session::MoopleSessionSet,
+    data::character::CharacterID, meta::meta_service::MobMeta, session::ShroomSessionSet,
 };
 
 use super::{next_id, Pool, PoolItem};
@@ -98,8 +97,8 @@ impl Pool<Mob> {
                 },
             };
 
-            let mut pw = MaplePacketWriter::default();
-            pw.write_opcode(MobChangeControllerResp::OPCODE);
+            let mut pw = PacketWriter::default();
+            pw.write_opcode(MobChangeControllerResp::OPCODE)?;
             MobChangeControllerResp {
                 level: 1,
                 //seed: CrcSeed::default(),
@@ -114,7 +113,7 @@ impl Pool<Mob> {
             .encode_packet(&mut pw)?;
 
             //TODO
-            session.tx.try_send(pw.into_packet().data).unwrap();
+            session.tx.try_send(pw.into_packet().as_ref()).unwrap();
         }
         Ok(())
     }
@@ -125,7 +124,7 @@ impl Pool<Mob> {
         id: ObjectId,
         dmg: u32,
         buf: &mut PacketBuffer,
-        sessions: &MoopleSessionSet
+        sessions: &ShroomSessionSet
     ) -> anyhow::Result<bool> {
         // TODO: Locking the whole pool to update a single mob is not right
         let mut mobs = self.items.write().expect("Mob attack");
@@ -155,7 +154,7 @@ impl Pool<Mob> {
         id: ObjectId,
         req: MobMoveReq,
         controller: CharacterID,
-        sessions: &MoopleSessionSet,
+        sessions: &ShroomSessionSet,
     ) -> anyhow::Result<()> {
         let pkt = MobMoveResp {
             id,

@@ -1,7 +1,7 @@
 use std::{ops::Add, time::Duration};
 
 use geo::coord;
-use moople_packet::proto::time::MapleExpiration;
+use shroom_net::packet::proto::time::ShroomExpiration;
 use proto95::{
     game::{
         drop::{
@@ -16,7 +16,7 @@ use proto95::{
 };
 
 use crate::services::{
-    data::character::CharacterID, meta::fh_tree::Foothold, session::MoopleSessionSet,
+    data::character::CharacterID, meta::fh_tree::Foothold, session::ShroomSessionSet,
 };
 
 use super::{next_id, Pool, PoolItem};
@@ -63,7 +63,7 @@ impl PoolItem for Drop {
         let (drop_type, expiration) = match self.value {
             DropTypeValue::Item(item) => (
                 DropType::Item(item),
-                Some(MapleExpiration::delay(chrono::Duration::seconds(60))),
+                Some(ShroomExpiration::delay(chrono::Duration::seconds(60))),
             ),
             DropTypeValue::Mesos(mesos) => (DropType::Money(mesos), None),
         };
@@ -114,7 +114,7 @@ impl Pool<Drop> {
         pos: Vec2,
         fh: Option<&Foothold>,
         killer: CharacterID,
-        sessions: &MoopleSessionSet,
+        sessions: &ShroomSessionSet,
     ) -> anyhow::Result<()> {
         let Some(drops) = self.meta.get_drops_for_mob(killed_mob)  else {
             return Ok(())

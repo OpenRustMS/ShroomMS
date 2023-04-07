@@ -1,23 +1,25 @@
-use moople_derive::MooplePacket;
-use moople_packet::{
-    maple_enum_code, maple_packet_enum, packet_opcode,
-    proto::{time::Ticks, MapleList8},
+use shroom_net::{
+    packet::proto::{time::Ticks, ShroomList8},
+    packet_opcode, shroom_enum_code, shroom_packet_enum,
+};
+use shroom_net_derive::ShroomPacket;
+
+use crate::{
+    id::ItemId, recv_opcodes::RecvOpcodes, send_opcodes::SendOpcodes, shared::char::CharacterId,
 };
 
-use crate::{id::ItemId, recv_opcodes::RecvOpcodes, send_opcodes::SendOpcodes, shared::char::CharacterId};
-
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct GeneralChatPacket {
     message: String,
     show: bool,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct SpouseChatPacket {
     message: String,
 }
 
-maple_enum_code!(
+shroom_enum_code!(
     MultiChatPacketType,
     u8,
     Buddy = 1,
@@ -26,20 +28,20 @@ maple_enum_code!(
     Alliance = 4
 );
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct MultiChatPacket {
     ty: MultiChatPacketType,
-    recipients: MapleList8<u32>,
+    recipients: ShroomList8<u32>,
     message: String,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct WispherData {
     name: String,
     message: String,
 }
 
-maple_packet_enum!(
+shroom_packet_enum!(
     WispherMessageType,
     u8,
     Location(String) => 1,
@@ -51,20 +53,20 @@ maple_packet_enum!(
     LocationFriend(String) => 0x40
 );
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct ItemGainInfoData {
     path: String,
     unknown1: u32,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct ItemGainItemData {
     mode2: u8,
     item_id: ItemId,
     quantity: u32,
 }
 
-maple_packet_enum!(
+shroom_packet_enum!(
     SlashChatMsgType,
     u8,
     CmdStrF9(()) => 0x3A,
@@ -79,12 +81,12 @@ maple_packet_enum!(
 
 );
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct SlashChatMsg {
     msg: SlashChatMsgType,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct ChatMsgReq {
     pub ticks: Ticks,
     pub msg: String,
@@ -92,20 +94,20 @@ pub struct ChatMsgReq {
 }
 packet_opcode!(ChatMsgReq, RecvOpcodes::UserChat);
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct WhisperData {
     pub ticks: Ticks,
     pub target: String,
     pub msg: String,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct WhisperFindData {
     pub ticks: Ticks,
     pub target: String,
 }
 
-maple_packet_enum!(
+shroom_packet_enum!(
     WhiperMsgReq,
     u8,
     Unknown(WhisperData) => 0x86,
@@ -114,12 +116,11 @@ maple_packet_enum!(
 );
 packet_opcode!(WhiperMsgReq, RecvOpcodes::Whisper);
 
-
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct UserChatMsgResp {
     pub char: CharacterId,
     pub is_admin: bool,
     pub msg: String,
-    pub only_balloon: bool
+    pub only_balloon: bool,
 }
 packet_opcode!(UserChatMsgResp, SendOpcodes::UserChat);

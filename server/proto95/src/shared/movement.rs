@@ -1,17 +1,15 @@
-use moople_derive::{MoopleEncodePacket, MooplePacket};
-use moople_packet::{
-    maple_packet_enum,
-    proto::{time::MapleDurationMs16, DecodePacket, MapleList8},
-    NetResult,
-};
+use shroom_net_derive::{ShroomEncodePacket, ShroomPacket};
+use shroom_net::{packet::{
+    proto::{time::ShroomDurationMs16, DecodePacket, ShroomList8}
+}, NetResult, shroom_packet_enum};
 
 use super::{Rect, Vec2, FootholdId};
 
-#[derive(Debug, MoopleEncodePacket)]
+#[derive(Debug, ShroomEncodePacket)]
 pub struct KeyPadState(u8, Vec<u8>);
 
 impl<'de> DecodePacket<'de> for KeyPadState {
-    fn decode_packet(pr: &mut moople_packet::MaplePacketReader<'de>) -> NetResult<Self> {
+    fn decode_packet(pr: &mut shroom_net::packet::PacketReader<'de>) -> NetResult<Self> {
         let n = pr.read_u8()? as usize / 2;
 
         let state = (0..n)
@@ -22,14 +20,14 @@ impl<'de> DecodePacket<'de> for KeyPadState {
     }
 }
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MovePassiveInfo {
     pub key_pad_state: KeyPadState,
     pub bounds: Rect,
 }
 
 /*
-maple_enum_code!(
+shroom_enum_code!(
     MovementState,
     u8,
     LeftWalk = 3,
@@ -49,14 +47,14 @@ maple_enum_code!(
 );*/
 pub type MovementAction = u8;
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct MovementFooter {
     pub action: MovementAction,
-    pub dur: MapleDurationMs16,
+    pub dur: ShroomDurationMs16,
 }
 
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct AbsoluteMovement {
     pub pos: Vec2,
     pub velocity: Vec2,
@@ -74,7 +72,7 @@ impl AbsoluteMovement {
         &self.footer
     }
 }
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct AbsoluteFallMovement {
     pub pos: Vec2,
     pub velocity: Vec2,
@@ -94,7 +92,7 @@ impl AbsoluteFallMovement {
     }
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct RelativeMovement {
     pub velocity: Vec2,
     pub footer: MovementFooter,
@@ -110,7 +108,7 @@ impl RelativeMovement {
     }
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct InstantMovement {
     pub pos: Vec2,
     pub fh: FootholdId,
@@ -127,7 +125,7 @@ impl InstantMovement {
     }
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct FallDownMovement {
     pub velocity: Vec2,
     pub fh_fall_start: FootholdId,
@@ -144,7 +142,7 @@ impl FallDownMovement {
     }
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct FlyingMovement {
     pub pos: Vec2,
     pub velocity: Vec2,
@@ -161,7 +159,7 @@ impl FlyingMovement {
     }
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct UnknownMovement {
     pub footer: MovementFooter,
 }
@@ -176,7 +174,7 @@ impl UnknownMovement {
     }
 }
 
-maple_packet_enum!(
+shroom_packet_enum!(
    Movement,
    u8,
    Normal(AbsoluteMovement) => 0,
@@ -300,11 +298,11 @@ impl Movement {
     }
 }
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MovePath {
     pub pos: Vec2,
     pub velocity: Vec2,
-    pub moves: MapleList8<Movement>,
+    pub moves: ShroomList8<Movement>,
 }
 
 impl MovePath {
@@ -316,7 +314,7 @@ impl MovePath {
     }
 }
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct MovePassivePath {
     pub path: MovePath,
     pub passive_info: MovePassiveInfo,

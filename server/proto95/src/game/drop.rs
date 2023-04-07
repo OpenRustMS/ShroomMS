@@ -1,12 +1,11 @@
-use moople_derive::MooplePacket;
-use moople_packet::{
-    maple_enum_code, maple_packet_enum, packet_opcode,
+use shroom_net_derive::ShroomPacket;
+use shroom_net::{packet::{
+    
     proto::{
-        time::{MapleDurationMs16, MapleExpiration},
+        time::{ShroomDurationMs16, ShroomExpiration},
         CondOption, PacketTryWrapped,
     },
-    NetError,
-};
+}, NetError, shroom_enum_code, shroom_packet_enum, packet_opcode};
 
 use crate::{
     id::ItemId,
@@ -37,7 +36,7 @@ impl PacketTryWrapped for DropOwner {
         }
     }
 
-    fn packet_try_from(v: Self::Inner) -> moople_packet::NetResult<Self> {
+    fn packet_try_from(v: Self::Inner) -> shroom_net::NetResult<Self> {
         Ok(match v.1 {
             0 => Self::User(v.0),
             1 => Self::Party(v.0),
@@ -48,7 +47,7 @@ impl PacketTryWrapped for DropOwner {
     }
 }
 
-maple_enum_code!(
+shroom_enum_code!(
     DropEnterType,
     u8,
     None = 0,
@@ -67,7 +66,7 @@ impl DropEnterType {
     }
 }
 
-maple_packet_enum!(
+shroom_packet_enum!(
     DropType,
     u8,
     Item(ItemId) => 0,
@@ -80,7 +79,7 @@ impl DropType {
     }
 }
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct DropEnterFieldResp {
     pub enter_type: DropEnterType,
     pub id: DropId,
@@ -89,9 +88,9 @@ pub struct DropEnterFieldResp {
     pub pos: Vec2,
     pub src_id: u32,
     #[pkt(if(field = "enter_type", cond = "DropEnterType::has_start_pos"))]
-    pub start_pos: CondOption<(Vec2, MapleDurationMs16)>,
+    pub start_pos: CondOption<(Vec2, ShroomDurationMs16)>,
     #[pkt(if(field = "drop_type", cond = "DropType::has_expiration"))]
-    pub drop_expiration: CondOption<MapleExpiration>,
+    pub drop_expiration: CondOption<ShroomExpiration>,
     //TODO: ? ownerCharId == 0
     pub by_pet: bool,
     // If this is set to true It throws an exception
@@ -99,7 +98,7 @@ pub struct DropEnterFieldResp {
 }
 packet_opcode!(DropEnterFieldResp, SendOpcodes::DropEnterField);
 
-maple_enum_code!(
+shroom_enum_code!(
     DropLeaveType,
     u8,
     TimeOut = 0,
@@ -118,7 +117,7 @@ impl DropLeaveType {
     }
 }
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct DropLeaveFieldResp {
     pub leave_type: DropLeaveType,
     pub id: DropId,

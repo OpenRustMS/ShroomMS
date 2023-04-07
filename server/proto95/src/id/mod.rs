@@ -4,19 +4,19 @@ pub mod item_id;
 pub mod job_id;
 pub mod map_id;
 
-use moople_packet::maple_enum_code;
+use shroom_net::shroom_enum_code;
 
 pub use self::item_id::ItemId;
 pub use self::job_id::JobClass;
 pub use self::map_id::MapId;
 
 #[macro_export]
-macro_rules! moople_id {
+macro_rules! shroom_id {
     ($name:ident, $ty:ty) => {
         #[derive(Default, Debug, PartialEq, Eq, Clone, Copy, Hash, Ord, PartialOrd)]
         pub struct $name(pub $ty);
 
-        impl moople_packet::proto::PacketWrapped for $name {
+        impl shroom_net::packet::proto::PacketWrapped for $name {
             type Inner = $ty;
 
             fn packet_into_inner(&self) -> Self::Inner {
@@ -30,7 +30,7 @@ macro_rules! moople_id {
     };
 }
 
-moople_id!(FaceId, u32);
+shroom_id!(FaceId, u32);
 
 impl FaceId {
     pub const MOTIVATED_LOOK_M: FaceId = FaceId(20000); // Face
@@ -46,7 +46,7 @@ impl FaceId {
     pub const MOTIVATED_LOOK_BLUE: FaceId = FaceId(20100);
 }
 
-moople_id!(HairId, u32);
+shroom_id!(HairId, u32);
 
 impl HairId {
     pub const BLACK_TOBEN: HairId = HairId(30000); // Hair
@@ -58,7 +58,7 @@ impl HairId {
     pub const BLACK_CONNIE: HairId = HairId(31050);
 }
 
-moople_id!(SkillId, u32);
+shroom_id!(SkillId, u32);
 
 impl SkillId {
     pub fn is_dispel(&self) -> bool {
@@ -92,7 +92,7 @@ impl SkillId {
     }
 }
 
-maple_enum_code!(
+shroom_enum_code!(
     Skin,
     u8,
     Normal = 0,

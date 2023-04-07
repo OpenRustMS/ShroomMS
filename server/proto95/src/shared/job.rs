@@ -1,8 +1,8 @@
-use moople_derive::MooplePacket;
+use shroom_net_derive::ShroomPacket;
 
 use crate::id::job_id::{JobId, SubJob};
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct Job {
  pub job_id: JobId,
  pub sub_job: SubJob,

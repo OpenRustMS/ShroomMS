@@ -2,13 +2,13 @@ use std::net::IpAddr;
 
 use data::services::{
     field::FieldJoinHandle,
-    session::{session_data::OwnedMoopleSession, ClientKey},
+    session::{session_data::OwnedShroomSession, ClientKey},
 };
-use moople_net::service::{packet_buffer::PacketBuffer, session_svc::SharedSessionHandle};
 use proto95::{
     login::world::{ChannelId, WorldId},
     shared::{char::CharStatPartial, FootholdId, Vec2},
 };
+use shroom_net::net::service::{packet_buffer::PacketBuffer, server_sess::SharedSessionHandle};
 
 use crate::repl::GameRepl;
 
@@ -17,7 +17,7 @@ use self::char::PartialCharStats;
 pub mod char;
 
 pub struct SessionState {
-    pub session: OwnedMoopleSession,
+    pub session: OwnedShroomSession,
     pub session_handle: SharedSessionHandle,
     pub peer_addr: IpAddr,
     pub world_id: WorldId,

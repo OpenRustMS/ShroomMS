@@ -1,13 +1,12 @@
-use moople_derive::MooplePacket;
-use moople_packet::{
-    maple_packet_enum, packet_opcode,
+use shroom_net_derive::ShroomPacket;
+use shroom_net::{packet::{
     proto::{
-        list::{MapleList, MapleListLen},
-        option::MapleOption8,
-        time::MapleTime,
-        MapleList16,
+        list::{ShroomList, ShroomListLen},
+        option::ShroomOption8,
+        time::ShroomTime,
+        ShroomList16,
     },
-};
+}, shroom_packet_enum, packet_opcode};
 
 use crate::{
     id::MapId,
@@ -18,29 +17,29 @@ use crate::{
     },
 };
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct ClientOption {
     pub key: u32,
     pub value: u32,
 }
 
-#[derive(MooplePacket, Debug, Default)]
+#[derive(ShroomPacket, Debug, Default)]
 pub struct CrcSeed {
     pub s1: u32,
     pub s2: u32,
     pub s3: u32,
 }
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct LogoutGiftConfig {
     pub predict_quit: u32,
     pub gift_commodity_id: [u32; 3],
 }
 
-#[derive(MooplePacket, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(ShroomPacket, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PlusOneListIndex(pub u16);
 
-impl MapleListLen for PlusOneListIndex {
+impl ShroomListLen for PlusOneListIndex {
     fn to_len(&self) -> usize {
         match self.0 {
             0 => 0,
@@ -53,9 +52,9 @@ impl MapleListLen for PlusOneListIndex {
     }
 }
 
-pub type NotificationList = MapleList<PlusOneListIndex, String>;
+pub type NotificationList = ShroomList<PlusOneListIndex, String>;
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct SetFieldCharData {
     pub notifications: NotificationList,
     pub seed: CrcSeed,
@@ -65,13 +64,13 @@ pub struct SetFieldCharData {
     pub logout_gift_config: LogoutGiftConfig,
 }
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct SetFieldOtherData {
     pub notifications: NotificationList,
     pub map: MapId,
     pub portal: u8,
     pub hp: u32,
-    pub chase_target_pos: MapleOption8<TagPoint>,
+    pub chase_target_pos: ShroomOption8<TagPoint>,
 }
 
 impl SetFieldOtherData {
@@ -80,21 +79,21 @@ impl SetFieldOtherData {
     }
 }
 
-maple_packet_enum!(
+shroom_packet_enum!(
     SetFieldResult,
     u8,
     TransferField(SetFieldOtherData) => 0,
     CharData(SetFieldCharData) => 1,
 );
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct SetFieldResp {
-    pub client_option: MapleList16<ClientOption>,
+    pub client_option: ShroomList16<ClientOption>,
     pub channel_id: u32,
     pub old_driver_id: CharacterId,
     pub unknown_flag_1: u8,
     pub set_field_result: SetFieldResult,
-    pub timestamp: MapleTime,
+    pub timestamp: ShroomTime,
     pub extra: u32,
 }
 packet_opcode!(SetFieldResp, SendOpcodes::SetField);

@@ -1,15 +1,14 @@
-use moople_derive::MooplePacket;
-use moople_packet::{
-    packet_opcode, partial_data,
+use shroom_net_derive::ShroomPacket;
+use shroom_net::{packet::{
     proto::{
         conditional::CondEither,
-        list::{MapleIndexList8, MapleIndexListZ16, MapleIndexListZ8},
-        option::MapleOption8,
+        list::{ShroomIndexList8, ShroomIndexListZ16, ShroomIndexListZ8},
+        option::ShroomOption8,
         partial::PartialFlag,
-        time::{MapleDurationMs16, MapleDurationMs32, MapleExpiration, MapleTime},
-        MapleList16, MapleList32,
+        time::{ShroomDurationMs16, ShroomDurationMs32, ShroomExpiration, ShroomTime},
+        ShroomList16, ShroomList32,
     },
-};
+}, packet_opcode, partial_data};
 
 use crate::{
     game::mob::MobId,
@@ -20,7 +19,7 @@ use crate::{
     send_opcodes::SendOpcodes,
 };
 
-use super::{item::Item, job::Job, Gender, NameStr};
+use super::{job::Job, Gender, NameStr, item::Item};
 
 const CHAR_PET_COUNT: usize = 3;
 pub type CashID = u64;
@@ -31,7 +30,7 @@ pub type PetCashIds = [CashID; CHAR_PET_COUNT];
 pub type Money = u32;
 pub type CharacterId = u32;
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct SkillPointPage {
     pub index: u8,
     pub value: u8,
@@ -39,7 +38,7 @@ pub struct SkillPointPage {
 
 pub type SkillPointPages = [SkillPointPage; 10];
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct CharStat {
     pub char_id: CharacterId,
     pub name: NameStr,
@@ -85,14 +84,14 @@ impl CharStat {
     }
 }
 
-#[derive(MooplePacket, Debug, Clone)]
+#[derive(ShroomPacket, Debug, Clone)]
 pub struct AvatarEquips {
-    pub equips: MapleIndexList8<ItemId>,
-    pub masked_equips: MapleIndexList8<ItemId>,
+    pub equips: ShroomIndexList8<ItemId>,
+    pub masked_equips: ShroomIndexList8<ItemId>,
     pub weapon_sticker_id: ItemId,
 }
 
-#[derive(MooplePacket, Debug, Clone)]
+#[derive(ShroomPacket, Debug, Clone)]
 pub struct AvatarData {
     pub gender: Gender,
     pub skin: Skin,
@@ -103,27 +102,27 @@ pub struct AvatarData {
     pub pets: PetIds,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct UnknownCharExtraData {
     unknown: u8,
     // IDs?
-    unknown_list: MapleList32<u64>,
-    timestamps: MapleList32<u64>,
+    unknown_list: ShroomList32<u64>,
+    timestamps: ShroomList32<u64>,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct SkillInfo {
     pub id: SkillId,
     pub level: u32,
-    pub expiration: MapleExpiration,
+    pub expiration: ShroomExpiration,
     //TODO if is_skill_need_master_level, 4th job only?
     pub master_level: u32,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct SkillCooltime {
     pub id: SkillId,
-    pub time_left: MapleDurationMs16,
+    pub time_left: ShroomDurationMs16,
 }
 
 /*
@@ -139,19 +138,19 @@ limits:
 
 pub type QuestId = u16;
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct QuestInfo {
     id: QuestId,
     value: String,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct QuestCompleteInfo {
     id: QuestId,
-    time: MapleTime,
+    time: ShroomTime,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct MiniGameInfo {
     game_id: u32,
     win: u32,
@@ -161,7 +160,7 @@ pub struct MiniGameInfo {
 
 pub type CharId = u32;
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct CoupleRecord {
     pair_char_id: CharId,
     pair_char_name: NameStr,
@@ -169,7 +168,7 @@ pub struct CoupleRecord {
     pair_sn: CashID,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct FriendRecord {
     pair_char_id: CharId,
     pair_char_name: NameStr,
@@ -178,7 +177,7 @@ pub struct FriendRecord {
     friend_item_id: ItemId,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct MarriageRecord {
     marriage_no: u32,
     groom_id: CharId,
@@ -190,74 +189,74 @@ pub struct MarriageRecord {
     bride_name: NameStr,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct SocialRecords {
-    couple_records: MapleList16<CoupleRecord>,
-    friend_records: MapleList16<FriendRecord>,
-    marriage_records: MapleList16<MarriageRecord>,
+    couple_records: ShroomList16<CoupleRecord>,
+    friend_records: ShroomList16<FriendRecord>,
+    marriage_records: ShroomList16<MarriageRecord>,
 }
 
-#[derive(Debug, MooplePacket, Default)]
+#[derive(Debug, ShroomPacket, Default)]
 pub struct TeleportRockInfo {
     //TODO allow MapID
     pub maps: [MapId; 5],
     pub vip_maps: [MapId; 10],
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct NewYearCardInfo {
     id: u32, //sn
     sender_id: CharId,
     sender_name: String,
     is_sender_discarded: bool,
-    data_sent: MapleTime,
+    data_sent: ShroomTime,
     receiver_id: CharId,
     receiver_name: String,
     is_receiver_discarded: bool,
     is_receiver_received: bool,
-    date_deceived: MapleTime,
+    date_deceived: ShroomTime,
     content: String,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct QuestRecordExpired {
     id: QuestId,
     value: String,
 }
 
-#[derive(Debug, MooplePacket, Default)]
+#[derive(Debug, ShroomPacket, Default)]
 pub struct WildHunterInfo {
     //TODO proper typing
     pub riding_ty_id: u8,
     pub captured_mobs: [MobId; 5],
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct QuestCompleteOldInfo {
     id: QuestId,
-    time: MapleTime,
+    time: ShroomTime,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct VisitorQuestLogInfo {
     id: QuestId,
     unknown: u16,
 }
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct CharDataStat {
     pub stat: CharStat,
     pub friend_max: u8,
-    pub linked_character: MapleOption8<String>,
+    pub linked_character: ShroomOption8<String>,
 }
 
-#[derive(MooplePacket, Debug, Default)]
+#[derive(ShroomPacket, Debug, Default)]
 pub struct CharDataEquipped {
-    pub equipped: MapleIndexListZ16<Item>,
-    pub equipped_cash: MapleIndexListZ16<Item>,
-    pub equip: MapleIndexListZ16<Item>,
-    pub dragon_equipped: MapleIndexListZ16<Item>,
-    pub mechanic_equipped: MapleIndexListZ16<Item>,
+    pub equipped: ShroomIndexListZ16<Item>,
+    pub equipped_cash: ShroomIndexListZ16<Item>,
+    pub equip: ShroomIndexListZ16<Item>,
+    pub dragon_equipped: ShroomIndexListZ16<Item>,
+    pub mechanic_equipped: ShroomIndexListZ16<Item>,
 }
 
 partial_data!(
@@ -279,13 +278,13 @@ partial_data!(
     SpeedMax(u8) => 1 << 12
 );
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct CharForcedStatSetResp {
     pub stats: PartialFlag<(), CharForcedStatPartial>,
 }
 packet_opcode!(CharForcedStatSetResp, SendOpcodes::ForcedStatSet);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct CharForcedStatResetResp;
 packet_opcode!(CharForcedStatResetResp, SendOpcodes::ForcedStatReset);
 
@@ -316,7 +315,7 @@ partial_data!(
 
 );
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct CharStatChangedResp {
     pub excl: bool,
     pub stats: PartialFlag<(), CharStatPartial>,
@@ -326,14 +325,14 @@ pub struct CharStatChangedResp {
 }
 packet_opcode!(CharStatChangedResp, SendOpcodes::StatChanged);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct CharTempStatSetResp {
     pub temp_stats: PartialFlag<(), CharSecondaryStatPartial>,
     pub unknown: u16, // Delay?
 }
 packet_opcode!(CharTempStatSetResp, SendOpcodes::TemporaryStatSet);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct CharTempStatResetResp {
     pub flags: CharSecondaryStatFlags,
 }
@@ -341,10 +340,10 @@ packet_opcode!(CharTempStatResetResp, SendOpcodes::TemporaryStatReset);
 
 // TODO always has combat orders + extra data
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct CharDataHeader {
     pub combat_orders: u8,
-    pub extra_data: MapleOption8<UnknownCharExtraData>,
+    pub extra_data: ShroomOption8<UnknownCharExtraData>,
 }
 
 partial_data!(
@@ -354,41 +353,41 @@ partial_data!(
     Stat(CharDataStat) => 1 << 0,
     Money(Money) => 1 << 1,
     InvSize([u8; 5]) => 1 << 7,
-    EquipExtSlotExpiration(MapleExpiration) => 1 << 20,
+    EquipExtSlotExpiration(ShroomExpiration) => 1 << 20,
     Equipped(CharDataEquipped) => 1 << 2,
-    UseInv(MapleIndexListZ8<Item>) => 1 << 3,
-    SetupInv(MapleIndexListZ8<Item>) => 1 << 4,
-    EtcInv(MapleIndexListZ8<Item>) => 1 << 5,
-    CashInv(MapleIndexListZ8<Item>) => 1 << 6,
+    UseInv(ShroomIndexListZ8<Item>) => 1 << 3,
+    SetupInv(ShroomIndexListZ8<Item>) => 1 << 4,
+    EtcInv(ShroomIndexListZ8<Item>) => 1 << 5,
+    CashInv(ShroomIndexListZ8<Item>) => 1 << 6,
     // InvSize 1 << 7
-    SkillRecords(MapleList16<SkillInfo>) => 1 << 8,
-    SkllCooltime(MapleList16<SkillCooltime>) => 1 << 15,
-    Quests(MapleList16<QuestInfo>) => 1 << 9,
-    QuestsCompleted(MapleList16<QuestCompleteInfo>) => 1 << 14,
-    MiniGameRecords(MapleList16<MiniGameInfo>) => 1 << 10,
-    SocialRecords(MapleList16<SocialRecords>) => 1 << 11,
+    SkillRecords(ShroomList16<SkillInfo>) => 1 << 8,
+    SkllCooltime(ShroomList16<SkillCooltime>) => 1 << 15,
+    Quests(ShroomList16<QuestInfo>) => 1 << 9,
+    QuestsCompleted(ShroomList16<QuestCompleteInfo>) => 1 << 14,
+    MiniGameRecords(ShroomList16<MiniGameInfo>) => 1 << 10,
+    SocialRecords(ShroomList16<SocialRecords>) => 1 << 11,
     TeleportRockInfo(TeleportRockInfo) => 1 << 12,
     // Unknown 1 << 13
     // QuestsCompleted 1 << 14
     // SkillCooltimes 1 << 15
     // Monsterbook Card 1 << 16
     // Monster Book Cover  1 << 17
-    NewYearCards(MapleList16<NewYearCardInfo>) => 1 << 18,
-    QuestRecordsExpired(MapleList16<QuestRecordExpired>) => 1 << 19,
+    NewYearCards(ShroomList16<NewYearCardInfo>) => 1 << 18,
+    QuestRecordsExpired(ShroomList16<QuestRecordExpired>) => 1 << 19,
     // EquipExtExpire 1 << 20
     //TODO this has to be optional in the all struct, bneed to implement this later 1 << somehow
     // this only affects the all struct, partial struct can opt to not encode 1 << it
     //WILD_HUNTER_INFO(WildHunterInfo) => 1 << 21,
-    QuestCompleteOld(MapleList16<QuestCompleteOldInfo>) => 1 << 22,
-    VisitorQuestLogInfo(MapleList16<VisitorQuestLogInfo>) => 1 << 23,
+    QuestCompleteOld(ShroomList16<QuestCompleteOldInfo>) => 1 << 22,
+    VisitorQuestLogInfo(ShroomList16<VisitorQuestLogInfo>) => 1 << 23,
 
 );
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct TempStatValue {
     pub n: u16,
     pub r: u32,
-    pub t: MapleDurationMs32,
+    pub t: ShroomDurationMs32,
 }
 
 partial_data!(
@@ -532,7 +531,7 @@ partial_data!(
     Morph(TempStatValue) =>  1 << 0x21,
     Ghost(TempStatValue) =>  1 << 0x31, // ghost morph
     Regen(TempStatValue) =>  1 << 0x22, // recovery
-    BasicStatUp(TempStatValue) =>  1 << 0x23, // maple warrior
+    BasicStatUp(TempStatValue) =>  1 << 0x23, // shroom warrior
     Stance(TempStatValue) =>  1 << 0x24, // Done
     SharpEyes(TempStatValue) =>  1 << 0x25, // Done
     ManaReflection(TempStatValue) =>  1 << 0x26, // Done
@@ -613,7 +612,7 @@ partial_data!(
     //TODO: 0x81 overflow u128 SummonBomb(TempStatValue) =>  1 << 0x81,
 );
 
-#[derive(MooplePacket)]
+#[derive(ShroomPacket)]
 pub struct CharSecondaryStatExtra {
     // TODO option If any Swallow stat is set
     pub swallow_buff_time: u8,

@@ -1,8 +1,7 @@
-use moople_derive::MooplePacket;
-use moople_packet::{
-    maple_packet_enum, packet_opcode,
-    proto::{option::MapleOption8, time::MapleTime, CondOption},
-};
+use shroom_net_derive::ShroomPacket;
+use shroom_net::{packet::{
+    proto::{option::ShroomOption8, time::ShroomTime, CondOption},
+}, packet_opcode, shroom_packet_enum};
 
 use crate::{
     recv_opcodes::RecvOpcodes,
@@ -10,11 +9,11 @@ use crate::{
     shared::{Gender, OptionGender},
 };
 
-use super::{BanReason, ClientKey, LoginOpt, LoginResultHeader, MachineId, StartMode};
+use super::{BanReason, ClientKey, LoginResultHeader, MachineId, StartMode, LoginOpt};
 
 pub type AccountId = u32;
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct CheckPasswordReq {
     pub id: String,
     pub pw: String,
@@ -28,14 +27,14 @@ pub struct CheckPasswordReq {
 }
 packet_opcode!(CheckPasswordReq, RecvOpcodes::CheckPassword);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct BlockedIp {
     pub hdr: LoginResultHeader,
     pub reason: BanReason,
-    pub ban_time: MapleTime,
+    pub ban_time: ShroomTime,
 }
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct AccountInfo {
     pub id: u32,
     pub gender: OptionGender,
@@ -46,8 +45,8 @@ pub struct AccountInfo {
     pub name: String,
     pub purchase_exp: u8,
     pub chat_block_reason: u8,
-    pub chat_block_date: MapleTime,
-    pub registration_date: MapleTime,
+    pub chat_block_date: ShroomTime,
+    pub registration_date: ShroomTime,
     pub num_chars: u32,
 }
 
@@ -57,20 +56,20 @@ impl AccountInfo {
     }
 }
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct LoginInfo {
     pub skip_pin: bool,
     pub login_opt: LoginOpt,
     pub client_key: ClientKey,
 }
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct LoginAccountData {
     pub account_info: AccountInfo,
     #[pkt(if(field = "account_info", cond = "AccountInfo::has_login_info"))]
     pub login_info: CondOption<LoginInfo>,
 }
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct GuestAccountInfo {
     account_id: u32,
     gender: OptionGender,
@@ -81,15 +80,15 @@ pub struct GuestAccountInfo {
     name: String,
     purchase_exp: u8,
     chat_block_reason: u8,
-    chat_block_date: MapleTime,
-    registration_date: MapleTime,
+    chat_block_date: ShroomTime,
+    registration_date: ShroomTime,
     num_chars: u32,
     guest_id_url: String,
 }
 
 
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct SuccessResult {
     //TODO reg has to be either 0/1 for having an acc
     // 2/3 is some yes/no dialog
@@ -97,7 +96,7 @@ pub struct SuccessResult {
     pub account: LoginAccountData,
 }
 
-maple_packet_enum!(
+shroom_packet_enum!(
     CheckPasswordResp,
     u8,
     Success(SuccessResult) => 0,
@@ -113,9 +112,9 @@ maple_packet_enum!(
 );
 packet_opcode!(CheckPasswordResp, SendOpcodes::CheckPasswordResult);
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct SetGenderReq {
-    pub gender: MapleOption8<Gender>,
+    pub gender: ShroomOption8<Gender>,
 }
 packet_opcode!(SetGenderReq, RecvOpcodes::SetGender);
 
@@ -133,20 +132,20 @@ impl SetGenderReq {
     }
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct SetGenderResp {
     pub gender: Gender,
     pub success: bool,
 }
 packet_opcode!(SetGenderResp, SendOpcodes::SetAccountResult);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct ConfirmEULAReq {
     pub accepted: bool,
 }
 packet_opcode!(ConfirmEULAReq, RecvOpcodes::ConfirmEULA);
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct ConfirmEULAResp {
     pub success: bool,
 }

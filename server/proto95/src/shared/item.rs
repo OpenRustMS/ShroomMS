@@ -1,14 +1,12 @@
 use bytes::BufMut;
-use moople_derive::MooplePacket;
-use moople_packet::{
-    maple_packet_enum, mark_maple_bit_flags,
+use shroom_net_derive::ShroomPacket;
+use shroom_net::{packet::{
     proto::{
-        option::MapleOption8,
-        time::{MapleExpiration, MapleTime},
+        option::ShroomOption8,
+        time::{ShroomExpiration, ShroomTime},
         CondOption, DecodePacket, EncodePacket,
     },
-    NetResult,
-};
+}, mark_shroom_bit_flags, NetResult, shroom_packet_enum};
 
 use crate::id::ItemId;
 
@@ -28,7 +26,7 @@ bitflags::bitflags! {
         const MergeUntradeable = 0x200;
     }
 }
-mark_maple_bit_flags!(ItemFlags);
+mark_shroom_bit_flags!(ItemFlags);
 
 bitflags::bitflags! {
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -37,7 +35,7 @@ bitflags::bitflags! {
         const TradingPossible = 0x02;
     }
 }
-mark_maple_bit_flags!(ItemBundleFlags);
+mark_shroom_bit_flags!(ItemBundleFlags);
 
 bitflags::bitflags! {
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -46,7 +44,7 @@ bitflags::bitflags! {
         const TradingPossible = 0x02;
     }
 }
-mark_maple_bit_flags!(ItemPetFlags);
+mark_shroom_bit_flags!(ItemPetFlags);
 
 bitflags::bitflags! {
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -58,21 +56,21 @@ bitflags::bitflags! {
         //const TradingPossible = 0x1;
     }
 }
-mark_maple_bit_flags!(ItemEquipFlags);
+mark_shroom_bit_flags!(ItemEquipFlags);
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct PetItemInfo {
     pub name: NameStr,
     pub level: u8,
     pub tameness: u16,
     pub fullness: u8,                /* repleteness */
-    pub expiration: MapleExpiration, /* dateDead */
+    pub expiration: ShroomExpiration, /* dateDead */
     pub attribute1: u16,             /* PetAttribute  seems to be only hasStats 2^0*/
     pub skill: u16,
     pub remain_life: u32,
     pub attribute2: u16, /* Attribute  Only IsPossibleTrading 2^0 */
 }
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct EquipStats {
     pub str: u16,
     pub dex: u16,
@@ -91,7 +89,7 @@ pub struct EquipStats {
     pub jump: u16,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct EquipAllStats {
     pub remaining_upgrade_slots: u8,
     pub upgrade_count: u8,
@@ -100,11 +98,11 @@ pub struct EquipAllStats {
     pub flags: ItemFlags,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct ItemInfo {
     pub item_id: ItemId,
-    pub cash_id: MapleOption8<u64>,
-    pub expiration: MapleExpiration,
+    pub cash_id: ShroomOption8<u64>,
+    pub expiration: ShroomExpiration,
 }
 
 impl ItemInfo {
@@ -113,21 +111,21 @@ impl ItemInfo {
     }
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct ItemPetData {
     pub info: ItemInfo,
     pub name: NameStr,
     pub level: u8,
     pub tameness: u16,
     pub fullness: u8,
-    pub expiration: MapleExpiration,
+    pub expiration: ShroomExpiration,
     pub attribute1: u16,
     pub skill: u16,
     pub remain_life: u32,
     pub attribute2: u16,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct ItemStackData {
     pub info: ItemInfo,
     pub quantity: u16, /* nNumber */
@@ -141,7 +139,7 @@ pub struct ItemStackData {
 pub struct OptionalLevelInfo(pub Option<ItemLevelInfo>);
 
 impl<'de> DecodePacket<'de> for OptionalLevelInfo {
-    fn decode_packet(pr: &mut moople_packet::MaplePacketReader<'de>) -> NetResult<Self> {
+    fn decode_packet(pr: &mut shroom_net::packet::PacketReader<'de>) -> NetResult<Self> {
         let ty = pr.read_u8()?;
         let item_info = match ty {
             0x40 => {
@@ -168,21 +166,21 @@ impl EncodePacket for OptionalLevelInfo {
 
     fn encode_packet<B: BufMut>(
         &self,
-        pw: &mut moople_packet::MaplePacketWriter<B>,
+        pw: &mut shroom_net::packet::PacketWriter<B>,
     ) -> NetResult<()> {
         match self.0 {
             Some(ref info) => {
-                pw.write_u8(0x00);
+                pw.write_u8(0x00)?;
                 info.encode_packet(pw)?;
             }
-            None => pw.write_array(&[0x40; 10]),
+            None => pw.write_array(&[0x40; 10])?,
         };
 
         Ok(())
     }
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct ItemLevelInfo {
     pub level: u8,
     pub exp: u32,
@@ -190,7 +188,7 @@ pub struct ItemLevelInfo {
     pub unknown2: u64, /* nIUC(4) + Durability(4) */
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct EquipItemInfo {
     pub info: ItemInfo,
     pub stats: EquipAllStats,
@@ -211,11 +209,11 @@ pub struct EquipItemInfo {
         if ((*(uint *)&this->field_0x18 | *(uint *)&this->field_0x1c) == 0) {
       COutPacket::EncodeBuffer(param_1,&this->liSN,8);
     } */
-    pub time_stamp: MapleTime,    // ftEquipped
+    pub time_stamp: ShroomTime,    // ftEquipped
     pub prev_bonus_exp_rate: i32, // nPrevBonusExpRate ?
 }
 
-maple_packet_enum!(
+shroom_packet_enum!(
     Item,
     u8,
     Equip(EquipItemInfo) => 1,

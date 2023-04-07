@@ -1,17 +1,17 @@
 use sea_orm_migration::prelude::*;
 
 use super::{
-    moople_opt_id,
-    moople_ty::{moople_id, moople_id_pkey},
+    shroom_opt_id,
+    shroom_ty::{shroom_id, shroom_id_pkey},
 };
 
 #[derive(Debug, Clone)]
-pub struct MoopleTableMeta {
+pub struct ShroomTableMeta {
     pub name: DynIden,
     pub key: DynIden,
 }
 
-impl MoopleTableMeta {
+impl ShroomTableMeta {
     pub fn new(name: impl IntoIden, key: impl IntoIden) -> Self {
         Self {
             name: name.into_iden(),
@@ -22,7 +22,7 @@ impl MoopleTableMeta {
     pub fn create(&self, columns: impl IntoIterator<Item = ColumnDef>) -> TableCreateStatement {
         let mut tbl = Table::create()
             .table(self.name.clone())
-            .col(&mut moople_id_pkey(self.key.clone()))
+            .col(&mut shroom_id_pkey(self.key.clone()))
             .to_owned();
 
         for mut col in columns {
@@ -42,8 +42,8 @@ impl MoopleTableMeta {
             let (from_col, ref_tbl) = r.get_val();
             tbl.foreign_key(&mut self.create_foreign_key(ref_tbl, from_col.clone()));
             match r {
-                Ref::Optional(_, _) => tbl.col(&mut moople_opt_id(from_col)),
-                Ref::Ownership(_, _) => tbl.col(&mut moople_id(from_col)),
+                Ref::Optional(_, _) => tbl.col(&mut shroom_opt_id(from_col)),
+                Ref::Ownership(_, _) => tbl.col(&mut shroom_id(from_col)),
             };
         }
 
@@ -80,20 +80,20 @@ impl MoopleTableMeta {
 
 #[derive(Debug)]
 pub enum Ref {
-    Ownership(DynIden, MoopleTableMeta),
-    Optional(DynIden, MoopleTableMeta),
+    Ownership(DynIden, ShroomTableMeta),
+    Optional(DynIden, ShroomTableMeta),
 }
 
 impl Ref {
-    pub fn ownership(iden: impl IntoIden, table: &MoopleTbl) -> Self {
+    pub fn ownership(iden: impl IntoIden, table: &ShroomTbl) -> Self {
         Self::Ownership(iden.into_iden(), table.meta.clone())
     }
 
-    pub fn opt(iden: impl IntoIden, table: &MoopleTbl) -> Self {
+    pub fn opt(iden: impl IntoIden, table: &ShroomTbl) -> Self {
         Self::Optional(iden.into_iden(), table.meta.clone())
     }
 
-    fn get_val(&self) -> (DynIden, &MoopleTableMeta) {
+    fn get_val(&self) -> (DynIden, &ShroomTableMeta) {
         match self {
             Ref::Optional(col, tbl) | Ref::Ownership(col, tbl) => (col.clone(), tbl),
         }
@@ -101,13 +101,13 @@ impl Ref {
 }
 
 #[derive(Debug)]
-pub struct MoopleTbl {
-    meta: MoopleTableMeta,
+pub struct ShroomTbl {
+    meta: ShroomTableMeta,
     columns: Vec<ColumnDef>,
     refs: Vec<Ref>,
 }
 
-impl MoopleTbl {
+impl ShroomTbl {
     pub fn new<T: IntoIden>(
         name: T,
         key: T,
@@ -115,7 +115,7 @@ impl MoopleTbl {
         refs: impl IntoIterator<Item = Ref>,
     ) -> Self {
         Self {
-            meta: MoopleTableMeta::new(name, key),
+            meta: ShroomTableMeta::new(name, key),
             columns: columns.into_iter().collect(),
             refs: refs.into_iter().collect(),
         }

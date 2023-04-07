@@ -1,5 +1,5 @@
-use moople_derive::MooplePacket;
-use moople_packet::{packet_opcode, proto::time::Ticks};
+use shroom_net_derive::ShroomPacket;
+use shroom_net::{packet::{proto::time::Ticks}, packet_opcode};
 
 use crate::{recv_opcodes::RecvOpcodes, shared::Vec2};
 
@@ -9,7 +9,7 @@ pub type PetLockerId = u64;
 pub type PetId = u32;
 pub type PetIx = u8;
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct PetDropPickUpReq {
     pub locker_id: PetLockerId,
     pub u1: u8,// Pet id?

@@ -1,9 +1,9 @@
-use moople_derive::MooplePacket;
-use moople_packet::{maple_enum_code, packet_opcode, proto::option::MapleOption8};
+use shroom_net_derive::ShroomPacket;
+use shroom_net::{packet::{proto::option::ShroomOption8}, packet_opcode, shroom_enum_code};
 
 use crate::{recv_opcodes::RecvOpcodes, send_opcodes::SendOpcodes};
 
-maple_enum_code!(
+shroom_enum_code!(
     CheckPinResp,
     u8,
     Accepted = 0,
@@ -16,13 +16,13 @@ maple_enum_code!(
 );
 packet_opcode!(CheckPinResp, SendOpcodes::CheckPinCodeResult);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct UpdatePinResp {
     pub success: bool,
 }
 packet_opcode!(UpdatePinResp, SendOpcodes::UpdatePinCodeResult);
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct CheckPinData {
     //TODO: set to true in CheckPasswordResult and OnSelectWorldResult why?
     /// Somehow set to one for CLogin::OnSelectWorldResult, elsewise 0
@@ -30,14 +30,14 @@ pub struct CheckPinData {
     pub pin: String,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct CheckPinReq {
-    pub pin: MapleOption8<CheckPinData>,
+    pub pin: ShroomOption8<CheckPinData>,
 }
 packet_opcode!(CheckPinReq, RecvOpcodes::CheckPinCode);
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct UpdatePinReq {
-    pub pin: MapleOption8<String>,
+    pub pin: ShroomOption8<String>,
 }
 packet_opcode!(UpdatePinReq, RecvOpcodes::UpdatePinCode);

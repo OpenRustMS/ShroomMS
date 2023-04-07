@@ -1,8 +1,8 @@
 use std::ops::RangeInclusive;
 
-use crate::moople_id;
+use crate::shroom_id;
 
-moople_id!(ItemId, u32);
+shroom_id!(ItemId, u32);
 
 impl ItemId {
     pub fn is_arrow_for_bow(&self) -> bool {

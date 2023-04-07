@@ -2,7 +2,7 @@ use std::ops::{Deref, DerefMut, RangeInclusive};
 
 use chrono::NaiveDateTime;
 use enum_map::{enum_map, Enum, EnumMap};
-use moople_packet::proto::time::{MapleExpiration, MapleTime};
+use shroom_net::packet::proto::time::{ShroomExpiration, ShroomTime};
 use proto95::{
     id::ItemId,
     shared::item::{self as proto_item},
@@ -252,7 +252,7 @@ impl From<&EquipItem> for proto_item::EquipItemInfo {
                 title: value.owner.clone().unwrap_or("".to_string()),
                 flags: value.flags,
             },
-            time_stamp: MapleTime::permanent(),
+            time_stamp: ShroomTime::permanent(),
             lvl_up_ty: 0,
             lvl: value.level_info.as_ref().map(|l| l.level).unwrap_or(0),
             exp: value.level_info.as_ref().map(|l| l.exp).unwrap_or(0),
@@ -294,7 +294,7 @@ impl From<&StackItem> for proto_item::ItemStackData {
             info: proto_item::ItemInfo {
                 item_id: value.item_id,
                 cash_id: value.cash_id.into(),
-                expiration: MapleExpiration::never(),
+                expiration: ShroomExpiration::never(),
             },
             quantity: value.quantity,
             title: value.owner.clone().unwrap_or("aaa".to_string()),
@@ -317,7 +317,7 @@ fn map_item(item: &EquipItem) -> Item {
             array: todo!(),
         },
         level_info: OptionalLevelInfo(None),
-        time_stamp: MapleTime::zero(),
+        time_stamp: ShroomTime::zero(),
         unknown1: 0,
     })
 }*/

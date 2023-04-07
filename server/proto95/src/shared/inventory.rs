@@ -1,19 +1,19 @@
-use moople_derive::MooplePacket;
-use moople_packet::{
-    maple_enum_code, maple_packet_enum, packet_opcode,
+use shroom_net_derive::ShroomPacket;
+use shroom_net::{packet::{
     proto::{
-        list::{MapleIndexListZ16, MapleIndexListZ8},
-        time::{MapleTime, Ticks},
-        MapleList8,
+        list::{ShroomIndexListZ16, ShroomIndexListZ8},
+        time::{ShroomTime, Ticks},
+        ShroomList8,
     },
-};
+}, shroom_enum_code, shroom_packet_enum, packet_opcode};
 
 use crate::{id::ItemId, recv_opcodes::RecvOpcodes, send_opcodes::SendOpcodes};
 
 use super::item::Item;
 
+
 //TODO indexing
-maple_enum_code!(
+shroom_enum_code!(
     InventoryType,
     u8,
     Equip = 1,
@@ -27,7 +27,7 @@ maple_enum_code!(
     MechanicEquipped = 11
 );
 
-maple_enum_code!(
+shroom_enum_code!(
     EquippedSlot,
     u8,
     None = 0,
@@ -55,7 +55,7 @@ maple_enum_code!(
     PetEquip = 114
 );
 
-maple_enum_code!(
+shroom_enum_code!(
     CashEquippedSlot,
     u8,
     Hat = 101,
@@ -78,27 +78,27 @@ maple_enum_code!(
     TamedMob = 118
 );
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct InventoryInfo {
     slot_limits: [u8; 5],
-    timestamp: MapleTime,
-    equipped: MapleIndexListZ16<Item>,
-    equipped_cash: MapleIndexListZ16<Item>,
-    equip: MapleIndexListZ16<Item>,
+    timestamp: ShroomTime,
+    equipped: ShroomIndexListZ16<Item>,
+    equipped_cash: ShroomIndexListZ16<Item>,
+    equip: ShroomIndexListZ16<Item>,
     pad: u16,
-    _use: MapleIndexListZ8<Item>,
-    setup: MapleIndexListZ8<Item>,
-    etc: MapleIndexListZ8<Item>,
-    cash: MapleIndexListZ8<Item>,
+    _use: ShroomIndexListZ8<Item>,
+    setup: ShroomIndexListZ8<Item>,
+    etc: ShroomIndexListZ8<Item>,
+    cash: ShroomIndexListZ8<Item>,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct SortItemsPacket {
     timestamp: Ticks,
     inv_ty: u8,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct MoveItemsPacket {
     timestamp: Ticks,
     inv_ty: u8,
@@ -107,13 +107,13 @@ pub struct MoveItemsPacket {
     count: u16,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct UseItemPacket {
     timestamp: Ticks,
     slot: u16,
     item_id: u16,
 }
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct ScrollFlag(u16);
 
 impl ScrollFlag {
@@ -126,7 +126,7 @@ impl ScrollFlag {
     }
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct ScrollEquipPacket {
     timestamp: Ticks,
     src: u16,
@@ -134,40 +134,40 @@ pub struct ScrollEquipPacket {
     flag: ScrollFlag,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct InvOpAdd {
     pub inv_type: InventoryType,
     pub pos: u16,
     pub item: Item,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct InvOpUpdateQuantity {
     pub inv_type: InventoryType,
     pub pos: u16,
     pub quantity: u16,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct InvOpMove {
     pub inv_type: InventoryType,
     pub pos: u16,
     pub new_pos: u16,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct InvOpRemove {
     pub inv_type: InventoryType,
     pub pos: u16,
 }
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct InvOpUpdateExp {
     pub inv_type: InventoryType,
     pub pos: u16,
 }
 
-maple_packet_enum!(
+shroom_packet_enum!(
     InventoryOperation,
     u8,
     Add(InvOpAdd) => 0,
@@ -177,23 +177,23 @@ maple_packet_enum!(
     UpdateExp(InvOpUpdateExp) => 4
 );
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct InventoryOperationsResp {
     pub reset_excl: bool,
-    pub operations: MapleList8<InventoryOperation>,
+    pub operations: ShroomList8<InventoryOperation>,
     pub secondary_stat_changed: bool, //TODO optional tail byte
                                       // Updated when operation is done on equip inv, either Move(2), Remove(3)
 }
 packet_opcode!(InventoryOperationsResp, SendOpcodes::InventoryOperation);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct InvGrowResp {
     pub inv_type: InventoryType, //TODO only first 6 inv can grow
     pub new_size: u8,
 }
 packet_opcode!(InvGrowResp, SendOpcodes::InventoryGrow);
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct InvChangeSlotPosReq {
     pub ticks: Ticks,
     pub inv_type: InventoryType,
@@ -206,7 +206,7 @@ packet_opcode!(
     RecvOpcodes::UserChangeSlotPositionRequest
 );
 
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct InvSortRequest {
     pub ticks: Ticks,
     pub inv_type: InventoryType,
@@ -214,7 +214,7 @@ pub struct InvSortRequest {
 packet_opcode!(InvSortRequest, RecvOpcodes::UserSortItemRequest);
 
 // Use an item like magnifying glass, maybe hammer aswell?
-#[derive(MooplePacket, Debug)]
+#[derive(ShroomPacket, Debug)]
 pub struct ItemReleaseReq {
     pub ticks: Ticks,
     pub use_slot: u16,
@@ -222,14 +222,14 @@ pub struct ItemReleaseReq {
 }
 packet_opcode!(ItemReleaseReq, RecvOpcodes::UserItemReleaseRequest);
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct GatherItemReq {
     pub timestamp: Ticks,
     pub inv_ty: InventoryType,
 }
 packet_opcode!(GatherItemReq, RecvOpcodes::UserGatherItemRequest);
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct ItemOptionUpgradeReq {
     pub timestamp: Ticks,
     pub use_slot: u16,
@@ -241,7 +241,7 @@ packet_opcode!(
     RecvOpcodes::UserItemOptionUpgradeItemUseRequest
 );
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct ItemHyperUpgradeReq {
     pub timestamp: Ticks,
     pub use_slot: u16,
@@ -253,7 +253,7 @@ packet_opcode!(
     RecvOpcodes::UserHyperUpgradeItemUseRequest
 );
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct ItemUpgradeReq {
     pub timestamp: Ticks,
     pub use_slot: u16,
@@ -263,7 +263,7 @@ pub struct ItemUpgradeReq {
 }
 packet_opcode!(ItemUpgradeReq, RecvOpcodes::UserUpgradeItemUseRequest);
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct TamingMobUseFoodReq {
     pub timestamp: Ticks,
     pub food_slot: u16,
@@ -274,7 +274,7 @@ packet_opcode!(
     RecvOpcodes::UserTamingMobFoodItemUseRequest
 );
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct ItemOpenUIReq {
     pub timestamp: Ticks,
     pub slot: u16,
@@ -282,7 +282,7 @@ pub struct ItemOpenUIReq {
 }
 packet_opcode!(ItemOpenUIReq, RecvOpcodes::UserUIOpenItemUseRequest);
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct ItemLearnSkillReq {
     pub timestamp: Ticks,
     pub slot: u16,
@@ -290,7 +290,7 @@ pub struct ItemLearnSkillReq {
 }
 packet_opcode!(ItemLearnSkillReq, RecvOpcodes::UserSkillLearnItemUseRequest);
 
-#[derive(Debug, MooplePacket)]
+#[derive(Debug, ShroomPacket)]
 pub struct UserSitReq {
     pub seat_id: u16,
 }

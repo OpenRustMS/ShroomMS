@@ -1,14 +1,10 @@
-use std::net::{IpAddr, SocketAddr};
+use std::{net::{IpAddr, SocketAddr}, time::Duration};
 
 use data::services::{
     meta::meta_service::MetaService, server_info::ServerInfo, Services, SharedServices,
 };
 use login::{config::LoginConfig, LoginHandler};
-use moople_net::service::{
-    handler::{BroadcastSender, MakeServerSessionHandler},
-    session_svc::{MapleServer, SharedSessionHandle},
-    BasicHandshakeGenerator, HandshakeGenerator,
-};
+use shroom_net::net::{service::{HandshakeGenerator, server_sess::{ShroomServer, SharedSessionHandle, ShroomServerConfig}, BasicHandshakeGenerator, handler::MakeServerSessionHandler}, ShroomSession, crypto::ShroomCryptoKeys};
 use tokio::{net::TcpStream, task::JoinSet};
 
 use shrooming::{FileIndex, FileSvr};
@@ -38,7 +34,7 @@ impl MakeServerSessionHandler for MakeLoginHandler {
 
     async fn make_handler(
         &mut self,
-        sess: &mut moople_net::MapleSession<Self::Transport>,
+        sess: &mut ShroomSession<Self::Transport>,
         _broadcast_tx: SharedSessionHandle,
     ) -> Result<Self::Handler, Self::Error> {
         Ok(LoginHandler::new(
@@ -50,23 +46,26 @@ impl MakeServerSessionHandler for MakeLoginHandler {
 }
 
 async fn srv_login_server(
+    cfg: ShroomServerConfig,
     addr: impl tokio::net::ToSocketAddrs,
     handshake_gen: impl HandshakeGenerator,
     services: SharedServices,
 ) -> anyhow::Result<()> {
-    let mut login_server = MapleServer::new(handshake_gen, MakeLoginHandler { services });
+    let mut login_server = ShroomServer::new(cfg, handshake_gen, MakeLoginHandler { services });
     login_server.serve_tcp(addr).await?;
     Ok(())
 }
 
 async fn srv_game_server(
+    cfg: ShroomServerConfig,
     addr: impl tokio::net::ToSocketAddrs,
     handshake_gen: impl HandshakeGenerator,
     services: SharedServices,
     world_id: u32,
     channel_id: u16,
 ) -> anyhow::Result<()> {
-    let mut game_server = MapleServer::new(
+    let mut game_server = ShroomServer::new(
+        cfg,
         handshake_gen,
         game::MakeGameHandler::new(services, channel_id, world_id),
     );
@@ -78,8 +77,8 @@ async fn srv_shrooming(addr: SocketAddr) -> anyhow::Result<()> {
     let file_ix = FileIndex::build_index(
         [
             "notes.txt",
-            "../../client/moople_hook/target/i686-pc-windows-gnu/release/dinput8.dll",
-            "../../target/i686-pc-windows-gnu/release/moople_launchar.exe",
+            "../../client/shroom_hook/target/i686-pc-windows-gnu/release/dinput8.dll",
+            "../../target/i686-pc-windows-gnu/release/shroom_launchar.exe",
         ]
         .iter(),
     )?;
@@ -129,12 +128,14 @@ async fn main() -> anyhow::Result<()> {
 
     let mut set = JoinSet::new();
     set.spawn(srv_login_server(
+        ShroomServerConfig { keys: ShroomCryptoKeys::default(), migrate_delay: Duration::from_millis(7500) },
         SocketAddr::new(bind_addr, settings.base_port),
         handshake_gen.clone(),
         services.clone(),
     ));
     for ch in 0..settings.num_channels {
         set.spawn(srv_game_server(
+            ShroomServerConfig { keys: ShroomCryptoKeys::default(), migrate_delay: Duration::from_millis(7500) },
             SocketAddr::new(bind_addr, settings.base_port + 1 + ch as u16),
             handshake_gen.clone(),
             services.clone(),
