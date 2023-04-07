@@ -21,9 +21,22 @@ pub fn created_at(db: &DatabaseConnection) -> ActiveValue<NaiveDateTime> {
     }
 }
 
+pub async fn gen_psql(opt: &str) -> Result<DatabaseConnection, DbErr> {
+    let mut opt = ConnectOptions::new(opt.to_owned());
+    let log_level = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
+    if log_level != "debug" {
+        opt.sqlx_logging(false);
+    }
+    let db = Database::connect(opt).await?;
+    Ok(db)
+}
+
 pub async fn gen_sqlite(opt: &str) -> Result<DatabaseConnection, DbErr> {
     let mut opt = ConnectOptions::new(opt.to_owned());
-    opt.sqlx_logging(true);
+    let log_level = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
+    if log_level != "debug" {
+        opt.sqlx_logging(false);
+    }
     let db = Database::connect(opt).await?;
 
     let schema = Schema::new(DbBackend::Sqlite);

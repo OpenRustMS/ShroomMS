@@ -67,6 +67,15 @@ impl Services {
         Ok(Self::new(db, servers, meta))
     }
 
+    pub async fn seeded_in_db(
+        servers: impl IntoIterator<Item = ServerInfo>,
+        meta: &'static MetaService,
+    ) -> Result<Self, DbErr> {
+        let opt = std::env::var("DATABASE_URL").expect("DATABASE_URL not set");
+        let db = crate::gen_psql(&opt).await?;
+        Ok(Self::new(db, servers, meta))
+    }
+
     pub fn as_shared(self) -> SharedServices {
         Arc::new(self)
     }
