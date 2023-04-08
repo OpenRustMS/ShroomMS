@@ -1,12 +1,11 @@
 use std::{ops::Add, time::Duration};
 
 use geo::coord;
-use shroom_net::packet::proto::time::ShroomExpiration;
 use proto95::{
     game::{
         drop::{
-            DropEnterFieldResp, DropEnterType, DropLeaveFieldResp, DropLeaveType, DropOwner,
-            DropType,
+            DropEnterFieldResp, DropEnterType, DropId, DropLeaveFieldResp, DropLeaveType,
+            DropOwner, DropType,
         },
         mob::MobId,
         ObjectId,
@@ -14,6 +13,7 @@ use proto95::{
     id::ItemId,
     shared::Vec2,
 };
+use shroom_net::packet::proto::time::ShroomExpiration;
 
 use crate::services::{
     data::character::CharacterID, meta::fh_tree::Foothold, session::ShroomSessionSet,
@@ -108,6 +108,20 @@ impl PoolItem for Drop {
 }
 
 impl Pool<Drop> {
+    pub fn is_money(&self, item: DropId) -> Option<u32> {
+        let pool = match self.items.read() {
+            Ok(map) => map,
+            Err(_) => return None,
+        };
+        match pool.get(&item) {
+            Some(i) => match i.value {
+                DropTypeValue::Item(_) => None,
+                DropTypeValue::Mesos(m) => Some(m),
+            },
+            None => None,
+        }
+    }
+
     pub fn add_mob_drops(
         &self,
         killed_mob: MobId,

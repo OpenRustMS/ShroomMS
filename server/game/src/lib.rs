@@ -521,11 +521,25 @@ impl GameHandler {
     ) -> GameResult<CharStatChangedResp> {
         dbg!(&req);
 
+        self.field
+            .handle_pickup(req.drop_id, &mut self.session.char)?;
         self.field.remove_drop(
             req.drop_id,
             DropLeaveParam::UserPickup(self.session.char.model.id as u32),
         )?;
-        Ok(self.enable_char().into())
+        Ok(CharStatChangedResp {
+            excl: true,
+            stats: PartialFlag {
+                hdr: (),
+                data: CharStatPartial {
+                    money: CondOption(Some(self.session.char.model.mesos.try_into().unwrap())),
+                    ..CharStatPartial::default()
+                },
+            },
+            secondary_stat: false,
+            battle_recovery: false,
+        }
+        .into())
     }
 
     async fn handle_drop_money(

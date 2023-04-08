@@ -1,15 +1,15 @@
 use std::ops::{Add, Div};
 
-use crate::{entities, services::helper::intentory::inv::InventorySet};
+use crate::{entities::character::Model, services::helper::intentory::inv::InventorySet};
 
 #[derive(Debug, Clone)]
 pub struct Character {
-    pub model: entities::character::Model,
+    pub model: Model,
     pub inventory: InventorySet,
 }
 
 impl Character {
-    pub fn new(model: entities::character::Model, inventory: InventorySet) -> Self {
+    pub fn new(model: Model, inventory: InventorySet) -> Self {
         Self { model, inventory }
     }
 
