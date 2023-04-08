@@ -1,6 +1,5 @@
 use std::ops::{Add, Div};
 
-use game_data::wz2::Item;
 use proto95::{
     id::ItemId,
     shared::char::{CharStatFlags, CharStatPartial},
@@ -11,6 +10,7 @@ use crate::{
     entities::character::Model,
     services::{
         helper::intentory::inv::{InventoryExt, InventorySet, InventoryType},
+        meta::meta_service::ItemMeta,
         model::item::{EquipItem, StackItem},
     },
 };
@@ -72,7 +72,8 @@ impl Character {
         &mut self,
         item_id: ItemId,
         itype: InventoryType,
-        item: &Item
+        item_meta: ItemMeta,
+        quantity: usize,
     ) -> anyhow::Result<bool> {
         if InventoryType::is_equip(&itype) {
             let eq_inv = self.inventory.get_equipped_inventory_mut(itype)?;
@@ -84,7 +85,7 @@ impl Character {
                 .unwrap_or(false))
         } else {
             let stack_inv = self.inventory.get_stack_inventory_mut(itype)?;
-            let stack_item = StackItem::from_item_id(item_id, 1).into();
+            let stack_item = StackItem::from_item_id(item_id, quantity as u16).into();
             Ok(stack_inv
                 .get_inner_mut()
                 .try_add(stack_item)

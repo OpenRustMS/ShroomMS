@@ -249,7 +249,7 @@ impl FieldData {
 
     pub fn handle_pickup(&self, item: DropId, char: &mut Character) -> anyhow::Result<bool> {
         match self.drop_pool.get_item(item) {
-            Some(v) => match v {
+            Some(v) => match v.value {
                 DropTypeValue::Item(i) => {
                     let (item, itype) = match self.meta.get_item_data(i) {
                         Some(v) => (v, InventoryType::Use),
@@ -258,7 +258,7 @@ impl FieldData {
                             None => return Ok(false),
                         },
                     };
-                    Ok(char.update_inventory(i, itype, item)?)
+                    Ok(char.update_inventory(i, itype, item, v.quantity)?)
                 }
                 DropTypeValue::Mesos(m) => Ok(char.update_mesos(m as i32)?),
             },

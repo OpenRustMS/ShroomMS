@@ -21,7 +21,7 @@ use crate::services::{
 
 use super::{next_id, Pool, PoolItem};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Drop {
     pub owner: DropOwner,
     pub pos: Vec2,
@@ -108,15 +108,12 @@ impl PoolItem for Drop {
 }
 
 impl Pool<Drop> {
-    pub fn get_item(&self, item: DropId) -> Option<DropTypeValue> {
+    pub fn get_item(&self, item: DropId) -> Option<Drop> {
         let pool = match self.items.read() {
             Ok(map) => map,
             Err(_) => return None,
         };
-        match pool.get(&item) {
-            Some(i) => Some(i.value.clone()),
-            None => None,
-        }
+        pool.get(&item).cloned()
     }
 
     pub fn add_mob_drops(
