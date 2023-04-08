@@ -28,7 +28,6 @@ use shroom_net::packet::EncodePacket;
 use shroom_net::packet::proto::list::{ShroomIndexList8, ShroomIndexListZ};
 use shroom_net::packet::proto::partial::PartialFlag;
 use shroom_net::packet::proto::time::ShroomExpiration;
-use shroom_net::packet::proto::CondOption;
 use shroom_net::packet::{
     proto::{
         list::{ShroomIndexListZ16, ShroomIndexListZ8},
@@ -288,10 +287,7 @@ impl GameHandler {
             excl: false,
             stats: PartialFlag {
                 hdr: (),
-                data: CharStatPartial {
-                    hp: CondOption(Some(self.session.char.model.hp.try_into().unwrap())),
-                    ..CharStatPartial::default()
-                },
+                data: self.session.char.get_char_partial(),
             },
             secondary_stat: false,
             battle_recovery: false,
@@ -310,11 +306,7 @@ impl GameHandler {
             excl: false,
             stats: PartialFlag {
                 hdr: (),
-                data: CharStatPartial {
-                    hp: CondOption(Some(self.session.char.model.hp.try_into().unwrap())),
-                    mp: CondOption(Some(self.session.char.model.mp.try_into().unwrap())),
-                    ..CharStatPartial::default()
-                },
+                data: self.session.char.get_char_partial(),
             },
             secondary_stat: false,
             battle_recovery: false,
@@ -531,10 +523,7 @@ impl GameHandler {
             excl: true,
             stats: PartialFlag {
                 hdr: (),
-                data: CharStatPartial {
-                    money: CondOption(Some(self.session.char.model.mesos.try_into().unwrap())),
-                    ..CharStatPartial::default()
-                },
+                data: self.session.char.get_char_partial(),
             },
             secondary_stat: false,
             battle_recovery: false,
@@ -560,10 +549,7 @@ impl GameHandler {
             excl: true,
             stats: PartialFlag {
                 hdr: (),
-                data: CharStatPartial {
-                    money: CondOption(Some(self.session.char.model.mesos.try_into().unwrap())),
-                    ..CharStatPartial::default()
-                },
+                data: self.session.char.get_char_partial(),
             },
             secondary_stat: false,
             battle_recovery: false,
