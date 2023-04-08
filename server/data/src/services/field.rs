@@ -13,9 +13,10 @@ use proto95::{
     shared::{char::AvatarData, FootholdId, Range2, Vec2},
 };
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort};
-use shroom_net::net::service::{server_sess::SharedSessionHandle, packet_buffer::PacketBuffer};
+use shroom_net::net::service::{packet_buffer::PacketBuffer, server_sess::SharedSessionHandle};
 
 use super::{
+    character::Character,
     data::character::CharacterID,
     helper::pool::{drop::DropLeaveParam, reactor::Reactor, user::User, Drop, Mob, Npc, Pool},
     meta::{
@@ -236,6 +237,17 @@ impl FieldData {
 
     pub fn add_chat(&self, chat: UserChatMsgResp) -> anyhow::Result<()> {
         self.sessions.broadcast_pkt(chat, -1)?;
+        Ok(())
+    }
+
+    // TODO: handle various drop items
+    pub fn handle_pickup(&self, item: DropId, char: &mut Character) -> anyhow::Result<()> {
+        match self.drop_pool.is_money(item) {
+            Some(m) => {
+                char.update_mesos(m.try_into().unwrap());
+            }
+            None => {}
+        };
         Ok(())
     }
 
