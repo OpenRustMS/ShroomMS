@@ -49,7 +49,7 @@ use proto95::game::user::{
 use proto95::id::{FaceId, HairId, ItemId, Skin};
 use proto95::shared::char::{AvatarData, AvatarEquips, PetIds, SkillInfo, TeleportRockInfo};
 use proto95::shared::inventory::InvChangeSlotPosReq;
-use proto95::shared::{FootholdId, PongReq, Vec2};
+use proto95::shared::{ClientDumpLogReq, FootholdId, PongReq, Vec2};
 use proto95::{
     game::{
         chat::{ChatMsgReq, UserChatMsgResp},
@@ -239,6 +239,7 @@ impl ShroomSessionHandler for GameHandler {
             UserHitReq => GameHandler::handle_user_hit,
             UserStatChangeReq => GameHandler::handle_stat_change,
             InvChangeSlotPosReq => GameHandler::handle_inv_change_slot,
+            ClientDumpLogReq => GameHandler::handle_client_dump_log,
         );
 
         Ok(handler(self, session, packet.into_reader()).await?)
@@ -275,23 +276,23 @@ impl ShroomServerSessionHandler for GameHandler {
 }
 
 impl GameHandler {
+    async fn handle_client_dump_log(&mut self, req: ClientDumpLogReq) -> anyhow::Result<()> {
+        dbg!(req);
+        Ok(())
+    }
+
     async fn handle_user_hit(&mut self, req: UserHitReq) -> GameResult<CharStatChangedResp> {
         self.session.char.update_hp((req.dmg_internal as i32).neg());
 
-        let stats = CharStatPartial {
-            hp: CondOption(Some(self.session.char.model.hp.try_into().unwrap())),
-            ..Default::default()
-        };
-
-        _ = self
-            .services
-            .data
-            .char
-            .save_char(self.session.char.model.clone().into());
-
         Ok(CharStatChangedResp {
             excl: false,
-            stats: stats.into(),
+            stats: PartialFlag {
+                hdr: (),
+                data: CharStatPartial {
+                    hp: CondOption(Some(self.session.char.model.hp.try_into().unwrap())),
+                    ..CharStatPartial::default()
+                },
+            },
             secondary_stat: false,
             battle_recovery: false,
         }
@@ -305,21 +306,16 @@ impl GameHandler {
         self.session.char.update_hp(req.hp as i32);
         self.session.char.update_mp(req.mp as i32);
 
-        let stats = CharStatPartial {
-            hp: CondOption(Some(self.session.char.model.hp.try_into().unwrap())),
-            mp: CondOption(Some(self.session.char.model.mp.try_into().unwrap())),
-            ..Default::default()
-        };
-
-        _ = self
-            .services
-            .data
-            .char
-            .save_char(self.session.char.model.clone().into());
-
         Ok(CharStatChangedResp {
             excl: false,
-            stats: stats.into(),
+            stats: PartialFlag {
+                hdr: (),
+                data: CharStatPartial {
+                    hp: CondOption(Some(self.session.char.model.hp.try_into().unwrap())),
+                    mp: CondOption(Some(self.session.char.model.mp.try_into().unwrap())),
+                    ..CharStatPartial::default()
+                },
+            },
             secondary_stat: false,
             battle_recovery: false,
         }
@@ -365,10 +361,10 @@ impl GameHandler {
 
     pub async fn handle_default(
         &mut self,
-        _op: RecvOpcodes,
+        op: RecvOpcodes,
         pr: PacketReader<'_>,
     ) -> anyhow::Result<SessionHandleResult> {
-        log::info!("Unhandled packet: {:?}", pr.into_inner());
+        log::info!("Unhandled packet: {:?} {:?}", op, pr.into_inner());
         Ok(SessionHandleResult::Ok)
     }
 
@@ -396,7 +392,8 @@ impl GameHandler {
 
         let equipped: ShroomIndexListZ16<Item> = self
             .session
-            .inv
+            .char
+            .inventory
             .equipped
             .iter()
             .map(|(slot, item)| (slot as u16, Item::Equip(item.item.as_ref().into())))
@@ -404,7 +401,8 @@ impl GameHandler {
 
         let etc: ShroomIndexListZ8<Item> = self
             .session
-            .inv
+            .char
+            .inventory
             .etc
             .iter()
             .map(|(slot, item)| (slot as u8 + 1, Item::Stack(item.item.as_ref().into())))
@@ -522,6 +520,7 @@ impl GameHandler {
         req: UserDropPickUpReq,
     ) -> GameResult<CharStatChangedResp> {
         dbg!(&req);
+
         self.field.remove_drop(
             req.drop_id,
             DropLeaveParam::UserPickup(self.session.char.model.id as u32),
@@ -533,14 +532,29 @@ impl GameHandler {
         &mut self,
         req: UserDropMoneyReq,
     ) -> GameResult<CharStatChangedResp> {
-        self.field.add_drop(Drop {
-            owner: proto95::game::drop::DropOwner::User(self.session.char.model.id as u32),
-            pos: self.pos,
-            start_pos: self.pos,
-            value: DropTypeValue::Mesos(req.money),
-            quantity: 1,
-        })?;
-        Ok(self.enable_char().into())
+        let ok = self.session.char.update_mesos((req.money as i32).neg());
+        if ok {
+            self.field.add_drop(Drop {
+                owner: proto95::game::drop::DropOwner::User(self.session.char.model.id as u32),
+                pos: self.pos,
+                start_pos: self.pos,
+                value: DropTypeValue::Mesos(req.money),
+                quantity: 1,
+            })?;
+        }
+        Ok(CharStatChangedResp {
+            excl: true,
+            stats: PartialFlag {
+                hdr: (),
+                data: CharStatPartial {
+                    money: CondOption(Some(self.session.char.model.mesos.try_into().unwrap())),
+                    ..CharStatPartial::default()
+                },
+            },
+            secondary_stat: false,
+            battle_recovery: false,
+        }
+        .into())
     }
 
     async fn handle_chat_msg(&mut self, req: ChatMsgReq) -> anyhow::Result<()> {

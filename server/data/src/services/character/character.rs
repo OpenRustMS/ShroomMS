@@ -1,19 +1,18 @@
 use std::ops::{Add, Div};
 
-use crate::entities;
+use crate::{entities, services::helper::intentory::inv::InventorySet};
 
 #[derive(Debug, Clone)]
 pub struct Character {
     pub model: entities::character::Model,
-}
-
-impl From<entities::character::Model> for Character {
-    fn from(model: entities::character::Model) -> Self {
-        Self { model }
-    }
+    pub inventory: InventorySet,
 }
 
 impl Character {
+    pub fn new(model: entities::character::Model, inventory: InventorySet) -> Self {
+        Self { model, inventory }
+    }
+
     pub fn decrease_exp(&mut self, town: bool) {
         if self.model.exp <= 0 || self.model.exp >= 200 {
             return;
@@ -38,5 +37,13 @@ impl Character {
 
     pub fn update_mp(&mut self, mp: i32) {
         self.model.mp = 0.max(self.model.mp.add(mp)).min(self.model.max_mp);
+    }
+
+    pub fn update_mesos(&mut self, mesos: i32) -> bool {
+        if self.model.mesos + mesos < 0 {
+            return false;
+        }
+        self.model.mesos = self.model.mesos.checked_add(mesos).unwrap_or(i32::MAX);
+        true
     }
 }

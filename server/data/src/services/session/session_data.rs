@@ -7,7 +7,6 @@ use crate::{
     services::{
         character::Character,
         data::{character::CharacterID, DataServices},
-        helper::intentory::inv::InventorySet,
     },
 };
 
@@ -17,7 +16,6 @@ use super::session_manager::{OwnedSession, SessionBackend};
 pub struct ShroomSessionData {
     pub acc: entities::account::Model,
     pub char: Character,
-    pub inv: InventorySet,
     pub skills: BTreeMap<SkillId, skill::Model>,
 }
 
@@ -36,8 +34,7 @@ impl SessionBackend for ShroomSessionBackend {
     async fn load(&self, param: Self::SessionLoadParam) -> anyhow::Result<Self::SessionData> {
         let (acc, char_id) = param;
         //TODO: important verify that char belongs to the account
-        let char = Character::from(self.data.char.must_get(char_id).await?);
-        let inv = self.data.item.load_inventory_for_character(char_id).await?;
+        let char = Character::new(self.data.char.must_get(char_id).await?, self.data.item.load_inventory_for_character(char_id).await?);
 
         let skills = self
             .data
@@ -47,16 +44,14 @@ impl SessionBackend for ShroomSessionBackend {
             .into_iter()
             .map(|skill| (SkillId(skill.id as u32), skill))
             .collect();
-        Ok(ShroomSessionData {
-            acc,
-            char,
-            inv,
-            skills,
-        })
+        Ok(ShroomSessionData { acc, char, skills })
     }
     async fn save(&self, session: Self::SessionData) -> anyhow::Result<()> {
         let char_id = session.char.model.id;
-        self.data.item.save_inventory(session.inv, char_id).await?;
+        self.data
+            .item
+            .save_inventory(session.char.inventory, char_id)
+            .await?;
 
         Ok(())
     }
