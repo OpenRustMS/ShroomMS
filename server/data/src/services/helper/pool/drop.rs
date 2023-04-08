@@ -30,7 +30,7 @@ pub struct Drop {
     pub quantity: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum DropTypeValue {
     Mesos(u32),
     Item(ItemId),
@@ -108,16 +108,13 @@ impl PoolItem for Drop {
 }
 
 impl Pool<Drop> {
-    pub fn is_money(&self, item: DropId) -> Option<u32> {
+    pub fn get_item(&self, item: DropId) -> Option<DropTypeValue> {
         let pool = match self.items.read() {
             Ok(map) => map,
             Err(_) => return None,
         };
         match pool.get(&item) {
-            Some(i) => match i.value {
-                DropTypeValue::Item(_) => None,
-                DropTypeValue::Mesos(m) => Some(m),
-            },
+            Some(i) => Some(i.value.clone()),
             None => None,
         }
     }

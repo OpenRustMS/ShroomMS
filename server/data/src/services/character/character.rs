@@ -1,9 +1,19 @@
 use std::ops::{Add, Div};
 
-use proto95::shared::char::{CharStatFlags, CharStatPartial};
+use game_data::wz2::Item;
+use proto95::{
+    id::ItemId,
+    shared::char::{CharStatFlags, CharStatPartial},
+};
 use shroom_net::packet::CondOption;
 
-use crate::{entities::character::Model, services::helper::intentory::inv::InventorySet};
+use crate::{
+    entities::character::Model,
+    services::{
+        helper::intentory::inv::{InventoryExt, InventorySet, InventoryType},
+        model::item::{EquipItem, StackItem},
+    },
+};
 
 #[derive(Debug, Clone)]
 pub struct Character {
@@ -49,13 +59,38 @@ impl Character {
         self.char_stat_flags.insert(CharStatFlags::Mp);
     }
 
-    pub fn update_mesos(&mut self, mesos: i32) -> bool {
-        if self.model.mesos + mesos < 0 {
-            return false;
+    pub fn update_mesos(&mut self, mesos: i32) -> anyhow::Result<bool> {
+        if self.model.mesos.checked_add(mesos).is_none() {
+            return Ok(false);
         }
         self.model.mesos = self.model.mesos.saturating_add(mesos);
         self.char_stat_flags.insert(CharStatFlags::Money);
-        true
+        Ok(true)
+    }
+
+    pub fn update_inventory(
+        &mut self,
+        item_id: ItemId,
+        itype: InventoryType,
+        item: &Item
+    ) -> anyhow::Result<bool> {
+        if InventoryType::is_equip(&itype) {
+            let eq_inv = self.inventory.get_equipped_inventory_mut(itype)?;
+            let equip_item = EquipItem::from_item_id(item_id, &item_meta).into();
+            Ok(eq_inv
+                .get_inner_mut()
+                .try_add(equip_item)
+                .map(|_| true)
+                .unwrap_or(false))
+        } else {
+            let stack_inv = self.inventory.get_stack_inventory_mut(itype)?;
+            let stack_item = StackItem::from_item_id(item_id, 1).into();
+            Ok(stack_inv
+                .get_inner_mut()
+                .try_add(stack_item)
+                .map(|_| true)
+                .unwrap_or(false))
+        }
     }
 
     pub fn get_char_partial(&mut self) -> CharStatPartial {
