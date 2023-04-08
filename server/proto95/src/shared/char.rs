@@ -311,7 +311,10 @@ partial_data!(
     Ap(u16) => 1 << 14,
     // TODO handle extended SP
     Sp(u16) => 1 << 15,
-    Exp(u32) => 1 << 17
+    Exp(u32) => 1 << 17,
+    Pop(u16) => 1 << 18,
+    Money(u32) => 1 << 19,
+    TempExp(u32) => 1 << 21
 
 );
 
