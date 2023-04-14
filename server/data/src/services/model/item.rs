@@ -2,7 +2,7 @@ use std::ops::{Deref, DerefMut, RangeInclusive};
 
 use chrono::NaiveDateTime;
 use enum_map::{enum_map, Enum, EnumMap};
-use shroom_net::packet::proto::time::{ShroomExpiration, ShroomTime};
+use shroom_net::packet::proto::time::{ShroomExpirationTime, ShroomTime};
 use proto95::{
     id::ItemId,
     shared::item::{self as proto_item},
@@ -11,7 +11,7 @@ use rand::Rng;
 
 use crate::{
     entities::{equip_item, item_stack},
-    services::meta::meta_service::{get_equip_stats, ItemMeta},
+    services::meta::meta_service::{get_equip_stats, ItemMeta}, proto_mapper::db_to_shroom_time,
 };
 
 #[derive(Debug, Enum, Clone)]
@@ -243,7 +243,7 @@ impl From<&EquipItem> for proto_item::EquipItemInfo {
             info: proto_item::ItemInfo {
                 item_id: value.item_id,
                 cash_id: value.cash_id.into(),
-                expiration: value.expiration.into(),
+                expiration: value.expiration.map(db_to_shroom_time).into()
             },
             stats: proto_item::EquipAllStats {
                 remaining_upgrade_slots: value.slots,
@@ -252,7 +252,8 @@ impl From<&EquipItem> for proto_item::EquipItemInfo {
                 title: value.owner.clone().unwrap_or("".to_string()),
                 flags: value.flags,
             },
-            time_stamp: ShroomTime::permanent(),
+            // TODO what's that
+            time_stamp: ShroomTime::now(),
             lvl_up_ty: 0,
             lvl: value.level_info.as_ref().map(|l| l.level).unwrap_or(0),
             exp: value.level_info.as_ref().map(|l| l.exp).unwrap_or(0),
@@ -294,7 +295,7 @@ impl From<&StackItem> for proto_item::ItemStackData {
             info: proto_item::ItemInfo {
                 item_id: value.item_id,
                 cash_id: value.cash_id.into(),
-                expiration: ShroomExpiration::never(),
+                expiration: ShroomExpirationTime::never(),
             },
             quantity: value.quantity,
             title: value.owner.clone().unwrap_or("aaa".to_string()),

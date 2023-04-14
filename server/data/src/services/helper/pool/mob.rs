@@ -1,4 +1,3 @@
-use shroom_net::{packet::{EncodePacket, PacketWriter}, net::service::{server_sess::SharedSessionHandle, packet_buffer::PacketBuffer}, HasOpcode};
 use proto95::{
     game::{
         mob::{
@@ -9,6 +8,11 @@ use proto95::{
         ObjectId,
     },
     shared::{FootholdId, Vec2},
+};
+use shroom_net::{
+    net::service::server_sess::SharedSessionHandle,
+    packet::{EncodePacket, PacketWriter},
+    HasOpcode, PacketBuffer,
 };
 
 use crate::services::{
@@ -124,7 +128,7 @@ impl Pool<Mob> {
         id: ObjectId,
         dmg: u32,
         buf: &mut PacketBuffer,
-        sessions: &ShroomSessionSet
+        sessions: &ShroomSessionSet,
     ) -> anyhow::Result<bool> {
         // TODO: Locking the whole pool to update a single mob is not right
         let mut mobs = self.items.write().expect("Mob attack");
@@ -133,13 +137,16 @@ impl Pool<Mob> {
             .ok_or(anyhow::format_err!("Invalid mob"))?;
         mob.damage(dmg);
 
-        sessions.broadcast_pkt(MobDamagedResp {
-            id,
-            ty: 0,
-            dec_hp: dmg,
-            hp: mob.hp,
-            max_hp: mob.meta.max_hp,
-        }, attacker)?;
+        sessions.broadcast_pkt(
+            MobDamagedResp {
+                id,
+                ty: 0,
+                dec_hp: dmg,
+                hp: mob.hp,
+                max_hp: mob.meta.max_hp,
+            },
+            attacker,
+        )?;
 
         buf.write_packet(MobHPIndicatorResp {
             id,

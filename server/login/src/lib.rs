@@ -1,7 +1,7 @@
 pub mod config;
 pub mod login_state;
 
-use std::{net::IpAddr, time::Duration};
+use std::net::IpAddr;
 
 use async_trait::async_trait;
 use config::LoginConfig;
@@ -34,23 +34,23 @@ use proto95::{
         CreateSecurityHandleReq, LoginOpt, LoginResultHeader,
     },
     recv_opcodes::RecvOpcodes,
-    send_opcodes::SendOpcodes,
     shared::{
         char::{AvatarData, CharStat, PetIds},
         UpdateScreenSettingReq,
     },
 };
+use shroom_net::net::service::handler::{SessionHandleResult, ShroomSessionHandler};
+use shroom_net::net::service::resp::{
+    MigrateResponse, PacketOpcodeExt, PongResponse, ResponsePacket,
+};
 use shroom_net::net::ShroomSession;
-use shroom_net::packet::ShroomList8;
 use shroom_net::packet::list::ShroomIndexList8;
 use shroom_net::packet::time::ShroomTime;
-use shroom_net::{ShroomPacket, shroom_router_handler, PacketWriter, PacketReader, HasOpcode};
-use shroom_net::net::service::handler::{ShroomSessionHandler, SessionHandleResult, ShroomServerSessionHandler};
-use shroom_net::net::service::resp::{ResponsePacket, PongResponse, MigrateResponse, PacketOpcodeExt};
+use shroom_net::packet::ShroomList8;
+use shroom_net::{shroom_router_fn, HasOpcode, PacketReader, ShroomPacket};
 use tokio::net::TcpStream;
 
-pub type LoginResponse<T> = ResponsePacket<SendOpcodes, T>;
-pub type LoginResult<T> = Result<LoginResponse<T>, anyhow::Error>;
+pub type LoginResult<T> = Result<T, anyhow::Error>;
 
 pub struct LoginHandler {
     services: services::SharedServices,
@@ -78,13 +78,22 @@ impl LoginHandler {
 impl ShroomSessionHandler for LoginHandler {
     type Transport = TcpStream;
     type Error = anyhow::Error;
+    type Msg = ();
+
+    async fn handle_msg(
+        &mut self,
+        _session: &mut ShroomSession<Self::Transport>,
+        _msg: Self::Msg,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
 
     async fn handle_packet(
         &mut self,
         packet: ShroomPacket,
         session: &mut ShroomSession<Self::Transport>,
     ) -> Result<SessionHandleResult, Self::Error> {
-        shroom_router_handler!(
+        shroom_router_fn!(
             handler,
             LoginHandler,
             ShroomSession<TcpStream>,
@@ -111,18 +120,6 @@ impl ShroomSessionHandler for LoginHandler {
         );
 
         handler(self, session, packet.into_reader()).await
-    }
-}
-
-impl ShroomServerSessionHandler for LoginHandler {
-    fn get_ping_interval() -> std::time::Duration {
-        Duration::from_secs(30)
-    }
-
-    fn get_ping_packet(&mut self) -> Result<ShroomPacket, Self::Error> {
-        let mut pw = PacketWriter::default();
-        pw.write_opcode(SendOpcodes::AliveReq)?;
-        Ok(pw.into_packet())
     }
 }
 
@@ -253,7 +250,7 @@ impl LoginHandler {
         .into())
     }
 
-    fn get_world_info(&self) -> Vec<LoginResponse<WorldInfoResp>> {
+    fn get_world_info(&self) -> Vec<WorldInfoResp> {
         self.services
             .server_info
             .get_world_info_packets()
@@ -265,14 +262,14 @@ impl LoginHandler {
     async fn handle_world_information(
         &mut self,
         _req: WorldInfoReq,
-    ) -> anyhow::Result<Vec<LoginResponse<WorldInfoResp>>> {
+    ) -> anyhow::Result<Vec<WorldInfoResp>> {
         Ok(self.get_world_info())
     }
 
     async fn handle_world_request(
         &mut self,
         _req: WorldReq,
-    ) -> anyhow::Result<Vec<LoginResponse<WorldInfoResp>>> {
+    ) -> anyhow::Result<Vec<WorldInfoResp>> {
         Ok(self.get_world_info())
     }
 
@@ -289,7 +286,7 @@ impl LoginHandler {
             Err(AccountServiceError::AccountIsBanned) => CheckPasswordResp::BlockedIp(BlockedIp {
                 hdr,
                 reason: 0,
-                ban_time: ShroomTime::shroom_default(),
+                ban_time: ShroomTime::now(), // TODO
             }),
             Ok(acc) => {
                 let account_info = (&acc).into();
@@ -352,7 +349,7 @@ impl LoginHandler {
     async fn handle_check_duplicate_id(
         &mut self,
         req: CheckDuplicateIDReq,
-    ) -> anyhow::Result<LoginResponse<CheckDuplicateIDResp>> {
+    ) -> anyhow::Result<CheckDuplicateIDResp> {
         let _ = self.state.get_char_select()?;
         let name_used = !self.services.data.char.check_name(&req.name).await?;
 
@@ -431,7 +428,7 @@ impl LoginHandler {
     async fn handle_select_char(
         &mut self,
         req: SelectCharReq,
-    ) -> anyhow::Result<MigrateResponse<ResponsePacket<SendOpcodes, SelectCharResp>>> {
+    ) -> anyhow::Result<MigrateResponse<ResponsePacket<SelectCharResp>>> {
         let (_, world, channel) = self.state.get_char_select()?;
 
         let acc = self.state.claim_account()?;
@@ -453,11 +450,11 @@ impl LoginHandler {
             premium_arg: 0,
         };
 
-        let pkt: ResponsePacket<_, _> = SelectCharResp {
+        let pkt = SelectCharResp {
             error_code: 0,
             result: SelectCharResult::Success(migrate),
         }
-        .into_response(SelectCharResp::OPCODE);
+        .with_opcode(SelectCharResp::OPCODE);
 
         Ok(MigrateResponse(pkt))
     }

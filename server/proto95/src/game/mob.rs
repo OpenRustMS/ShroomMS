@@ -97,14 +97,15 @@ pub type PartialMobTemporaryStat = PartialFlag<(), MobTemporaryStatPartial>;
 //TODO figure out what the u32 is, summon id?
 
 shroom_packet_enum!(
-    MobSummonType,
-    i8,
-    Effect(u32) => 0,
-    Normal(()) => -1,
-    Regen(()) => -2,
-    Revived(u32) => -3,
-    Suspended(()) => -4,
-    Delay(()) => -5,
+    #[derive(Debug)]
+    pub enum MobSummonType: i8 {
+        Effect(u32) = 0,
+        Normal(()) = -1,
+        Regen(()) = -2,
+        Revived(u32) = -3,
+        Suspended(()) = -4,
+        Delay(()) = -5
+    }
 );
 
 shroom_enum_code!(CarnivalTeam, u8, None = 0xff, Blue = 0, Red = 1);
@@ -132,14 +133,15 @@ pub struct MobEnterFieldResp {
 packet_opcode!(MobEnterFieldResp, SendOpcodes::MobEnterField);
 
 shroom_packet_enum!(
-    MobLeaveType,
-    u8,
-    RemainHp(()) => 0,
-    Etc(()) => 1, //Fadeout?
-    SelfDestruct(()) => 2,
-    DestructByMiss(()) => 3,
-    Swallow(CharacterId) => 4,
-    SummonTimeout(()) => 5
+    #[derive(Debug)]
+    pub enum MobLeaveType: u8 {
+        RemainHp(()) = 0,
+        Etc(()) = 1, //Fadeout?
+        SelfDestruct(()) = 2,
+        DestructByMiss(()) = 3,
+        Swallow(CharacterId) = 4,
+        SummonTimeout(()) = 5
+    }
 );
 
 #[derive(ShroomPacket, Debug)]

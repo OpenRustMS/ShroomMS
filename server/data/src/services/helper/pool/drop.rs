@@ -13,7 +13,7 @@ use proto95::{
     id::ItemId,
     shared::Vec2,
 };
-use shroom_net::packet::proto::time::ShroomExpiration;
+use shroom_net::packet::proto::time::ShroomExpirationTime;
 
 use crate::services::{
     data::character::CharacterID, meta::fh_tree::Foothold, session::ShroomSessionSet,
@@ -63,7 +63,7 @@ impl PoolItem for Drop {
         let (drop_type, expiration) = match self.value {
             DropTypeValue::Item(item) => (
                 DropType::Item(item),
-                Some(ShroomExpiration::delay(chrono::Duration::seconds(60))),
+                Some(ShroomExpirationTime::delay(chrono::Duration::seconds(60))),
             ),
             DropTypeValue::Mesos(mesos) => (DropType::Money(mesos), None),
         };

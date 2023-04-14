@@ -168,13 +168,14 @@ pub struct InvOpUpdateExp {
 }
 
 shroom_packet_enum!(
-    InventoryOperation,
-    u8,
-    Add(InvOpAdd) => 0,
-    UpdateQuantity(InvOpUpdateQuantity) => 1,
-    Move(InvOpMove) => 2,
-    Remove(InvOpRemove) => 3,
-    UpdateExp(InvOpUpdateExp) => 4
+    #[derive(Debug)]
+    pub enum InventoryOperation: u8 {
+        Add(InvOpAdd) = 0,
+        UpdateQuantity(InvOpUpdateQuantity) = 1,
+        Move(InvOpMove) = 2,
+        Remove(InvOpRemove) = 3,
+        UpdateExp(InvOpUpdateExp) = 4
+    }
 );
 
 #[derive(Debug, ShroomPacket)]
