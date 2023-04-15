@@ -136,6 +136,7 @@ impl<const CAP: usize> InventoryExt<CAP> for EquippedInventory<CAP> {
     fn get_inner_mut(&mut self) -> &mut Inventory<CAP, Self::Item> {
         &mut self.0
     }
+
 }
 
 impl<const CAP: usize> EquippedInventory<CAP> {
@@ -181,6 +182,14 @@ impl<const CAP: usize> EquipInventory<CAP> {
 
     pub fn items_mut(&mut self) -> impl Iterator<Item = &mut EquipItemSlot> {
         self.0.items_mut()
+    }
+
+    pub fn get_inner(&self) -> &Inventory<CAP, EquipItemSlot> {
+        &self.0
+    }
+
+    pub fn get_inner_mut(&mut self) -> &mut Inventory<CAP, EquipItemSlot> {
+        &mut self.0
     }
 }
 
@@ -241,6 +250,14 @@ impl<const CAP: usize> StackInventory<CAP> {
 
     pub fn items_mut(&mut self) -> impl Iterator<Item = &mut StackItemSlot> {
         self.0.items_mut()
+    }
+
+    pub fn get_inner(&self) -> &Inventory<CAP, StackItemSlot> {
+        &self.0
+    }
+
+    pub fn get_inner_mut(&mut self) -> &mut Inventory<CAP, StackItemSlot> {
+        &mut self.0
     }
 }
 

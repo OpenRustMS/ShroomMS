@@ -15,10 +15,17 @@ use proto95::{
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort};
 use shroom_net::{net::service::{server_sess::SharedSessionHandle}, PacketBuffer};
 
+use crate::services::helper::intentory::inv::InventoryType;
+
 use super::{
     character::Character,
     data::character::CharacterID,
-    helper::pool::{drop::DropLeaveParam, reactor::Reactor, user::User, Drop, Mob, Npc, Pool},
+    helper::pool::{
+        drop::{DropLeaveParam, DropTypeValue},
+        reactor::Reactor,
+        user::User,
+        Drop, Mob, Npc, Pool,
+    },
     meta::{
         fh_tree::FhTree,
         meta_service::{FieldMeta, MetaService},
@@ -28,7 +35,7 @@ use super::{
 
 #[derive(Debug)]
 pub struct FieldData {
-    _meta: &'static MetaService,
+    meta: &'static MetaService,
     field_meta: FieldMeta,
     field_fh: &'static FhTree,
     drop_pool: Pool<Drop>,
@@ -105,7 +112,7 @@ impl FieldData {
         });
 
         Self {
-            _meta: meta,
+            meta: meta,
             field_meta,
             field_fh: fh_meta,
             drop_pool: Pool::new(meta),
@@ -240,15 +247,23 @@ impl FieldData {
         Ok(())
     }
 
-    // TODO: handle various drop items
-    pub fn handle_pickup(&self, item: DropId, char: &mut Character) -> anyhow::Result<()> {
-        match self.drop_pool.is_money(item) {
-            Some(m) => {
-                char.update_mesos(m.try_into().unwrap());
-            }
-            None => {}
-        };
-        Ok(())
+    pub fn handle_pickup(&self, item: DropId, char: &mut Character) -> anyhow::Result<bool> {
+        match self.drop_pool.get_item(item) {
+            Some(v) => match v.value {
+                DropTypeValue::Item(i) => {
+                    let (item, itype) = match self.meta.get_item_data(i) {
+                        Some(v) => (v, InventoryType::Use),
+                        None => match self.meta.get_eq_data(i) {
+                            Some(v) => (v, InventoryType::Equip),
+                            None => return Ok(false),
+                        },
+                    };
+                    Ok(char.update_inventory(i, itype, item, v.quantity)?)
+                }
+                DropTypeValue::Mesos(m) => Ok(char.update_mesos(m as i32)?),
+            },
+            None => Ok(false),
+        }
     }
 
     pub async fn attack_mob(

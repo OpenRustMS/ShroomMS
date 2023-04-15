@@ -507,12 +507,16 @@ impl GameHandler {
     ) -> GameResult<CharStatChangedResp> {
         dbg!(&req);
 
-        self.field
+        let remove_drop = self
+            .field
             .handle_pickup(req.drop_id, &mut self.session.char)?;
-        self.field.remove_drop(
-            req.drop_id,
-            DropLeaveParam::UserPickup(self.session.char.model.id as u32),
-        )?;
+        if remove_drop {
+            self.field.remove_drop(
+                req.drop_id,
+                DropLeaveParam::UserPickup(self.session.char.model.id as u32),
+            )?;
+        }
+
         Ok(CharStatChangedResp {
             excl: true,
             stats: PartialFlag {
@@ -529,7 +533,7 @@ impl GameHandler {
         &mut self,
         req: UserDropMoneyReq,
     ) -> GameResult<CharStatChangedResp> {
-        let ok = self.session.char.update_mesos((req.money as i32).neg());
+        let ok = self.session.char.update_mesos((req.money as i32).neg())?;
         if ok {
             self.field.add_drop(Drop {
                 owner: proto95::game::drop::DropOwner::User(self.session.char.model.id as u32),
