@@ -80,10 +80,11 @@ impl SetFieldOtherData {
 }
 
 shroom_packet_enum!(
-    SetFieldResult,
-    u8,
-    TransferField(SetFieldOtherData) => 0,
-    CharData(SetFieldCharData) => 1,
+    #[derive(Debug)]
+    pub enum SetFieldResult: u8 {
+        TransferField(SetFieldOtherData) = 0,
+        CharData(SetFieldCharData) = 1
+    }
 );
 
 #[derive(ShroomPacket, Debug)]

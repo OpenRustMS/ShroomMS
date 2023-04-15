@@ -1,8 +1,14 @@
 pub mod char;
+use chrono::NaiveDateTime;
+use sea_orm::prelude::DateTimeUtc;
 use shroom_net::packet::proto::time::ShroomTime;
 use proto95::{login::account::AccountInfo, shared::Gender};
 
 use crate::entities::{account, sea_orm_active_enums::GenderTy};
+
+pub fn db_to_shroom_time(dt: NaiveDateTime) -> ShroomTime {
+    ShroomTime::from_datetime(DateTimeUtc::from_utc(dt, chrono::Utc))
+}
 
 impl From<&GenderTy> for Gender {
     fn from(value: &GenderTy) -> Self {
@@ -35,8 +41,8 @@ impl From<&account::Model> for AccountInfo {
             name: model.username.clone(),
             purchase_exp: 0,
             chat_block_reason: 0,
-            chat_block_date: ShroomTime::zero(),
-            registration_date: ShroomTime::try_from(model.created_at).unwrap(),
+            chat_block_date: ShroomTime::from_i64(0),
+            registration_date: db_to_shroom_time(model.created_at),
             num_chars: model.character_slots as u32,
         }
     }

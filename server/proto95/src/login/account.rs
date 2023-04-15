@@ -97,18 +97,19 @@ pub struct SuccessResult {
 }
 
 shroom_packet_enum!(
-    CheckPasswordResp,
-    u8,
-    Success(SuccessResult) => 0,
-    BlockedIp(BlockedIp) => 2,
-    IdDeleted(LoginResultHeader) => 3,
-    InvalidPassword(LoginResultHeader) => 4,
-    InvalidUserName(LoginResultHeader) => 5,
-    SystemError(LoginResultHeader) => 6,
-    AlreadyLoggedIn(LoginResultHeader) => 7,
-    UnableToLoginWithIp(LoginResultHeader) => 13,
-    TOS(LoginResultHeader) => 23,
-    Unknown(LoginResultHeader) => 255
+    #[derive(Debug)]
+    pub enum CheckPasswordResp: u8 {
+        Success(SuccessResult) = 0,
+        BlockedIp(BlockedIp) = 2,
+        IdDeleted(LoginResultHeader) = 3,
+        InvalidPassword(LoginResultHeader) = 4,
+        InvalidUserName(LoginResultHeader) = 5,
+        SystemError(LoginResultHeader) = 6,
+        AlreadyLoggedIn(LoginResultHeader) = 7,
+        UnableToLoginWithIp(LoginResultHeader) = 13,
+        TOS(LoginResultHeader) = 23,
+        Unknown(LoginResultHeader) = 255
+    }
 );
 packet_opcode!(CheckPasswordResp, SendOpcodes::CheckPasswordResult);
 

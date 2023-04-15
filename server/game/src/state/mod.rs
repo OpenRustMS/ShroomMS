@@ -8,7 +8,7 @@ use proto95::{
     login::world::{ChannelId, WorldId},
     shared::{char::CharStatPartial, FootholdId, Vec2},
 };
-use shroom_net::net::service::{packet_buffer::PacketBuffer, server_sess::SharedSessionHandle};
+use shroom_net::{net::service::server_sess::SharedSessionHandle, PacketBuffer};
 
 use crate::repl::GameRepl;
 

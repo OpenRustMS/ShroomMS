@@ -3,31 +3,30 @@ pub mod state;
 
 use std::ops::Neg;
 
-use std::{net::IpAddr, time::Duration};
+use std::net::IpAddr;
 
 use async_trait::async_trait;
 
 use data::entities::character;
+use data::proto_mapper::db_to_shroom_time;
 use data::services::field::FieldJoinHandle;
 use data::services::helper::pool::drop::{DropLeaveParam, DropTypeValue};
 use data::services::session::session_data::OwnedShroomSession;
 use data::services::session::{ClientKey, ShroomMigrationKey};
 use data::services::SharedServices;
 use shroom_net::net::service::handler::{
-    MakeServerSessionHandler, SessionHandleResult, ShroomServerSessionHandler, ShroomSessionHandler,
+    MakeServerSessionHandler, SessionHandleResult, ShroomSessionHandler,
 };
-use shroom_net::net::service::resp::{
-    MigrateResponse, PacketOpcodeExt, PongResponse, ResponsePacket,
-};
+use shroom_net::net::service::resp::{MigrateResponse, PongResponse};
 use shroom_net::net::service::server_sess::SharedSessionHandle;
 use shroom_net::net::ShroomSession;
-use shroom_net::{shroom_router_handler, HasOpcode};
+use shroom_net::{shroom_router_fn, HasOpcode};
 
 use shroom_net::packet::EncodePacket;
 
 use shroom_net::packet::proto::list::{ShroomIndexList8, ShroomIndexListZ};
 use shroom_net::packet::proto::partial::PartialFlag;
-use shroom_net::packet::proto::time::ShroomExpiration;
+use shroom_net::packet::proto::time::ShroomExpirationTime;
 use shroom_net::packet::{
     proto::{
         list::{ShroomIndexListZ16, ShroomIndexListZ8},
@@ -65,7 +64,6 @@ use proto95::{
     id::MapId,
     login::world::{ChannelId, WorldId},
     recv_opcodes::RecvOpcodes,
-    send_opcodes::SendOpcodes,
     shared::{
         char::{
             CharDataAll, CharDataEquipped, CharDataFlagsAll, CharDataHeader, CharDataStat,
@@ -78,8 +76,7 @@ use proto95::{
 use repl::GameRepl;
 use tokio::net::TcpStream;
 
-pub type GameResponse<T> = ResponsePacket<SendOpcodes, T>;
-pub type GameResult<T> = Result<GameResponse<T>, anyhow::Error>;
+pub type GameResult<T> = Result<T, anyhow::Error>;
 
 #[derive(Debug, Clone)]
 pub struct MakeGameHandler {
@@ -211,13 +208,22 @@ impl GameHandler {
 impl ShroomSessionHandler for GameHandler {
     type Transport = TcpStream;
     type Error = anyhow::Error;
+    type Msg = ();
+
+    async fn handle_msg(
+        &mut self,
+        _session: &mut ShroomSession<Self::Transport>,
+        _msg: Self::Msg,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
 
     async fn handle_packet(
         &mut self,
         packet: ShroomPacket,
         session: &mut ShroomSession<Self::Transport>,
     ) -> Result<SessionHandleResult, Self::Error> {
-        shroom_router_handler!(
+        shroom_router_fn!(
             handler,
             GameHandler,
             ShroomSession<TcpStream>,
@@ -259,18 +265,6 @@ impl ShroomSessionHandler for GameHandler {
         }
 
         Ok(())
-    }
-}
-
-impl ShroomServerSessionHandler for GameHandler {
-    fn get_ping_interval() -> std::time::Duration {
-        Duration::from_secs(30)
-    }
-
-    fn get_ping_packet(&mut self) -> Result<ShroomPacket, Self::Error> {
-        let mut pw = PacketWriter::default();
-        pw.write_opcode(SendOpcodes::AliveReq)?;
-        Ok(pw.into_packet())
     }
 }
 
@@ -329,7 +323,7 @@ impl GameHandler {
                 id: req.skill_id,
                 level: 1,
                 master_level: 0,
-                expiration: ShroomExpiration::never(),
+                expiration: ShroomExpirationTime::never(),
             }]
             .into(),
             updated_secondary_stat: false,
@@ -420,7 +414,7 @@ impl GameHandler {
             .map(|(id, skill)| SkillInfo {
                 id: *id,
                 level: skill.skill_level as u32,
-                expiration: skill.expires_at.into(),
+                expiration: skill.expires_at.map(db_to_shroom_time).into(),
                 master_level: skill.master_level as u32,
             })
             .collect();
@@ -435,7 +429,7 @@ impl GameHandler {
             },
             money: char.model.mesos as u32,
             invsize,
-            equipextslotexpiration: ShroomExpiration::never(),
+            equipextslotexpiration: ShroomExpirationTime::never(),
             equipped: char_equipped,
             useinv: ShroomIndexListZ::default(),
             setupinv: ShroomIndexListZ::default(),
@@ -479,7 +473,7 @@ impl GameHandler {
             old_driver_id: 0,
             unknown_flag_1: 0,
             set_field_result: SetFieldResult::CharData(char_data),
-            timestamp: ShroomTime::utc_now(),
+            timestamp: ShroomTime::now(),
             extra: 0,
         }
     }
@@ -710,20 +704,17 @@ impl GameHandler {
     async fn handle_channel_transfer(
         &mut self,
         req: TransferChannelReq,
-    ) -> anyhow::Result<MigrateResponse<ResponsePacket<SendOpcodes, MigrateCommandResp>>> {
+    ) -> anyhow::Result<MigrateResponse<MigrateCommandResp>> {
         log::info!("Transfer channel: {:?}", req);
         let addr = self
             .services
             .server_info
             .get_channel_addr(self.world_id, req.channel_id as ChannelId)?;
 
-        let pkt: ResponsePacket<_, _> = MigrateCommandResp {
+        Ok(MigrateResponse(MigrateCommandResp {
             unknown: true,
             addr: addr.try_into()?,
-        }
-        .into_response(MigrateCommandResp::OPCODE);
-
-        Ok(MigrateResponse(pkt))
+        }))
     }
 }
 

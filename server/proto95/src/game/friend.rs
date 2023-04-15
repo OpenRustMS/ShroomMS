@@ -68,24 +68,25 @@ pub struct FriendReq {
 }
 
 shroom_packet_enum!(
-    FriendResultResp,
-    u8,
-    Reset(FriendList) => 0,
-    Update(FriendUpdate) => 1,
-    Req(FriendReq) => 2,
-    Reset3(FriendList) => 3,
-    Unknown4(()) => 4,
-    Unknown5(()) => 5,
-    Unknown6(()) => 6,
-    Unknown7(()) => 7,
-    Unknown8(()) => 8,
-    Unknown9(ShroomOption8<String>) => 9,
-    UnknownA(ShroomOption8<String>) => 0xa,
-    // Blocked is alwayws true for this
-    ResetB(FriendList) => 0xb,
-    UnknownC(ShroomOption8<String>) => 0xc,
-    ChangeChannel(FriendChangeChannel) => 0xd,
-    MaxFriends(u8) => 0xe,
-    UnknownF(ShroomOption8<String>) => 0xf,
+    #[derive(Debug)]
+    pub enum FriendResultResp: u8 {
+        Reset(FriendList) = 0,
+        Update(FriendUpdate) = 1,
+        Req(FriendReq) = 2,
+        Reset3(FriendList) = 3,
+        Unknown4(()) = 4,
+        Unknown5(()) = 5,
+        Unknown6(()) = 6,
+        Unknown7(()) = 7,
+        Unknown8(()) = 8,
+        Unknown9(ShroomOption8<String>) = 9,
+        UnknownA(ShroomOption8<String>) = 0xa,
+        // Blocked is alwayws true fo this
+        ResetB(FriendList) = 0xb,
+        UnknownC(ShroomOption8<String>) = 0xc,
+        ChangeChannel(FriendChangeChannel) = 0xd,
+        MaxFriends(u8) = 0xe,
+        UnknownF(ShroomOption8<String>) = 0xf
+    }
 );
 packet_opcode!(FriendResultResp, SendOpcodes::FriendResult);

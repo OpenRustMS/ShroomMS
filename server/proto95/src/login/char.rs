@@ -1,8 +1,8 @@
+use shroom_net::{
+    packet::proto::{option::ShroomOption8, ShroomList8},
+    packet_opcode, shroom_enum_code, shroom_packet_enum,
+};
 use shroom_net_derive::ShroomPacket;
-use shroom_net::{packet::{
-    proto::{option::ShroomOption8, ShroomList8},
-}, shroom_packet_enum, packet_opcode, mark_shroom_enum};
-use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use crate::{
     id::{
@@ -17,7 +17,9 @@ use crate::{
     },
 };
 
-use super::{account::AccountId, world::WorldId, HardwareInfo, LoginOpt, StartModeInfo};
+use super::{
+    account::AccountId, world::WorldId, HardwareInfo, LoginOpt, MachineId, StartMode, StartModeInfo,
+};
 
 type CharacterId = u32;
 
@@ -36,10 +38,11 @@ pub struct MigrateStageInfo {
 }
 
 shroom_packet_enum!(
-    SelectCharResult,
-    u8,
-    Success(MigrateStageInfo) => 0,
-    //TODO add the rest
+    #[derive(Debug)]
+    pub enum SelectCharResult: u8 {
+        Success(MigrateStageInfo) = 0
+        //TODO add the rest
+    }
 );
 
 #[derive(ShroomPacket, Debug)]
@@ -59,42 +62,43 @@ pub struct ViewAllCharReq {
 packet_opcode!(ViewAllCharReq, RecvOpcodes::ViewAllChar);
 
 shroom_packet_enum!(
-    ViewAllCharResp,
-    u8,
-    Success(ViewAllCharList) => 0,
-    Prepare(ViewAllCharPrepare) => 1,
-    Reset(()) => 2,
-    Error3(ViewAllCharCustomError) => 3,
-    Error4(()) => 4,
-    Error5(()) => 5,
-    Error6(ViewAllCharCustomError) => 6,
-    Error7(ViewAllCharCustomError) => 7
+    #[derive(Debug)]
+    pub enum ViewAllCharResp: u8 {
+        Success(ViewAllCharList) = 0,
+        Prepare(ViewAllCharPrepare) = 1,
+        Reset(()) = 2,
+        Error3(ViewAllCharCustomError) = 3,
+        Error4(()) = 4,
+        Error5(()) = 5,
+        Error6(ViewAllCharCustomError) = 6,
+        Error7(ViewAllCharCustomError) = 7
+    }
 );
 packet_opcode!(ViewAllCharResp, SendOpcodes::ViewAllCharResult);
 
 shroom_packet_enum!(
-    SelectWorldResp,
-    u8,
-    Success(SelectWorldCharList) => 0,
-    Err(()) => 1 //TODO add more errors
+    #[derive(Debug)]
+    pub enum SelectWorldResp: u8 {
+        Success(SelectWorldCharList) = 0,
+        Err(()) = 1 //TODO add more errors
+    }
 );
 packet_opcode!(SelectWorldResp, SendOpcodes::SelectWorldResult);
 
 shroom_packet_enum!(
-    CreateCharResp,
-    u8,
-    Success(ViewChar) => 0,
-    Timeout(()) => 0xa,
-    SystemError(()) => 0x1a,
-    InvalidCharName(()) => 0x1e,
-    //TODO more errors?
+    pub enum CreateCharResp: u8 {
+        Success(ViewChar) = 0,
+        Timeout(()) = 0xa,
+        SystemError(()) = 0x1a,
+        InvalidCharName(()) = 0x1e
+        //TODO more errors?
+    }
 );
 packet_opcode!(CreateCharResp, SendOpcodes::CreateNewCharacterResult);
 
-#[derive(Debug, Clone, TryFromPrimitive, IntoPrimitive)]
-#[repr(u8)]
-pub enum SelectCharResultCode {
-    //TODO verify
+shroom_enum_code!(
+    SelectCharResultCode,
+    u8,
     Success = 0,
     DBFail = 6,
     UnknownErr = 9,
@@ -104,13 +108,12 @@ pub enum SelectCharResultCode {
     ErrGuildMaster = 0x16,
     ErrPendingWedding = 0x18,
     ErrPendingWorldTransfer = 0x1A,
-    ErrHasFamily = 0x1D,
-}
+    ErrHasFamily = 0x1D
+);
 
-#[derive(Debug, Clone, TryFromPrimitive, IntoPrimitive)]
-#[repr(u8)]
-pub enum DeleteCharResult {
-    //TODO verify
+shroom_enum_code!(
+    DeleteCharResult,
+    u8,
     Success = 0,
     DBFail = 6,
     UnknownErr = 9,
@@ -120,9 +123,8 @@ pub enum DeleteCharResult {
     ErrGuildMaster = 0x16,
     ErrPendingWedding = 0x18,
     ErrPendingWorldTransfer = 0x1A,
-    ErrHasFamily = 0x1D,
-}
-mark_shroom_enum!(DeleteCharResult);
+    ErrHasFamily = 0x1D
+);
 
 #[derive(ShroomPacket, Debug)]
 pub struct DeleteCharResp {
@@ -208,18 +210,18 @@ pub struct ViewAllCharPrepare {
 
 #[derive(ShroomPacket, Debug)]
 pub struct CharacterRankData {
-    world_rank: u32,
-    world_rank_gap: u32,
-    job_rank: u32,
-    job_rank_gap: u32,
+    pub world_rank: u32,
+    pub world_rank_gap: u32,
+    pub job_rank: u32,
+    pub job_rank_gap: u32,
 }
 
 #[derive(ShroomPacket, Debug)]
 pub struct ViewExtraInfo {
-    hardware_id: String,
-    machine_id: [u8; 0x10],
-    game_room_client: u32,
-    start_mode: u8,
+    pub hardware_id: String,
+    pub machine_id: MachineId,
+    pub game_room_client: u32,
+    pub start_mode: StartMode,
 }
 
 #[derive(ShroomPacket, Debug)]
@@ -318,18 +320,17 @@ pub struct CheckDuplicateIDReq {
 }
 packet_opcode!(CheckDuplicateIDReq, RecvOpcodes::CheckDuplicatedID);
 
-#[derive(Debug, Clone, TryFromPrimitive, IntoPrimitive)]
-#[repr(u8)]
-pub enum CheckDuplicateIDResult {
+shroom_enum_code!(
+    CheckDuplicateIDResult,
+    u8,
     Success = 0,
     // TODO: mapped to 5
     Error1 = 1,
     // map to 10
     Error2 = 2,
     // map to 18 or well every code aside from 0,1,2
-    Error3 = 3,
-}
-mark_shroom_enum!(CheckDuplicateIDResult);
+    Error3 = 3
+);
 
 #[derive(ShroomPacket, Debug)]
 pub struct CheckDuplicateIDResp {

@@ -5,7 +5,7 @@ use shroom_net::{packet::{
         list::{ShroomIndexList8, ShroomIndexListZ16, ShroomIndexListZ8},
         option::ShroomOption8,
         partial::PartialFlag,
-        time::{ShroomDurationMs16, ShroomDurationMs32, ShroomExpiration, ShroomTime},
+        time::{ShroomDurationMs16, ShroomDurationMs32, ShroomExpirationTime, ShroomTime},
         ShroomList16, ShroomList32,
     },
 }, packet_opcode, partial_data};
@@ -114,7 +114,7 @@ pub struct UnknownCharExtraData {
 pub struct SkillInfo {
     pub id: SkillId,
     pub level: u32,
-    pub expiration: ShroomExpiration,
+    pub expiration: ShroomExpirationTime,
     //TODO if is_skill_need_master_level, 4th job only?
     pub master_level: u32,
 }
@@ -356,7 +356,7 @@ partial_data!(
     Stat(CharDataStat) => 1 << 0,
     Money(Money) => 1 << 1,
     InvSize([u8; 5]) => 1 << 7,
-    EquipExtSlotExpiration(ShroomExpiration) => 1 << 20,
+    EquipExtSlotExpiration(ShroomExpirationTime) => 1 << 20,
     Equipped(CharDataEquipped) => 1 << 2,
     UseInv(ShroomIndexListZ8<Item>) => 1 << 3,
     SetupInv(ShroomIndexListZ8<Item>) => 1 << 4,
@@ -388,9 +388,12 @@ partial_data!(
 
 #[derive(ShroomPacket, Debug)]
 pub struct TempStatValue {
-    pub n: u16,
-    pub r: u32,
-    pub t: ShroomDurationMs32,
+    /// n
+    pub value: u16,
+    /// Either reason or buff id (r)
+    pub reason: u32,
+    /// (t)
+    pub duration: ShroomDurationMs32,
 }
 
 partial_data!(

@@ -2,7 +2,8 @@ use shroom_net_derive::ShroomPacket;
 use shroom_net::{packet::{
     
     proto::{
-        time::{ShroomDurationMs16, ShroomExpiration},
+        ShroomExpirationTime,
+        ShroomDurationMs16,
         CondOption, PacketTryWrapped,
     },
 }, NetError, shroom_enum_code, shroom_packet_enum, packet_opcode};
@@ -67,10 +68,11 @@ impl DropEnterType {
 }
 
 shroom_packet_enum!(
-    DropType,
-    u8,
-    Item(ItemId) => 0,
-    Money(u32) => 1
+    #[derive(Debug)]
+    pub enum DropType: u8 {
+        Item(ItemId) = 0,
+        Money(u32) = 1
+    }
 );
 
 impl DropType {
@@ -90,7 +92,7 @@ pub struct DropEnterFieldResp {
     #[pkt(if(field = "enter_type", cond = "DropEnterType::has_start_pos"))]
     pub start_pos: CondOption<(Vec2, ShroomDurationMs16)>,
     #[pkt(if(field = "drop_type", cond = "DropType::has_expiration"))]
-    pub drop_expiration: CondOption<ShroomExpiration>,
+    pub drop_expiration: CondOption<ShroomExpirationTime>,
     //TODO: ? ownerCharId == 0
     pub by_pet: bool,
     // If this is set to true It throws an exception

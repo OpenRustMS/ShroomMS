@@ -7,14 +7,18 @@ use std::{
 use data::services::{meta::meta_service::MetaService, server_info::ServerInfo, SharedServices};
 use dotenv::dotenv;
 use login::{config::LoginConfig, LoginHandler};
-use shroom_net::net::{
-    crypto::{ig_cipher::IgCipher, CryptoContext},
-    service::{
-        handler::MakeServerSessionHandler,
-        server_sess::{SharedSessionHandle, ShroomServer, ShroomServerConfig},
-        BasicHandshakeGenerator, HandshakeGenerator,
+use proto95::send_opcodes::SendOpcodes;
+use shroom_net::{
+    crypto::{ig_cipher::IgContext, CryptoContext},
+    net::{
+        service::{
+            handler::MakeServerSessionHandler,
+            server_sess::{SharedSessionHandle, ShroomServer, ShroomServerConfig},
+            BasicHandshakeGenerator, HandshakeGenerator,
+        },
+        ShroomSession,
     },
-    ShroomSession,
+    PacketWriter, ShroomPacket,
 };
 use tokio::{net::TcpStream, task::JoinSet};
 
@@ -101,10 +105,17 @@ async fn srv_shrooming(addr: SocketAddr) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn get_ping_packet() -> ShroomPacket {
+    let mut pw = PacketWriter::default();
+    pw.write_opcode(SendOpcodes::AliveReq).expect("Ping opcode");
+    pw.into_packet()
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     pretty_env_logger::init();
     dotenv().ok();
+
     // Load configuration
     let settings = config::get_configuration().expect("Failed to load configuration");
     log::info!("{0} - Mono - {1}", settings.server_name, settings.version);
@@ -112,9 +123,9 @@ async fn main() -> anyhow::Result<()> {
     //TODO add crypto keys to config
     let crypto_ctx = CryptoContext {
         aes_key: *include_bytes!("../../../keys/net/aes_key.bin"),
-        ig_cipher: IgCipher::new(
+        ig_ctx: IgContext::new(
             *include_bytes!("../../../keys/net/round_shifting_key.bin"),
-            u32::from_le_bytes(*include_bytes!("../../../keys/net/initial_round_key.bin")),
+            *include_bytes!("../../../keys/net/initial_round_key.bin"),
         ),
     };
 
@@ -166,6 +177,8 @@ async fn main() -> anyhow::Result<()> {
         ShroomServerConfig {
             crypto_ctx: shared_ctx.clone(),
             migrate_delay: Duration::from_millis(7500),
+            ping_packet: get_ping_packet(),
+            ping_interval: Duration::from_secs(45),
         },
         SocketAddr::new(bind_addr, settings.base_port),
         handshake_gen.clone(),
@@ -176,6 +189,8 @@ async fn main() -> anyhow::Result<()> {
             ShroomServerConfig {
                 crypto_ctx: shared_ctx.clone(),
                 migrate_delay: Duration::from_millis(7500),
+                ping_packet: get_ping_packet(),
+                ping_interval: Duration::from_secs(45),
             },
             SocketAddr::new(bind_addr, settings.base_port + 1 + ch as u16),
             handshake_gen.clone(),

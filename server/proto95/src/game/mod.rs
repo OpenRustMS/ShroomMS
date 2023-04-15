@@ -105,9 +105,10 @@ pub struct ServerMessage {
 }
 
 shroom_packet_enum!(
-    BroadcastMessageResp,
-    u8,
-    ServerMessage(ServerMessage) => 4,
-    PinkMessage(String) => 5,
+    #[derive(Debug)]
+    pub enum BroadcastMessageResp: u8 {
+        ServerMessage(ServerMessage) = 4,
+        PinkMessage(String) = 5
+    }
 );
 packet_opcode!(BroadcastMessageResp, SendOpcodes::BroadcastMsg);

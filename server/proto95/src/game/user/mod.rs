@@ -1,15 +1,15 @@
 pub mod remote;
 
 use bitflags::bitflags;
-use shroom_net_derive::{ShroomPacket, ShroomEncodePacket};
-use shroom_net::{packet::{
-    proto::{
-        option::ShroomOption8,
-        time::{ShroomDurationMs16, ShroomExpiration, Ticks},
-        CondOption, ShroomList16, ShroomList8, PacketWrapped,
+use shroom_net::{
+    mark_shroom_bitflags,
+    packet::{
+        proto::{option::ShroomOption8, CondOption, PacketWrapped, ShroomList16, ShroomList8},
+        DecodePacket, PacketReader, time::Ticks, ShroomDurationMs16, ShroomExpirationTime,
     },
-    DecodePacket, PacketReader
-}, packet_opcode, mark_shroom_bit_flags, NetError, NetResult, shroom_packet_enum};
+    packet_opcode, shroom_packet_enum, NetError, NetResult,
+};
+use shroom_net_derive::{ShroomEncodePacket, ShroomPacket};
 
 use crate::{
     id::{ItemId, MapId, SkillId},
@@ -125,7 +125,7 @@ bitflags! {
     }
 }
 
-mark_shroom_bit_flags!(AttackFlags);
+mark_shroom_bitflags!(AttackFlags);
 
 #[derive(Debug, ShroomPacket)]
 pub struct DrCheckData {
@@ -201,7 +201,6 @@ pub struct HitTargetCount {
     target_count: Integer<u8, packed_bits::Bits<4>>,
     hit_count: Integer<u8, packed_bits::Bits<4>>,
 }*/
-
 
 #[derive(Debug, ShroomEncodePacket)]
 pub struct AttackTargetInfo {
@@ -281,10 +280,9 @@ pub struct AttackReq<Info: AttackInfo, Extra> {
     pub extra: Extra,
 }
 
-
 #[derive(Debug, ShroomPacket)]
 pub struct MeleeAttackInfo {
-    pub portal: u8,            // Field key
+    pub portal: u8, // Field key
     pub hit_target_count: DrHitTargetCount,
     pub skill_id: SkillId,
     pub combat_orders: u8,
@@ -301,7 +299,6 @@ pub struct MeleeAttackInfo {
     //Special bmage handling
     pub affected_area_id: u32,
 }
-
 
 #[derive(Debug, ShroomPacket)]
 pub struct MeleeAttackTail {
@@ -356,20 +353,18 @@ packet_opcode!(UserMeleeAttackReq, RecvOpcodes::UserMeleeAttack);
 #[derive(ShroomPacket, Debug)]
 pub struct SkillInfoCrc {
     pub crc1: u32,
-    pub crc2: u32
+    pub crc2: u32,
 }
-
 
 #[derive(ShroomPacket, Debug)]
 pub struct ValWithCrc {
     pub val: u32,
-    pub crc: u32
+    pub crc: u32,
 }
-
 
 #[derive(Debug, ShroomPacket)]
 pub struct MagicAttackInfo {
-    pub portal: u8,            // Field key
+    pub portal: u8, // Field key
     pub hit_target_count: DrHitTargetCount,
     pub skill_id: SkillId,
     pub combat_orders: u8,
@@ -409,7 +404,7 @@ packet_opcode!(UserMagicAttackReq, RecvOpcodes::UserMagicAttack);
 
 #[derive(Debug, ShroomPacket)]
 pub struct BodyAttackInfo {
-    pub portal: u8,            // Field key
+    pub portal: u8, // Field key
     pub hit_target_count: DrHitTargetCount,
     pub skill_id: SkillId,
     pub combat_orders: u8,
@@ -423,7 +418,7 @@ pub struct BodyAttackInfo {
     pub attack_action_type: u8,
     pub atk_speed: u8,
     pub atk_time: u32,
-    pub id: u32,// dwid?
+    pub id: u32, // dwid?
 }
 
 #[derive(Debug, ShroomPacket)]
@@ -455,11 +450,11 @@ bitflags! {
         const SPARK = 0x80;
     }
 }
-mark_shroom_bit_flags!(ShotAttackFlags);
+mark_shroom_bitflags!(ShotAttackFlags);
 
 #[derive(Debug, ShroomPacket)]
 pub struct ShotAttackInfo {
-    pub portal: u8,            // Field key
+    pub portal: u8, // Field key
     pub hit_target_count: DrHitTargetCount,
     pub skill_id: SkillId,
     pub combat_orders: u8,
@@ -470,13 +465,13 @@ pub struct ShotAttackInfo {
     //TODO if skill_id is keydown/charge skill
     //key_down_dur: u32,
     pub attack_flags: ShotAttackFlags,
-    pub jablin: bool,// v291->m_bNextShootExJablin && CUserLocal::CheckApplyExJablin(v291, pSkill, nAttackAction)
+    pub jablin: bool, // v291->m_bNextShootExJablin && CUserLocal::CheckApplyExJablin(v291, pSkill, nAttackAction)
     pub action_dir: ActionDir,
     pub unknown_crc_1: u32,
     pub attack_action_type: u8,
     pub atk_speed: u8,
     pub atk_time: u32,
-    pub id: u32,// dwid?
+    pub id: u32, // dwid?
     pub bullet_slot: u16,
     pub cash_bullet_slot: u16,
     pub shot_range: u8,
@@ -491,7 +486,6 @@ pub struct ShootAttackTail {
     // body_rel_y_move: u16
     pub atk_pos: Vec2,
     // If skill_id == 15111006 (spark) -> reserve_spark_delay: u32
-
 }
 
 impl AttackInfo for ShotAttackInfo {
@@ -506,8 +500,6 @@ impl AttackInfo for ShotAttackInfo {
 
 pub type UserShotAttackReq = AttackReq<ShotAttackInfo, ShootAttackTail>;
 packet_opcode!(UserShotAttackReq, RecvOpcodes::UserShootAttack);
-
-
 
 #[derive(ShroomPacket, Debug)]
 pub struct UserSkillUpReq {
@@ -537,7 +529,7 @@ pub struct UpdatedSkillRecord {
     pub id: SkillId,
     pub level: u32,
     pub master_level: u32,
-    pub expiration: ShroomExpiration,
+    pub expiration: ShroomExpirationTime,
 }
 
 #[derive(ShroomPacket, Debug)]
@@ -558,18 +550,20 @@ pub struct CharGivePopularityResult {
 packet_opcode!(CharGivePopularityResult, SendOpcodes::GivePopularityResult);
 
 shroom_packet_enum!(
-    DropPickUpMsg,
-    u8,
-    // item, quantity
-    PickUp((ItemId, u32)) => 0,
-    PickUp1((u8, ItemId, u16)) => 1,// What's that?
-    PickUpEq(ItemId) => 0,
+    #[derive(Debug)]
+    pub enum DropPickUpMsg: u8 {
+        // item, quantity
+        PickUp((ItemId, u32)) = 0,
+        PickUp1((u8, ItemId, u16)) = 1// What's that?
+        //TODO: PickUpEq(ItemId) = ?
+    }
 );
 
 shroom_packet_enum!(
-    MessageResp,
-    u8,
-    DropPickUp(DropPickUpMsg) => 0,
+    #[derive(Debug)]
+    pub enum MessageResp: u8 {
+        DropPickUp(DropPickUpMsg) = 0
+    }
 );
 
 packet_opcode!(MessageResp, SendOpcodes::Message);

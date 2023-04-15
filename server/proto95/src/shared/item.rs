@@ -2,11 +2,9 @@ use bytes::BufMut;
 use shroom_net_derive::ShroomPacket;
 use shroom_net::{packet::{
     proto::{
-        option::ShroomOption8,
-        time::{ShroomExpiration, ShroomTime},
         CondOption, DecodePacket, EncodePacket,
-    },
-}, mark_shroom_bit_flags, NetResult, shroom_packet_enum};
+    }, ShroomExpirationTime, ShroomOption8, ShroomTime,
+}, NetResult, shroom_packet_enum, mark_shroom_bitflags};
 
 use crate::id::ItemId;
 
@@ -26,7 +24,7 @@ bitflags::bitflags! {
         const MergeUntradeable = 0x200;
     }
 }
-mark_shroom_bit_flags!(ItemFlags);
+mark_shroom_bitflags!(ItemFlags);
 
 bitflags::bitflags! {
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -35,7 +33,7 @@ bitflags::bitflags! {
         const TradingPossible = 0x02;
     }
 }
-mark_shroom_bit_flags!(ItemBundleFlags);
+mark_shroom_bitflags!(ItemBundleFlags);
 
 bitflags::bitflags! {
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -44,7 +42,7 @@ bitflags::bitflags! {
         const TradingPossible = 0x02;
     }
 }
-mark_shroom_bit_flags!(ItemPetFlags);
+mark_shroom_bitflags!(ItemPetFlags);
 
 bitflags::bitflags! {
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -56,7 +54,7 @@ bitflags::bitflags! {
         //const TradingPossible = 0x1;
     }
 }
-mark_shroom_bit_flags!(ItemEquipFlags);
+mark_shroom_bitflags!(ItemEquipFlags);
 
 #[derive(Debug, ShroomPacket)]
 pub struct PetItemInfo {
@@ -64,7 +62,7 @@ pub struct PetItemInfo {
     pub level: u8,
     pub tameness: u16,
     pub fullness: u8,                /* repleteness */
-    pub expiration: ShroomExpiration, /* dateDead */
+    pub expiration: ShroomExpirationTime, /* dateDead */
     pub attribute1: u16,             /* PetAttribute  seems to be only hasStats 2^0*/
     pub skill: u16,
     pub remain_life: u32,
@@ -102,7 +100,7 @@ pub struct EquipAllStats {
 pub struct ItemInfo {
     pub item_id: ItemId,
     pub cash_id: ShroomOption8<u64>,
-    pub expiration: ShroomExpiration,
+    pub expiration: ShroomExpirationTime,
 }
 
 impl ItemInfo {
@@ -118,7 +116,7 @@ pub struct ItemPetData {
     pub level: u8,
     pub tameness: u16,
     pub fullness: u8,
-    pub expiration: ShroomExpiration,
+    pub expiration: ShroomExpirationTime,
     pub attribute1: u16,
     pub skill: u16,
     pub remain_life: u32,
@@ -214,10 +212,11 @@ pub struct EquipItemInfo {
 }
 
 shroom_packet_enum!(
-    Item,
-    u8,
-    Equip(EquipItemInfo) => 1,
-    Stack(ItemStackData) => 2,
-    Pet(ItemPetData) => 3,
-    Equipped(()) => 255
+    #[derive(Debug)]
+    pub enum Item: u8 {
+        Equip(EquipItemInfo) = 1,
+        Stack(ItemStackData) = 2,
+        Pet(ItemPetData) = 3,
+        Equipped(()) = 255
+    }
 );

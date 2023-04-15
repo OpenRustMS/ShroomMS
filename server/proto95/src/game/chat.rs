@@ -42,15 +42,16 @@ pub struct WispherData {
 }
 
 shroom_packet_enum!(
-    WispherMessageType,
-    u8,
-    Location(String) => 1,
-    Whispher(WispherData) => 2,
-    Request(String) => 0x04,
-    Result(String) => 0x08,
-    Receiver(String) => 0x10,
-    Blocked(String) => 0x20,
-    LocationFriend(String) => 0x40
+    #[derive(Debug)]
+    pub enum WispherMessageType: u8 {
+        Location(String) = 1,
+        Whispher(WispherData) = 2,
+        Request(String) = 0x04,
+        Result(String) = 0x08,
+        Receiver(String) = 0x10,
+        Blocked(String) = 0x20,
+        LocationFriend(String) = 0x40
+    }
 );
 
 #[derive(Debug, ShroomPacket)]
@@ -66,19 +67,20 @@ pub struct ItemGainItemData {
     quantity: u32,
 }
 
-shroom_packet_enum!(
-    SlashChatMsgType,
-    u8,
-    CmdStrF9(()) => 0x3A,
-    //lvl
-    CmdStr725(u8) => 0x1E,
-    // some id?
-    Create(u32) => 0,
-    // /d
-    CmdStr717(u8) => 1,
-    // /exp
-    CmdStr718(u32) => 2,
 
+shroom_packet_enum!(
+    #[derive(Debug)]
+    pub enum SlashChatMsgType: u8 {
+        CmdStrF9(()) = 0x3A,
+        //lvl
+        CmdStr725(u8) = 0x1E,
+        // som id?
+        Create(u32) = 0,
+        // /
+        CmdStr717(u8) = 1,
+        // /ex
+        CmdStr718(u32) = 2
+    }
 );
 
 #[derive(Debug, ShroomPacket)]
@@ -108,11 +110,11 @@ pub struct WhisperFindData {
 }
 
 shroom_packet_enum!(
-    WhiperMsgReq,
-    u8,
-    Unknown(WhisperData) => 0x86,
-    Whisper(WhisperData) => 6,
-    WhisperFind(WhisperFindData) => 5,
+    pub enum WhiperMsgReq: u8 {
+        Unknown(WhisperData) = 0x86,
+        Whisper(WhisperData) = 6,
+        WhisperFind(WhisperFindData) = 5
+    }
 );
 packet_opcode!(WhiperMsgReq, RecvOpcodes::Whisper);
 

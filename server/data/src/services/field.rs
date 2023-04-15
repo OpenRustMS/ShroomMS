@@ -13,7 +13,7 @@ use proto95::{
     shared::{char::AvatarData, FootholdId, Range2, Vec2},
 };
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort};
-use shroom_net::net::service::{packet_buffer::PacketBuffer, server_sess::SharedSessionHandle};
+use shroom_net::{net::service::{server_sess::SharedSessionHandle}, PacketBuffer};
 
 use super::{
     character::Character,
@@ -140,7 +140,7 @@ impl FieldData {
         self.mob_pool.on_enter(&mut buf)?;
         self.reactor_pool.on_enter(&mut buf)?;
 
-        session.try_send_buf(&buf)?;
+        session.try_send_pkt_buf(&buf)?;
 
         Ok(())
     }
@@ -262,7 +262,7 @@ impl FieldData {
         let killed = self
             .mob_pool
             .attack_mob(attacker, id, dmg, &mut buf, &self.sessions)?;
-        session.try_send_buf(&buf)?;
+        session.try_send_pkt_buf(&buf)?;
 
         if killed {
             let mob = self

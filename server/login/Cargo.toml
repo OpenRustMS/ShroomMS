@@ -13,6 +13,5 @@ data = { version = "0.1.0", path = "../data" }
 log = "0.4.17"
 proto95 = { version = "0.1.0", path = "../proto95" }
 tokio = "1.25.0"
-
-shroom_net_derive = "0.1" 
-shroom_net = "0.1"
+shroom_net_derive = "0.2"
+shroom_net = "0.2.5"
