@@ -1,16 +1,16 @@
-use shroom_net_derive::ShroomPacket;
-use shroom_net::{packet::{
-    proto::{
+use shroom_net::{
+    packet::proto::{
         list::{ShroomIndexListZ16, ShroomIndexListZ8},
         time::{ShroomTime, Ticks},
         ShroomList8,
     },
-}, shroom_enum_code, shroom_packet_enum, packet_opcode};
+    packet_opcode, shroom_enum_code, shroom_packet_enum,
+};
+use shroom_net_derive::ShroomPacket;
 
 use crate::{id::ItemId, recv_opcodes::RecvOpcodes, send_opcodes::SendOpcodes};
 
 use super::item::Item;
-
 
 //TODO indexing
 shroom_enum_code!(
@@ -28,11 +28,11 @@ shroom_enum_code!(
 );
 
 shroom_enum_code!(
-    EquippedSlot,
+    CharEquipSlot,
     u8,
-    None = 0,
+    Hair = 0,
     Hat = 1,
-    Face = 2,
+    FaceAccessory = 2,
     EyeAccessory = 3,
     EarAccessory = 4,
     Top = 5,
@@ -44,15 +44,56 @@ shroom_enum_code!(
     Weapon = 11,
     Ring1 = 12,
     Ring2 = 13,
-    //14??
+    PetEquip = 14,
     Ring3 = 15,
     Ring4 = 16,
-    Pendant1 = 17,
+    Pendant = 17,
     TamedMob = 18,
     Saddle = 19,
-    Medal = 49,
-    Belt = 50,
-    PetEquip = 114
+    MobEquip = 20,
+    PetRingLabel = 21,
+    PetItem = 0x16,
+    PetMeso = 0x17,
+    PetHpConsume = 0x18,
+    PetMpConsume = 0x19,
+    PetSweepForDrop = 0x1A,
+    PetLongRange = 0x1B,
+    PetPickUpOthers = 0x1C,
+    PetRingQuote = 0x1D,
+    Pet2Wear = 0x1E,
+    Pet2Label = 0x1F,
+    Pet2Quote = 0x20,
+    Pet2Item = 0x21,
+    Pet2Meso = 0x22,
+    Pet2SweepForDrop = 0x23,
+    Pet2LongRange = 0x24,
+    Pet2PickUpOthers = 0x25,
+    Pet3Wear = 0x26,
+    Pet3Label = 0x27,
+    Pet3Quote = 0x28,
+    Pet3Item = 0x29,
+    Pet3Meso = 0x2A,
+    Pet3SweepForDrop = 0x2B,
+    Pet3LongRange = 0x2C,
+    Pet3PickUpOthers = 0x2D,
+    Pet1IgnoreItems = 0x2E,
+    Pet2IgnoreItems = 0x2F,
+    Pet3IgnoreItems = 0x30,
+    Medal = 0x31,
+    Belt = 0x32,
+    Shoulder = 0x33,
+    Nothing3 = 0x36,
+    Nothing2 = 0x37,
+    Nothing1 = 0x38,
+    Nothing0 = 0x39, 
+    ExtPendant1 = 0x3B,
+    Ext1 = 0x3C,
+    Ext2 = 0x3D,
+    Ext3 = 0x3E,
+    Ext4 = 0x3F,
+    Ext5 = 0x40,
+    Ext6 = 0x41,
+    Sticker = 0x64
 );
 
 shroom_enum_code!(
@@ -76,6 +117,25 @@ shroom_enum_code!(
     Ring4 = 116,
     Pendant = 117,
     TamedMob = 118
+);
+
+shroom_enum_code!(
+    DragonEquipSlot,
+    u16,
+    Cap = 0x3e8,
+    Pendant = 0x3e9,
+    Wings = 0x3ea,
+    Shoes = 0x3eb
+);
+
+shroom_enum_code!(
+    MechanicEquipSlot,
+    u16,
+    Engine = 0x44C,
+    Arm = 0x44D,
+    Leg = 0x44E,
+    Frame = 0x44F,
+    Transitor = 0x450
 );
 
 #[derive(Debug, ShroomPacket)]
