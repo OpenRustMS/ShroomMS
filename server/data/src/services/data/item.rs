@@ -1,19 +1,32 @@
-use crate::{entities::{equip_item, inventory_slot, item_stack}, services::{helper::intentory::{inv::{EquipInventory, InventorySet, InventoryExt, InventoryType, EquipItemSlot, StackInventory}, Inventory}, meta::meta_service::MetaService, model::item::{EquipItem, EquipStat, StackItem}}};
+use crate::{
+    entities::{equip_item, inventory_slot, item_stack},
+    services::{
+        helper::intentory::{
+            inv::{
+                EquipInventory, EquipItemSlot, InventoryExt, InventorySet, InventoryType,
+                StackInventory,
+            },
+            Inventory,
+        },
+        meta::meta_service::MetaService,
+        model::item::{EquipItem, EquipStat, StackItem},
+    },
+};
 use anyhow::anyhow;
 use itertools::Itertools;
 use num_enum::TryFromPrimitive;
-use proto95::{id::ItemId, shared::inventory::EquippedSlot};
+use proto95::{id::ItemId, shared::inventory::CharEquipSlot};
 use sea_orm::{
     ActiveValue::NotSet, ColumnTrait, DatabaseConnection, DeriveColumn, EntityTrait, EnumIter,
     QueryFilter, QuerySelect, Set,
 };
 
-use super::character::{ItemStarterSet, CharacterID};
+use super::character::{CharacterID, ItemStarterSet};
 
 #[derive(Debug, Clone, Default)]
 pub struct CharacterEquippedItemIds {
-    pub equipped: Vec<(EquippedSlot, ItemId)>,
-    pub masked: Vec<(EquippedSlot, ItemId)>,
+    pub equipped: Vec<(CharEquipSlot, ItemId)>,
+    pub masked: Vec<(CharEquipSlot, ItemId)>,
 }
 
 pub const EQUIPPED_CAP: usize = 96;
@@ -157,10 +170,10 @@ impl ItemService {
         starter_set: ItemStarterSet,
     ) -> anyhow::Result<()> {
         let slots = [
-            EquippedSlot::Bottom,
-            EquippedSlot::Shoes,
-            EquippedSlot::Top,
-            EquippedSlot::Weapon,
+            CharEquipSlot::Bottom,
+            CharEquipSlot::Shoes,
+            CharEquipSlot::Top,
+            CharEquipSlot::Weapon,
         ];
         let items = [
             starter_set.bottom,
@@ -345,12 +358,12 @@ impl ItemService {
 
             match inv_type {
                 InventoryType::Equipped => {
-                    let slot = EquippedSlot::try_from_primitive(slot_info.slot as u8)?;
+                    let slot = CharEquipSlot::try_from_primitive(slot_info.slot as u8)?;
                     let equip_item: EquipItem = equip_item.into();
                     inv.equipped.set(slot, equip_item.into())
                 }
                 InventoryType::MaskedEquipped => {
-                    let slot = EquippedSlot::try_from_primitive(slot_info.slot as u8)?;
+                    let slot = CharEquipSlot::try_from_primitive(slot_info.slot as u8)?;
                     let equip_item: EquipItem = equip_item.into();
                     inv.masked_equipped.set(slot, equip_item.into())
                 }
@@ -411,7 +424,7 @@ impl ItemService {
         equip_items.iter().try_fold(
             CharacterEquippedItemIds::default(),
             |mut acc, &(inv_ty, item_id, slot)| {
-                let item = (EquippedSlot::try_from(slot as u8)?, ItemId(item_id as u32));
+                let item = (CharEquipSlot::try_from(slot as u8)?, ItemId(item_id as u32));
                 // Inv type has to be either equipped or maskedequipped
                 match InventoryType::try_from_primitive(inv_ty as u8).unwrap() {
                     InventoryType::Equipped => acc.equipped.push(item),
@@ -429,10 +442,21 @@ mod tests {
 
     use proto95::{
         id::{job_id::JobGroup, FaceId, HairId, Skin},
-        shared::{inventory::EquippedSlot, Gender},
+        shared::{inventory::CharEquipSlot, Gender},
     };
 
-    use crate::{services::{meta::meta_service::MetaService, data::{account::{AccountId, Region}, character::{CharacterID, CharacterCreateDTO, ItemStarterSet}, AccountService, CharacterService}, helper::intentory::inv::InventoryExt}, gen_sqlite};
+    use crate::{
+        gen_sqlite,
+        services::{
+            data::{
+                account::{AccountId, Region},
+                character::{CharacterCreateDTO, CharacterID, ItemStarterSet},
+                AccountService, CharacterService,
+            },
+            helper::intentory::inv::InventoryExt,
+            meta::meta_service::MetaService,
+        },
+    };
 
     use super::ItemService;
 
@@ -490,7 +514,7 @@ mod tests {
         let mut inv = svc.load_inventory_for_character(char_id).await.unwrap();
         assert_eq!(inv.equipped.len(), 4);
         assert_eq!(inv.etc.len(), 1);
-        assert!(inv.equipped.remove(EquippedSlot::Top).is_some());
+        assert!(inv.equipped.remove(CharEquipSlot::Top).is_some());
         let stack_1 = inv.etc.get_mut(0).unwrap();
         stack_1.quantity += 5;
         stack_1.item.quantity += 5;

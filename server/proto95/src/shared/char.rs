@@ -388,9 +388,12 @@ partial_data!(
 
 #[derive(ShroomPacket, Debug)]
 pub struct TempStatValue {
-    pub n: u16,
-    pub r: u32,
-    pub t: ShroomDurationMs32,
+    /// n
+    pub value: u16,
+    /// Either reason or buff id (r)
+    pub reason: u32,
+    /// (t)
+    pub duration: ShroomDurationMs32,
 }
 
 partial_data!(

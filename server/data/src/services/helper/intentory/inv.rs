@@ -1,5 +1,5 @@
 use num_enum::TryFromPrimitive;
-use proto95::{id::ItemId, shared::inventory::EquippedSlot};
+use proto95::{id::ItemId, shared::inventory::CharEquipSlot};
 use crate::services::model::item::{EquipItem, StackItem};
 
 use super::{Inventory, InventoryError, InventoryItem};
@@ -19,9 +19,9 @@ impl InventorySlotIndex for usize {
     }
 }
 
-impl InventorySlotIndex for EquippedSlot {
+impl InventorySlotIndex for CharEquipSlot {
     fn from_index(ix: usize) -> Self {
-        EquippedSlot::try_from_primitive(ix as u8).unwrap()
+        CharEquipSlot::try_from_primitive(ix as u8).unwrap()
     }
 
     fn to_index(&self) -> usize {
@@ -125,7 +125,7 @@ impl InventoryItem for EquipItemSlot {
 pub struct EquippedInventory<const CAP: usize = EQUIPPED_CAP>(Inventory<CAP, EquipItemSlot>);
 
 impl<const CAP: usize> InventoryExt<CAP> for EquippedInventory<CAP> {
-    type Slot = EquippedSlot;
+    type Slot = CharEquipSlot;
 
     type Item = EquipItemSlot;
 
@@ -143,10 +143,10 @@ impl<const CAP: usize> EquippedInventory<CAP> {
         Self(Inventory::new(slots))
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (EquippedSlot, &EquipItemSlot)> {
+    pub fn iter(&self) -> impl Iterator<Item = (CharEquipSlot, &EquipItemSlot)> {
         self.0
             .items_with_slot()
-            .map(|(slot, item)| (EquippedSlot::try_from(slot as u8).unwrap(), item))
+            .map(|(slot, item)| (CharEquipSlot::try_from(slot as u8).unwrap(), item))
     }
 
     pub fn items_mut(&mut self) -> impl Iterator<Item = &mut EquipItemSlot> {
