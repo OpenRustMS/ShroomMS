@@ -1,8 +1,9 @@
 use std::ops::RangeInclusive;
 
-use geo::{coord, Coord, Rect, Contains};
+use geo::{coord, Contains, Coord, Rect};
+use geo_svg::ToSvg;
 use itertools::Itertools;
-use rstar::{RTree, RTreeObject, SelectionFunction, AABB};
+use rstar::{RTree, RTreeNode, RTreeObject, SelectionFunction, AABB};
 
 type FhScalar = f32;
 
@@ -101,7 +102,7 @@ impl Foothold {
         items: usize,
     ) -> impl Iterator<Item = geo::Coord<FhScalar>> + '_ {
         //TODO make this config-able
-        const STEP: FhScalar = 20.;
+        const STEP: FhScalar = 20.0;
         let start_x = if items > 0 {
             x - (items - 1) as FhScalar * STEP
         } else {
@@ -154,6 +155,74 @@ impl SelectionFunction<Foothold> for BelowPointSelector {
 }
 
 impl FhTree {
+    pub fn create_render_data_for_tree_2d(&self) -> String {
+        fn get_color_for_depth(depth: usize) -> geo_svg::Color {
+            match depth {
+                0 => geo_svg::Color::Rgb(0, 0, 0),
+                1 => geo_svg::Color::Rgb(216, 0, 216),
+                2 => geo_svg::Color::Rgb(0, 216, 216),
+                3 => geo_svg::Color::Rgb(0, 0, 130),
+                4 => geo_svg::Color::Rgb(216, 0, 0),
+                _ => geo_svg::Color::Rgb(0, 216, 216),
+            }
+        }
+
+        let line0 = geo::Point::new(0, 0);
+        let mut svg = line0.to_svg();
+        let mut rects = Vec::new();
+
+        let mut to_visit = vec![(self.tree.root(), 0)];
+        while let Some((cur, depth)) = to_visit.pop() {
+            let env = &cur.envelope();
+            rects.push((geo::Rect::new(env.lower(), env.upper()), depth));
+
+            for child in cur.children() {
+                match child {
+                    RTreeNode::Leaf(fh) => {
+                        let svg_line = fh
+                            .get_line()
+                            .to_svg()
+                            .with_radius(5.0)
+                            .with_stroke_width(5.)
+                            .with_fill_opacity(1.);
+                        let color = match fh {
+                            Foothold::Wall(_) => "black",
+                            Foothold::Platform(_) => "green",
+                            Foothold::Slope(_) => "red",
+                        };
+
+                        svg = svg.and(
+                            svg_line
+                                .with_fill_color(geo_svg::Color::Named(color))
+                                .with_stroke_color(geo_svg::Color::Named(color)),
+                        );
+                    }
+                    RTreeNode::Parent(ref data) => {
+                        to_visit.push((data, depth + 1));
+                    }
+                }
+            }
+        }
+
+        
+        let mut rect_svg = line0.to_svg();
+        for (rect, depth) in rects.iter() {
+            let c = get_color_for_depth(*depth);
+
+
+            rect_svg = rect_svg
+                .and(rect.to_svg()
+                .with_stroke_color(c)
+                .with_fill_color(c)
+                .with_stroke_width(3.0)
+                .with_stroke_opacity(0.3)
+                //.with_opacity(0.)
+                .with_fill_opacity((*depth as f32 + 1.0) * 0.03));
+        }
+
+        rect_svg.and(svg).to_string()
+    }
+
     pub fn from_meta(meta: &game_data::map::Map) -> Self {
         let fhs = meta
             .foothold
@@ -230,7 +299,7 @@ mod tests {
 
         let fh_tree = FhTree::from_meta(field_1);
         dbg!(&fh_tree.bounds);
-        let line0 = geo::Point::new(0., 0.);
+        let line0 = geo::Point::new(0, 0);
         let mut svg = line0.to_svg();
 
         for fh in fh_tree.tree.iter() {
@@ -282,6 +351,11 @@ mod tests {
 
         let mut f = File::create("sp2.svg")?;
         writeln!(&mut f, "{svg}")?;
+
+        let extra = fh_tree.create_render_data_for_tree_2d();
+
+        let mut f = File::create("extra.svg")?;
+        writeln!(&mut f, "{extra}")?;
 
         Ok(())
     }

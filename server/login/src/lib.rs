@@ -6,7 +6,7 @@ use std::net::IpAddr;
 use async_trait::async_trait;
 use config::LoginConfig;
 use data::services::data::account::AccountServiceError;
-use data::services::data::character::{CharacterCreateDTO, CharacterID, ItemStarterSet};
+use data::services::data::character::{CharacterCreateDTO, ItemStarterSet};
 use data::services::session::ShroomMigrationKey;
 use data::{entities::character, services};
 use login_state::LoginState;
@@ -18,7 +18,7 @@ use proto95::{
     login::{
         account::{
             BlockedIp, CheckPasswordReq, CheckPasswordResp, ConfirmEULAReq, ConfirmEULAResp,
-            LoginAccountData, LoginInfo, SetGenderReq, SetGenderResp, SuccessResult,
+            LoginAccountData, LoginInfo, SetGenderReq, SuccessResult,
         },
         char::{
             CharRankInfo, CheckDuplicateIDReq, CheckDuplicateIDResp, CheckDuplicateIDResult,
@@ -39,11 +39,10 @@ use proto95::{
         UpdateScreenSettingReq,
     },
 };
-use shroom_net::net::service::handler::{SessionHandleResult, ShroomSessionHandler};
-use shroom_net::net::service::resp::{
-    MigrateResponse, PacketOpcodeExt, PongResponse, ResponsePacket,
-};
-use shroom_net::net::ShroomSession;
+use shroom_net::net::service::handler::ShroomSessionHandler;
+use shroom_net::net::service::resp::MigrateResponse;
+use shroom_net::net::service::{SessionHandleResult, ShroomContext};
+
 use shroom_net::packet::list::ShroomIndexList8;
 use shroom_net::packet::time::ShroomTime;
 use shroom_net::packet::ShroomList8;
@@ -54,9 +53,9 @@ pub type LoginResult<T> = Result<T, anyhow::Error>;
 
 pub struct LoginHandler {
     services: services::SharedServices,
-    state: LoginState,
     addr: IpAddr,
     cfg: &'static LoginConfig,
+    login_state: LoginState,
 }
 
 impl LoginHandler {
@@ -67,12 +66,14 @@ impl LoginHandler {
     ) -> Self {
         Self {
             services,
-            state: LoginState::default(),
             cfg,
             addr,
+            login_state: LoginState::new(),
         }
     }
 }
+
+type Ctx = ShroomContext<LoginHandler>;
 
 #[async_trait]
 impl ShroomSessionHandler for LoginHandler {
@@ -80,23 +81,22 @@ impl ShroomSessionHandler for LoginHandler {
     type Error = anyhow::Error;
     type Msg = ();
 
-    async fn handle_msg(
-        &mut self,
-        _session: &mut ShroomSession<Self::Transport>,
-        _msg: Self::Msg,
-    ) -> Result<(), Self::Error> {
+    async fn handle_msg(_ctx: &mut Ctx, _msg: Self::Msg) -> Result<(), Self::Error> {
         Ok(())
     }
 
     async fn handle_packet(
-        &mut self,
+        ctx: &mut Ctx,
         packet: ShroomPacket,
-        session: &mut ShroomSession<Self::Transport>,
     ) -> Result<SessionHandleResult, Self::Error> {
+        let op = packet.read_opcode()?;
+        if op == u16::from(PongReq::OPCODE) {
+            return Ok(SessionHandleResult::Pong);
+        }
+
         shroom_router_fn!(
             handler,
             LoginHandler,
-            ShroomSession<TcpStream>,
             anyhow::Error,
             LoginHandler::handle_default,
             PongReq => LoginHandler::handle_pong,
@@ -119,31 +119,32 @@ impl ShroomSessionHandler for LoginHandler {
             ExceptionLogReq => LoginHandler::handle_exception_log
         );
 
-        handler(self, session, packet.into_reader()).await
+        handler(ctx, packet.into_reader()).await?;
+        Ok(SessionHandleResult::Ok)
     }
 }
 
 impl LoginHandler {
     pub async fn handle_default(
-        &mut self,
+        _ctx: &mut Ctx,
         _op: RecvOpcodes,
         pr: PacketReader<'_>,
-    ) -> anyhow::Result<SessionHandleResult> {
+    ) -> anyhow::Result<()> {
         log::info!("Unhandled packet: {:?}", pr.into_inner());
-        Ok(SessionHandleResult::Ok)
+        Ok(())
     }
 
-    async fn handle_pong(&mut self, _req: PongReq) -> anyhow::Result<PongResponse> {
-        Ok(PongResponse)
+    async fn handle_pong(_ctx: &mut Ctx, _req: PongReq) -> anyhow::Result<()> {
+        Ok(())
     }
 
-    async fn handle_exception_log(&mut self, _req: ExceptionLogReq) -> anyhow::Result<()> {
+    async fn handle_exception_log(_ctx: &mut Ctx, _req: ExceptionLogReq) -> LoginResult<()> {
         dbg!(&_req);
         Ok(())
     }
 
     async fn handle_create_security_handle(
-        &mut self,
+        _ctx: &mut Ctx,
         _req: CreateSecurityHandleReq,
     ) -> anyhow::Result<()> {
         dbg!(&_req);
@@ -151,35 +152,37 @@ impl LoginHandler {
     }
 
     async fn handle_update_screen_setting(
-        &mut self,
+        _ctx: &mut Ctx,
         req: UpdateScreenSettingReq,
     ) -> anyhow::Result<()> {
         dbg!(&req);
         Ok(())
     }
 
-    async fn handle_accept_tos(&mut self, req: ConfirmEULAReq) -> LoginResult<ConfirmEULAResp> {
-        self.state.get_accept_tos()?;
+    async fn handle_accept_tos(ctx: &mut Ctx, req: ConfirmEULAReq) -> LoginResult<()> {
+        ctx.login_state.get_accept_tos()?;
 
         if !req.accepted {
             anyhow::bail!("Should accept the TOS");
         }
 
-        self.state
-            .update_account(|acc| self.services.data.account.accept_tos(acc))
-            .await?;
-        self.state.reset();
+        let svc = ctx.services.clone();
 
-        Ok(ConfirmEULAResp { success: true }.into())
+        ctx.login_state
+            .update_account(|acc| svc.data.account.accept_tos(acc))
+            .await?;
+        ctx.login_state.reset();
+
+        ctx.send(ConfirmEULAResp { success: true }).await
     }
 
-    async fn handle_check_pin(&mut self, req: CheckPinReq) -> LoginResult<CheckPinResp> {
-        let acc = self.state.get_pin()?;
+    async fn handle_check_pin(ctx: &mut Ctx, req: CheckPinReq) -> LoginResult<()> {
+        let acc = ctx.login_state.get_pin()?;
 
-        Ok(if self.cfg.enable_pin {
+        ctx.send(if ctx.cfg.enable_pin {
             match req.pin.opt {
                 Some(pin) => {
-                    if self.services.data.account.check_pin(acc, &pin.pin)? {
+                    if ctx.services.data.account.check_pin(acc, &pin.pin)? {
                         CheckPinResp::Accepted
                     } else {
                         CheckPinResp::InvalidPin
@@ -189,65 +192,71 @@ impl LoginHandler {
             }
         } else {
             CheckPinResp::Accepted
-        }
-        .into())
+        })
+        .await
     }
 
-    async fn handle_register_pin(&mut self, req: UpdatePinReq) -> LoginResult<UpdatePinResp> {
-        self.state.get_pin()?;
+    async fn handle_register_pin(ctx: &mut Ctx, req: UpdatePinReq) -> LoginResult<()> {
+        ctx.login_state.get_pin()?;
 
         let Some(pin) = req.pin.opt else {
             //TODO handle a login reset here not a dc
             anyhow::bail!("Pin registration cancelled");
         };
 
-        self.state
-            .update_account(|acc| self.services.data.account.set_pin(acc, pin))
+        let svc = ctx.services.clone();
+
+        ctx.login_state
+            .update_account(|acc| svc.data.account.set_pin(acc, pin))
             .await?;
 
-        Ok(UpdatePinResp { success: true }.into())
+        ctx.send(UpdatePinResp { success: true }).await
     }
 
-    async fn handle_set_gender(&mut self, req: SetGenderReq) -> LoginResult<SetGenderResp> {
-        let _ = self.state.get_set_gender()?;
+    async fn handle_set_gender(ctx: &mut Ctx, req: SetGenderReq) -> LoginResult<()> {
+        let _ = ctx.login_state.get_set_gender()?;
 
         let gender = req
             .gender
             .opt
             .ok_or_else(|| anyhow::format_err!("Gender not set"))?;
 
-        self.state
-            .update_account(|acc| self.services.data.account.set_gender(acc, gender.into()))
-            .await?;
+        let svc = ctx.services.clone();
 
-        self.state.transition_login().unwrap();
+        ctx.login_state
+            .update_account(|acc| svc.data.account.set_gender(acc, gender.into()))
+            .await?;
+        /*
+        ctx.login_state.transition_login().unwrap();
 
         //TODO this doesn't set the client key, maybe make it dc?
         Ok(SetGenderResp {
             gender,
             success: true,
-        }
-        .into())
+        })
+        */
+
+        todo!("Set gender");
     }
 
-    async fn handle_world_logout(&mut self, _req: LogoutWorldReq) -> anyhow::Result<()> {
-        self.state.get_char_select()?;
-        self.state.transition_server_select()?;
+    async fn handle_world_logout(ctx: &mut Ctx, _req: LogoutWorldReq) -> LoginResult<()> {
+        ctx.login_state.get_char_select()?;
+        ctx.login_state.transition_server_select()?;
 
         Ok(())
     }
 
     async fn handle_world_check_user_limit(
-        &mut self,
+        ctx: &mut Ctx,
         _req: WorldCheckUserLimitReq,
-    ) -> LoginResult<WorldCheckUserLimitResp> {
-        let _acc = self.state.get_server_selection()?;
+    ) -> LoginResult<()> {
+        let _acc = ctx.login_state.get_server_selection()?;
 
-        Ok(WorldCheckUserLimitResp {
+        ctx.send(WorldCheckUserLimitResp {
             over_user_limit: false,
             populate_level: 0,
-        }
-        .into())
+        })
+        .await
     }
 
     fn get_world_info(&self) -> Vec<WorldInfoResp> {
@@ -255,32 +264,22 @@ impl LoginHandler {
             .server_info
             .get_world_info_packets()
             .into_iter()
-            .map(|p| p.into())
             .collect()
     }
 
-    async fn handle_world_information(
-        &mut self,
-        _req: WorldInfoReq,
-    ) -> anyhow::Result<Vec<WorldInfoResp>> {
-        Ok(self.get_world_info())
+    async fn handle_world_information(ctx: &mut Ctx, _req: WorldInfoReq) -> LoginResult<()> {
+        ctx.reply(ctx.get_world_info()).await
     }
 
-    async fn handle_world_request(
-        &mut self,
-        _req: WorldReq,
-    ) -> anyhow::Result<Vec<WorldInfoResp>> {
-        Ok(self.get_world_info())
+    async fn handle_world_request(ctx: &mut Ctx, _req: WorldReq) -> LoginResult<()> {
+        ctx.reply(ctx.get_world_info()).await
     }
 
-    pub async fn handle_check_password(
-        &mut self,
-        req: CheckPasswordReq,
-    ) -> LoginResult<CheckPasswordResp> {
-        let login_result = self.services.data.account.try_login(&req.id, &req.pw).await;
+    pub async fn handle_check_password(ctx: &mut Ctx, req: CheckPasswordReq) -> LoginResult<()> {
+        let login_result = ctx.services.data.account.try_login(&req.id, &req.pw).await;
         let hdr = LoginResultHeader::default();
 
-        let res = match login_result {
+        let resp = match login_result {
             Err(AccountServiceError::UsernameNotFound) => CheckPasswordResp::InvalidUserName(hdr),
             Err(AccountServiceError::PasswordMismatch) => CheckPasswordResp::InvalidPassword(hdr),
             Err(AccountServiceError::AccountIsBanned) => CheckPasswordResp::BlockedIp(BlockedIp {
@@ -290,13 +289,20 @@ impl LoginHandler {
             }),
             Ok(acc) => {
                 let account_info = (&acc).into();
-                self.state.transition_login_with_acc(acc)?;
-                let client_key = self
-                    .state
+                let login_session = ctx
+                    .services
+                    .session_manager
+                    .create_claimed_session(acc)
+                    .await?;
+
+                ctx.login_state
+                    .transition_login_with_session(login_session.as_login())?;
+                let client_key = ctx
+                    .login_state
                     .get_client_key()
                     .expect("Must have client key after login");
 
-                let login_info = (!self.state.is_set_gender_stage())
+                let login_info = (!ctx.login_state.is_set_gender_stage())
                     .then_some(LoginInfo {
                         skip_pin: false,
                         login_opt: proto95::login::LoginOpt::EnableSecondPassword,
@@ -304,7 +310,7 @@ impl LoginHandler {
                     })
                     .into();
 
-                if self.state.is_accept_tos_stage() {
+                if ctx.login_state.is_accept_tos_stage() {
                     CheckPasswordResp::TOS(hdr)
                 } else {
                     CheckPasswordResp::Success(SuccessResult {
@@ -319,12 +325,12 @@ impl LoginHandler {
             _ => todo!("Unhandled Account Service Login Result: {:?}", login_result),
         };
 
-        Ok(res.into())
+        ctx.send(resp).await
     }
 
-    async fn handle_select_world(&mut self, req: SelectWorldReq) -> LoginResult<SelectWorldResp> {
-        let acc = self.state.get_server_selection()?;
-        let char_list = self
+    async fn handle_select_world(ctx: &mut Ctx, req: SelectWorldReq) -> LoginResult<()> {
+        let acc = ctx.login_state.get_server_selection()?;
+        let char_list = ctx
             .services
             .data
             .char
@@ -340,18 +346,15 @@ impl LoginHandler {
             //TODO get buy count
             buy_char_count: 3,
         };
-        self.state
+        ctx.login_state
             .transition_char_select(req.world_id as WorldId, req.channel_id as ChannelId)?;
 
-        Ok(SelectWorldResp::Success(char_list).into())
+        ctx.send(SelectWorldResp::Success(char_list)).await
     }
 
-    async fn handle_check_duplicate_id(
-        &mut self,
-        req: CheckDuplicateIDReq,
-    ) -> anyhow::Result<CheckDuplicateIDResp> {
-        let _ = self.state.get_char_select()?;
-        let name_used = !self.services.data.char.check_name(&req.name).await?;
+    async fn handle_check_duplicate_id(ctx: &mut Ctx, req: CheckDuplicateIDReq) -> LoginResult<()> {
+        let _ = ctx.login_state.get_char_select()?;
+        let name_used = !ctx.services.data.char.check_name(&req.name).await?;
 
         let resp = if name_used {
             CheckDuplicateIDResp {
@@ -365,11 +368,11 @@ impl LoginHandler {
             }
         };
 
-        Ok(resp.into())
+        ctx.send(resp).await
     }
 
-    async fn handle_create_char(&mut self, req: CreateCharReq) -> LoginResult<CreateCharResp> {
-        let (acc, _, _) = self.state.get_char_select()?;
+    async fn handle_create_char(ctx: &mut Ctx, req: CreateCharReq) -> LoginResult<()> {
+        let (acc, _, _) = ctx.login_state.get_char_select()?;
 
         let starter_set = ItemStarterSet {
             shoes: req.starter_set.shoes,
@@ -379,7 +382,7 @@ impl LoginHandler {
             guide: req.job.get_guide_item(),
         };
 
-        let char_id = self
+        let char_id = ctx
             .services
             .data
             .char
@@ -395,17 +398,17 @@ impl LoginHandler {
                     starter_set,
                     gender: req.gender,
                 },
-                &self.services.data.item,
+                &ctx.services.data.item,
             )
             .await?;
 
-        let char = self.services.data.char.get(char_id).await?.unwrap();
-        Ok(CreateCharResp::Success(map_char(&char)).into())
+        let char = ctx.services.data.char.get(char_id).await?.unwrap();
+        ctx.send(CreateCharResp::Success(map_char(&char))).await
     }
 
-    async fn handle_delete_character(&mut self, req: DeleteCharReq) -> LoginResult<DeleteCharResp> {
-        let (acc, _, _) = self.state.get_char_select()?;
-        let status = self
+    async fn handle_delete_character(ctx: &mut Ctx, req: DeleteCharReq) -> LoginResult<()> {
+        let (acc, _, _) = ctx.login_state.get_char_select()?;
+        let status = ctx
             .services
             .data
             .char
@@ -418,31 +421,29 @@ impl LoginHandler {
             _ => DeleteCharResult::UnknownErr,
         };
 
-        Ok(DeleteCharResp {
+        ctx.send(DeleteCharResp {
             char_id: req.char_id,
             result,
-        }
-        .into())
+        })
+        .await
     }
 
-    async fn handle_select_char(
-        &mut self,
-        req: SelectCharReq,
-    ) -> anyhow::Result<MigrateResponse<ResponsePacket<SelectCharResp>>> {
-        let (_, world, channel) = self.state.get_char_select()?;
+    async fn handle_select_char(ctx: &mut Ctx, req: SelectCharReq) -> LoginResult<()> {
+        let (_, world, channel) = ctx.login_state.get_char_select()?;
 
-        let acc = self.state.claim_account()?;
-        let client_key = self.state.get_client_key()?;
+        let mut session = ctx.login_state.claim_session()?.unmap();
+        let client_key = ctx.login_state.get_client_key()?;
 
-        self.services
+        ctx.services
             .session_manager
-            .create_migration_session(
-                ShroomMigrationKey::new(client_key, self.addr),
-                (acc, req.char_id as CharacterID),
-            )
+            .transition_session(&mut session, req.char_id as i32)
             .await?;
 
-        let addr = self.services.server_info.get_channel_addr(world, channel)?;
+        ctx.services
+            .session_manager
+            .migrate_session(ShroomMigrationKey::new(client_key, ctx.addr), session)?;
+
+        let addr = ctx.services.server_info.get_channel_addr(world, channel)?;
         let migrate = MigrateStageInfo {
             socket_addr: addr.try_into()?,
             char_id: req.char_id,
@@ -453,10 +454,9 @@ impl LoginHandler {
         let pkt = SelectCharResp {
             error_code: 0,
             result: SelectCharResult::Success(migrate),
-        }
-        .with_opcode(SelectCharResp::OPCODE);
+        };
 
-        Ok(MigrateResponse(pkt))
+        ctx.reply(MigrateResponse::<SelectCharResp>(pkt)).await
     }
 }
 

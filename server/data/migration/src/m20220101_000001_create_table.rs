@@ -2,10 +2,7 @@ use futures::future::try_join_all;
 
 use sea_orm_migration::{prelude::*, sea_query::extension::postgres::Type};
 
-use crate::{
-    helper::{stats::with_equip_stats, *},
-    shroom::with_char_stats,
-};
+use crate::helper::{stats::with_char_stats, stats::with_equip_stats, *};
 
 #[derive(Iden)]
 enum Account {
@@ -26,7 +23,7 @@ enum Account {
     NxCredit,
     NxPrepaid,
     ShroomPoints,
-    Tester
+    Tester,
 }
 
 #[derive(Iden)]
@@ -48,7 +45,7 @@ enum Character {
     LastLoginAt,
     Gender,
     SkillPoints,
-    PlayTime
+    PlayTime,
 }
 
 #[derive(Iden)]
@@ -157,7 +154,7 @@ impl Default for Migration {
                 shroom_size(Account::NxCredit),
                 shroom_size(Account::NxPrepaid),
                 shroom_size(Account::ShroomPoints),
-                shroom_bool(Account::Tester)
+                shroom_bool(Account::Tester),
             ],
             [],
         );
@@ -171,7 +168,7 @@ impl Default for Migration {
                 date_time(Character::LastLoginAt),
                 shroom_gender_col(Character::Gender).not_null().to_owned(),
                 shroom_skill_points(Character::SkillPoints),
-                shroom_int(Character::PlayTime)
+                shroom_int(Character::PlayTime),
             ]),
             [Ref::ownership(Character::AccId, &acc_table)],
         );

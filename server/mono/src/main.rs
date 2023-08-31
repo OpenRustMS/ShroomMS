@@ -13,8 +13,8 @@ use shroom_net::{
     net::{
         service::{
             handler::MakeServerSessionHandler,
-            server_sess::{SharedSessionHandle, ShroomServer, ShroomServerConfig},
-            BasicHandshakeGenerator, HandshakeGenerator,
+            server_sess::{ShroomServer, ShroomServerConfig},
+            BasicHandshakeGenerator, HandshakeGenerator, ShroomContext, SharedSessionHandle,
         },
         ShroomSession,
     },
@@ -51,14 +51,11 @@ impl MakeServerSessionHandler for MakeLoginHandler {
 
     async fn make_handler(
         &mut self,
-        sess: &mut ShroomSession<Self::Transport>,
-        _broadcast_tx: SharedSessionHandle,
-    ) -> Result<Self::Handler, Self::Error> {
-        Ok(LoginHandler::new(
-            self.services.clone(),
-            LOGIN_CFG,
-            sess.peer_addr()?.ip(),
-        ))
+        sess: ShroomSession<Self::Transport>,
+        session_handle: SharedSessionHandle,
+    ) -> Result<ShroomContext<Self::Handler>, Self::Error> {
+        let handler = LoginHandler::new(self.services.clone(), LOGIN_CFG, sess.peer_addr()?.ip());
+        Ok(ShroomContext::new(sess, handler, session_handle))
     }
 }
 
@@ -90,7 +87,7 @@ async fn srv_game_server(
     Ok(())
 }
 
-async fn srv_shrooming(addr: SocketAddr) -> anyhow::Result<()> {
+async fn _srv_shrooming(addr: SocketAddr) -> anyhow::Result<()> {
     let file_ix = FileIndex::build_index(
         [
             "notes.txt",
@@ -130,14 +127,10 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let shared_ctx = Arc::new(crypto_ctx);
+    log::info!("Loaded crypto context");
 
     let server_addr: IpAddr = settings.external_ip.parse()?;
     let bind_addr: IpAddr = settings.bind_ip.parse()?;
-
-    tokio::spawn(srv_shrooming(SocketAddr::new(
-        bind_addr,
-        settings.shrooming_port,
-    )));
 
     let servers = [ServerInfo::new(
         server_addr,
@@ -184,6 +177,14 @@ async fn main() -> anyhow::Result<()> {
         handshake_gen.clone(),
         services.clone(),
     ));
+
+    let lifecycle_svc = services.clone();
+    set.spawn(async move {
+        loop {
+            lifecycle_svc.session_manager.clean().await.expect("Clean");
+            tokio::time::sleep(Duration::from_secs(15)).await;
+        }
+    });
     for ch in 0..settings.num_channels {
         set.spawn(srv_game_server(
             ShroomServerConfig {

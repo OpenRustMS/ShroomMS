@@ -10,13 +10,13 @@ use proto95::{
     shared::{FootholdId, Vec2},
 };
 use shroom_net::{
-    net::service::server_sess::SharedSessionHandle,
+    net::service::SharedSessionHandle,
     packet::{EncodePacket, PacketWriter},
     HasOpcode, PacketBuffer,
 };
 
 use crate::services::{
-    data::character::CharacterID, meta::meta_service::MobMeta, session::ShroomSessionSet,
+    data::character::CharacterID, meta::meta_service::MobMeta, session::shroom_session_manager::ShroomSessionSet
 };
 
 use super::{next_id, Pool, PoolItem};
@@ -91,7 +91,7 @@ impl PoolItem for Mob {
 }
 
 impl Pool<Mob> {
-    pub fn assign_controller(&self, mut session: SharedSessionHandle) -> anyhow::Result<()> {
+    pub fn assign_controller(&self, session: SharedSessionHandle) -> anyhow::Result<()> {
         //TODO move out loop
         for (id, mob) in self.items.read().expect("Mob assign controller").iter() {
             let empty_stats = PartialMobTemporaryStat {
@@ -117,7 +117,7 @@ impl Pool<Mob> {
             .encode_packet(&mut pw)?;
 
             //TODO
-            session.tx.try_send(pw.into_packet().as_ref()).unwrap();
+            session.try_send_pkt(pw.into_packet().as_ref()).unwrap();
         }
         Ok(())
     }
@@ -148,7 +148,7 @@ impl Pool<Mob> {
             attacker,
         )?;
 
-        buf.write_packet(MobHPIndicatorResp {
+        buf.encode_packet(MobHPIndicatorResp {
             id,
             hp_perc: mob.perc,
         })?;

@@ -1,0 +1,6 @@
+{
+    "yaml.schemaStore.enable": true,
+    "yaml.schemas": {
+        "scripts/schemas/npc.schema.yaml": "scripts/npc/*.yaml"
+    }
+}

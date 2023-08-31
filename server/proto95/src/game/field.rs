@@ -1,18 +1,19 @@
-use shroom_net_derive::ShroomPacket;
-use shroom_net::{packet::{
-    proto::{
+use shroom_net::{
+    packet::proto::{
         list::{ShroomList, ShroomListLen},
         option::ShroomOption8,
         time::ShroomTime,
         ShroomList16,
     },
-}, shroom_packet_enum, packet_opcode};
+    packet_opcode, shroom_packet_enum,
+};
+use shroom_net_derive::ShroomPacket;
 
 use crate::{
     id::MapId,
     send_opcodes::SendOpcodes,
     shared::{
-        char::{CharDataHeader, CharacterId, CharDataFlagsAll, CharDataAll},
+        char::{CharDataAll, CharDataFlagsAll, CharDataHeader, CharacterId},
         TagPoint,
     },
 };
@@ -36,6 +37,8 @@ pub struct LogoutGiftConfig {
     pub gift_commodity_id: [u32; 3],
 }
 
+/// Dirty hack to work around the problem
+/// that when there's a notification, there's always n + 1
 #[derive(ShroomPacket, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PlusOneListIndex(pub u16);
 

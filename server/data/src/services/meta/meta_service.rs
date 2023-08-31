@@ -11,8 +11,6 @@ use proto95::{
 };
 use rand::Rng;
 
-use crate::services::model::item::{EquipStat, EquipStats};
-
 use super::fh_tree::FhTree;
 
 #[derive(Debug)]
@@ -44,26 +42,6 @@ impl DropPool {
 
     pub fn get_money_drop<R: Rng>(&self, rng: &mut R) -> u32 {
         rng.gen_range((self.money - self.money_variance)..=self.money)
-    }
-}
-
-pub fn get_equip_stats(meta: ItemMeta) -> EquipStats {
-    enum_map::enum_map! {
-        EquipStat::Str => meta.inc_str as u16,
-        EquipStat::Dex => meta.inc_dex as u16,
-        EquipStat::Int => meta.inc_int as u16,
-        EquipStat::Luk => meta.inc_luk as u16,
-        EquipStat::Hp => meta.inc_max_hp as u16,
-        EquipStat::Mp => meta.inc_max_mp as u16,
-        EquipStat::WeaponAtk => meta.inc_pad as u16,
-        EquipStat::MagicAtk => meta.inc_mad as u16,
-        EquipStat::WeaponDef => meta.inc_pdd as u16,
-        EquipStat::MagicDef => meta.inc_mdd as u16,
-        EquipStat::Accuracy => meta.inc_acc as u16,
-        EquipStat::Avoid => meta.inc_eva as u16,
-        EquipStat::Craft => meta.inc_craft as u16,
-        EquipStat::Speed => meta.inc_speed as u16,
-        EquipStat::Jump => meta.inc_jump as u16
     }
 }
 
@@ -126,6 +104,11 @@ impl MetaService {
                 DropEntry {
                     item: ItemId::PINK_ADVENTURER_CAPE,
                     max_quantity: 1,
+                    chance: 0.7,
+                },
+                DropEntry {
+                    item: ItemId::CHAOS_SCROLL_60,
+                    max_quantity: 5,
                     chance: 0.7,
                 },
             ],

@@ -15,13 +15,16 @@ use windows::{
 
 extern "C" {
     #[link_name = "llvm.returnaddress"]
-    pub fn return_address(a: i32) -> *const u8;
+    pub fn return_address(level: i32) -> *const u8;
 }
 
 #[macro_export]
 macro_rules! ret_addr {
     () => {
-        unsafe { return_address(0) as usize }
+        unsafe { $crate::return_address(0) as usize }
+    };
+    (level: $level:expr) => {
+        unsafe { $crate::return_address($level) as usize }
     };
 }
 
@@ -56,7 +59,7 @@ macro_rules! fn_ref2 {
 #[macro_export]
 macro_rules! fn_ref_hook {
     ($name:ident,$fn_name:ident, $addr_name:ident, $addr:expr, $hook_name:ident, $($fn_ty:tt)*) => {
-        fn_ref!($name, $fn_name, $addr_name, $addr, $($fn_ty)*);
+        $crate::fn_ref!($name, $fn_name, $addr_name, $addr, $($fn_ty)*);
         detour::static_detour! {
             static $hook_name: $($fn_ty)*;
         }
@@ -66,7 +69,7 @@ macro_rules! fn_ref_hook {
 #[macro_export]
 macro_rules! fn_ref_hook2 {
     ($name:ident, $addr:expr, $hook_name:ident, $($fn_ty:tt)*) => {
-        fn_ref2!($name, $addr, $($fn_ty)*);
+        $crate::fn_ref2!($name, $addr, $($fn_ty)*);
         detour::static_detour! {
             static $hook_name: $($fn_ty)*;
         }
@@ -83,8 +86,8 @@ pub unsafe fn ms_fn_hook<F: detour::Function + Sized>(addr: usize, detour: F) ->
 macro_rules! static_ms_fn_hook {
     ($name:ident, $addr:expr, $detour:ident, type $fnty:ident = $($fn_ty:tt)*) => {
         pub type $fnty = $($fn_ty)*;
-        static $name: LazyLock<GenericDetour<$fnty>> =
-            LazyLock::new(|| unsafe { $crate::util::ms_fn_hook::<$fnty>($addr, $detour) });
+        static $name: std::sync::LazyLock<detour::GenericDetour<$fnty>> =
+            std::sync::LazyLock::new(|| unsafe { $crate::util::ms_fn_hook::<$fnty>($addr, $detour) });
     };
 }
 
@@ -107,8 +110,8 @@ pub unsafe fn win32_fn_hook<F: detour::Function + Sized>(
 macro_rules! static_win32_fn_hook {
     ($name:ident, $mod:expr, $fn_name:expr, $detour:ident, type $fnty:ident = $($fn_ty:tt)*) => {
         pub type $fnty = $($fn_ty)*;
-        static $name: LazyLock<GenericDetour<$fnty>> =
-            LazyLock::new(|| unsafe { $crate::util::win32_fn_hook::<$fnty>($mod, $fn_name, $detour) });
+        static $name: std::sync::LazyLock<GenericDetour<$fnty>> =
+            std::sync::LazyLock::new(|| unsafe { $crate::util::win32_fn_hook::<$fnty>($mod, $fn_name, $detour) });
     };
 }
 

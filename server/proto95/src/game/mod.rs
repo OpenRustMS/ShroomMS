@@ -1,6 +1,3 @@
-pub mod reactor;
-pub mod pet;
-pub mod npc;
 pub mod chat;
 pub mod drop;
 pub mod field;
@@ -8,9 +5,12 @@ pub mod friend;
 pub mod keymaps;
 pub mod macros;
 pub mod mob;
+pub mod npc;
+pub mod pet;
+pub mod reactor;
 pub mod user;
+use shroom_net::{packet::proto::time::Ticks, packet_opcode, shroom_packet_enum};
 use shroom_net_derive::ShroomPacket;
-use shroom_net::{packet::{proto::time::Ticks}, packet_opcode, shroom_packet_enum};
 
 use crate::{
     id::job_id::JobId,

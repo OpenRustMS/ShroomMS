@@ -1,13 +1,14 @@
 pub mod remote;
 
 use bitflags::bitflags;
+use bytes::BufMut;
 use shroom_net::{
     mark_shroom_bitflags,
     packet::{
         proto::{option::ShroomOption8, CondOption, PacketWrapped, ShroomList16, ShroomList8},
-        DecodePacket, PacketReader, time::Ticks, ShroomDurationMs16, ShroomExpirationTime,
+        DecodePacket, PacketReader, time::Ticks, ShroomDurationMs16, ShroomExpirationTime, ShroomDurationMs32,
     },
-    packet_opcode, shroom_packet_enum, NetError, NetResult,
+    packet_opcode, shroom_packet_enum, NetError, NetResult, EncodePacket, PacketWriter, SizeHint,
 };
 use shroom_net_derive::{ShroomEncodePacket, ShroomPacket};
 
@@ -54,7 +55,7 @@ pub struct UserTransferFieldReq {
     pub field_key: u8,
     pub target_field: MapId,
     pub portal: String,
-    #[pkt(if(field = "portal", cond = "is_not_empty"))]
+    #[pkt(check(field = "portal", cond = "is_not_empty"))]
     pub target_pos: CondOption<Vec2>,
     pub unknown: u8,
     pub premium: bool,
@@ -280,16 +281,56 @@ pub struct AttackReq<Info: AttackInfo, Extra> {
     pub extra: Extra,
 }
 
+/// Workaround hack for invalid extra byte for Reactor attacks
+/// Essentially for ignoring the extra byte when user attacks a single target reactor
+/// TODO toggle this via  feature flag
+#[derive(Debug)]
+pub struct ReactorFlag(pub bool);
+
+impl EncodePacket for ReactorFlag {
+    fn encode_packet<B: BufMut>(&self, pw: &mut PacketWriter<B>) -> NetResult<()> {
+        if self.0 {
+            self.0.encode_packet(pw)?;
+        }
+
+        Ok(())
+    }
+
+    const SIZE_HINT: SizeHint = SizeHint::NONE;
+
+    fn packet_len(&self) -> usize {
+        if self.0 {
+            1
+        } else {
+            0
+        }
+    }
+}
+
+impl<'de> DecodePacket<'de> for ReactorFlag {
+    fn decode_packet(pr: &mut PacketReader<'de>) -> NetResult<Self> {
+        let n = pr.remaining_slice().len();
+        if n == 60 {
+            let _ = pr.read_u8()?;
+            Ok(ReactorFlag(true))
+        } else {
+            Ok(ReactorFlag(false))
+        }
+    }
+}
+
 #[derive(Debug, ShroomPacket)]
 pub struct MeleeAttackInfo {
     pub portal: u8, // Field key
+    pub flag: ReactorFlag,
     pub hit_target_count: DrHitTargetCount,
     pub skill_id: SkillId,
     pub combat_orders: u8,
     pub rnd: ValWithCrc,
     pub skill_crc: SkillInfoCrc,
     //TODO if skill_id is keydown/charge skill
-    //key_down_dur: u32,
+    #[pkt(check(field = "skill_id", cond = "SkillId::is_charge_skill"))]
+    pub key_down_dur: CondOption<ShroomDurationMs32>,
     pub attack_flags: AttackFlags,
     pub action_dir: ActionDir,
     pub unknown_crc_1: u32,
@@ -303,7 +344,7 @@ pub struct MeleeAttackInfo {
 #[derive(Debug, ShroomPacket)]
 pub struct MeleeAttackTail {
     pub pos: Vec2,
-    // If skillid == 14111006
+    // TODO: If skillid == 14111006
     //pub grenade_pos: ShroomOption8<Vec2>
 }
 
@@ -346,6 +387,7 @@ impl PacketWrapped for DrHitTargetCount {
         }
     }
 }
+
 
 pub type UserMeleeAttackReq = AttackReq<MeleeAttackInfo, MeleeAttackTail>;
 packet_opcode!(UserMeleeAttackReq, RecvOpcodes::UserMeleeAttack);
@@ -512,9 +554,9 @@ packet_opcode!(UserSkillUpReq, RecvOpcodes::UserSkillUpRequest);
 pub struct UserSkillUseReq {
     pub ticks: Ticks,
     pub skill_id: SkillId,
-    #[pkt(if(field = "skill_id", cond = "SkillId::is_anti_repeat_buff_skill"))]
+    #[pkt(check(field = "skill_id", cond = "SkillId::is_anti_repeat_buff_skill"))]
     pub pos: CondOption<Vec2>,
-    #[pkt(if(field = "skill_id", cond = "SkillId::is_spirit_javelin"))]
+    #[pkt(check(field = "skill_id", cond = "SkillId::is_spirit_javelin"))]
     pub spirit_javelin_item: CondOption<ItemId>,
     // If has affected -> u8 affectedMemberBitmap, this is tricky
     // cause no way to detect if affectedMemberBitmap is not encoded

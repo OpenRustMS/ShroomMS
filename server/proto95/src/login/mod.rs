@@ -27,7 +27,7 @@ impl StartMode {
 #[derive(ShroomPacket, Debug)]
 pub struct StartModeInfo {
     start_mode: StartMode,
-    #[pkt(if(field = "start_mode", cond = "StartMode::has_system_info"))]
+    #[pkt(check(field = "start_mode", cond = "StartMode::has_system_info"))]
     system_info: CondOption<SystemInfo>,
 }
 

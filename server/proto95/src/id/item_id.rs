@@ -1,10 +1,51 @@
 use std::ops::RangeInclusive;
 
+use shroom_net::shroom_enum_code;
+
 use crate::shroom_id;
 
 shroom_id!(ItemId, u32);
 
+shroom_enum_code!(
+    InventoryType,
+    u8,
+    Equip = 1,
+    Consume = 2,
+    Install = 3,
+    Etc = 4,
+    Cash = 5,
+    Equipped = 6,
+    Special = 9,
+    DragonEquipped = 10,
+    MechanicEquipped = 11
+);
+
+impl InventoryType {
+    pub fn is_equip(&self) -> bool {
+        matches!(
+            self,
+            InventoryType::Equipped | InventoryType::Equip
+        )
+    }
+
+    pub fn is_stack(&self) -> bool {
+        !self.is_equip()
+    }
+}
+
 impl ItemId {
+    pub fn get_inv_type(&self) -> anyhow::Result<InventoryType> {
+        let ty = self.0 / 1000000;
+        Ok(match ty {
+            1 => InventoryType::Equip,
+            2 => InventoryType::Consume,
+            3 => InventoryType::Install,
+            4 => InventoryType::Etc,
+            5 => InventoryType::Cash,
+            _ => anyhow::bail!("Unknown inv type for item: {self}"),
+        })
+    }
+    
     pub fn is_arrow_for_bow(&self) -> bool {
         (2060000..=2061000).contains(&self.0)
     }

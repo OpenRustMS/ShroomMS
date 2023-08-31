@@ -1,12 +1,9 @@
 use shroom_net_derive::ShroomPacket;
-use shroom_net::{packet::{
-    
-    proto::{
+use shroom_net::{packet::proto::{
         ShroomExpirationTime,
         ShroomDurationMs16,
         CondOption, PacketTryWrapped,
-    },
-}, NetError, shroom_enum_code, shroom_packet_enum, packet_opcode};
+    }, NetError, shroom_enum_code, shroom_packet_enum, packet_opcode};
 
 use crate::{
     id::ItemId,
@@ -89,9 +86,9 @@ pub struct DropEnterFieldResp {
     pub drop_owner: DropOwner,
     pub pos: Vec2,
     pub src_id: u32,
-    #[pkt(if(field = "enter_type", cond = "DropEnterType::has_start_pos"))]
+    #[pkt(check(field = "enter_type", cond = "DropEnterType::has_start_pos"))]
     pub start_pos: CondOption<(Vec2, ShroomDurationMs16)>,
-    #[pkt(if(field = "drop_type", cond = "DropType::has_expiration"))]
+    #[pkt(check(field = "drop_type", cond = "DropType::has_expiration"))]
     pub drop_expiration: CondOption<ShroomExpirationTime>,
     //TODO: ? ownerCharId == 0
     pub by_pet: bool,
@@ -123,7 +120,7 @@ impl DropLeaveType {
 pub struct DropLeaveFieldResp {
     pub leave_type: DropLeaveType,
     pub id: DropId,
-    #[pkt(if(field = "leave_type", cond = "DropLeaveType::has_pickup_id"))]
+    #[pkt(check(field = "leave_type", cond = "DropLeaveType::has_pickup_id"))]
     pub pickup_id: CondOption<u32>,
 }
 packet_opcode!(DropLeaveFieldResp, SendOpcodes::DropLeaveField);

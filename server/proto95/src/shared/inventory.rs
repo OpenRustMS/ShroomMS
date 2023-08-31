@@ -8,24 +8,12 @@ use shroom_net::{
 };
 use shroom_net_derive::ShroomPacket;
 
-use crate::{id::ItemId, recv_opcodes::RecvOpcodes, send_opcodes::SendOpcodes};
+use crate::{id::{ItemId, item_id::InventoryType}, recv_opcodes::RecvOpcodes, send_opcodes::SendOpcodes};
 
 use super::item::Item;
 
 //TODO indexing
-shroom_enum_code!(
-    InventoryType,
-    u8,
-    Equip = 1,
-    Consume = 2,
-    Install = 30,
-    Etc = 4,
-    Cash = 5,
-    Equipped = 6,
-    Special = 9,
-    DragonEquipped = 10,
-    MechanicEquipped = 11
-);
+
 
 shroom_enum_code!(
     CharEquipSlot,
@@ -95,6 +83,13 @@ shroom_enum_code!(
     Ext6 = 0x41,
     Sticker = 0x64
 );
+
+impl CharEquipSlot {
+    pub fn can_swap(&self, other: &Self) -> bool {
+        // TODO handle ring etc
+        self == other
+    }
+}
 
 shroom_enum_code!(
     CashEquippedSlot,
@@ -238,6 +233,28 @@ shroom_packet_enum!(
     }
 );
 
+impl InventoryOperation {
+    pub fn remove(inv: InventoryType, pos: u16) -> Self {
+        Self::Remove(InvOpRemove { inv_type: inv, pos })
+    }
+
+    pub fn update_exp(inv: InventoryType, pos: u16) -> Self {
+        Self::Remove(InvOpRemove { inv_type: inv, pos })
+    }
+
+    pub fn update_quantity(inv: InventoryType, pos: u16, quantity: u16) -> Self {
+        Self::UpdateQuantity(InvOpUpdateQuantity { inv_type: inv, pos, quantity })
+    }
+
+    pub fn add(inv: InventoryType, pos: u16, item: Item) -> Self {
+        Self::Add(InvOpAdd { inv_type: inv, pos, item })
+    }
+
+    pub fn mov(inv: InventoryType, src: u16, dst: u16) -> Self {
+        Self::Move(InvOpMove { inv_type: inv, pos: src, new_pos: dst })
+    }
+}
+
 #[derive(Debug, ShroomPacket)]
 pub struct InventoryOperationsResp {
     pub reset_excl: bool,
@@ -258,8 +275,8 @@ packet_opcode!(InvGrowResp, SendOpcodes::InventoryGrow);
 pub struct InvChangeSlotPosReq {
     pub ticks: Ticks,
     pub inv_type: InventoryType,
-    pub old_pos: u16,
-    pub new_pos: u16,
+    pub from: u16,
+    pub to: u16,
     pub count: u16,
 }
 packet_opcode!(

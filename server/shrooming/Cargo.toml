@@ -6,22 +6,22 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tonic = "0.8"
+tonic = "0.9"
 prost = "0.11"
-tokio = { version = "1.0", features = ["macros", "rt-multi-thread", "fs"] }
-async-stream = "0.3.4"
-tokio-util = { version = "0.7.7", features = ["io"] }
-tokio-stream = "0.1.12"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "fs"] }
+async-stream = "0.3"
+tokio-util = { version = "0.7", features = ["io"] }
+tokio-stream = "0.1"
 axum = { version = "0.6", features = ["headers"] }
 anyhow = "1"
-sha2 = "0.10.6"
-hex = "0.4.3"
-hyper = "0.14.25"
+sha2 = "0.10"
+hex = "0.4"
+hyper = "0.14"
 reqwest = { version = "0.11", features = ["json", "stream"] }
-url = "2.3.1"
-serde = { version = "1.0.158", features = ["derive"] }
-serde_json = "1.0.94"
-tempfile = "3.4.0"
+url = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
 
 [build-dependencies]
-tonic-build = "0.8"
+tonic-build = "0.9"

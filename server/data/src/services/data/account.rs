@@ -1,7 +1,6 @@
 use std::net::IpAddr;
 
 use constant_time_eq::constant_time_eq;
-use rand::{thread_rng, RngCore};
 use sea_orm::{ActiveModelTrait, DbErr, TryIntoModel};
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use thiserror::Error;
@@ -10,6 +9,7 @@ use crate::created_at;
 use crate::entities::account::{ActiveModel, Column, Entity, Model};
 use crate::entities::ban;
 use crate::entities::sea_orm_active_enums::GenderTy;
+use crate::services::helper::pw::PwService;
 
 pub type AccountId = i32;
 pub type HardwareInfo = u32;
@@ -51,28 +51,15 @@ pub type AccResult<T> = std::result::Result<T, AccountServiceError>;
 #[derive(Debug, Clone)]
 pub struct AccountService {
     db: DatabaseConnection,
-}
-
-type PasswordSalt = [u8; 16];
-
-const HASH_COST: u32 = 9;
-
-fn gen_salt() -> PasswordSalt {
-    let mut salt = PasswordSalt::default();
-    thread_rng().fill_bytes(&mut salt);
-    salt
-}
-
-fn hash_password(pw: &str) -> String {
-    let salt = gen_salt();
-    bcrypt::hash_with_salt(pw, HASH_COST, salt)
-        .unwrap()
-        .to_string()
+    pw: PwService,
 }
 
 impl AccountService {
     pub fn new(db: DatabaseConnection) -> Self {
-        Self { db }
+        Self {
+            db,
+            pw: PwService::default(),
+        }
     }
 
     pub async fn get(&self, id: AccountId) -> anyhow::Result<Option<Model>> {
@@ -88,11 +75,11 @@ impl AccountService {
         gender: Option<GenderTy>,
     ) -> anyhow::Result<AccountId> {
         //TODO check username + password
-        let hash = hash_password(password);
+        let hash = self.pw.generate_hash(password);
 
         let acc = ActiveModel {
             username: Set(username.to_string()),
-            password_hash: Set(hash),
+            password_hash: Set(hash.to_string()),
             accepted_tos: Set(accepted_tos),
             created_at: created_at(&self.db),
             country: Set(region as u8 as i32),
@@ -127,7 +114,7 @@ impl AccountService {
             return Err(AccountServiceError::AccountIsBanned);
         }
 
-        let verfiy_password = self.verify_password(password, &acc.password_hash).unwrap();
+        let verfiy_password = self.pw.verify_password(password, &acc.password_hash);
         if !verfiy_password {
             return Err(AccountServiceError::PasswordMismatch);
         }
@@ -178,10 +165,6 @@ impl AccountService {
 
     pub async fn delete_acc(&self, _id: AccountId) -> anyhow::Result<()> {
         todo!()
-    }
-
-    pub fn verify_password(&self, pw: &str, pw_hash: &str) -> anyhow::Result<bool> {
-        Ok(bcrypt::verify(pw, pw_hash)?)
     }
 
     pub fn check_pin(&self, acc: &Model, pin: &str) -> anyhow::Result<bool> {

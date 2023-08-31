@@ -1,7 +1,5 @@
 use shroom_net_derive::ShroomPacket;
-use shroom_net::{packet::{
-    proto::{option::ShroomOption8, time::ShroomTime, CondOption},
-}, packet_opcode, shroom_packet_enum};
+use shroom_net::{packet::proto::{option::ShroomOption8, time::ShroomTime, CondOption}, packet_opcode, shroom_packet_enum};
 
 use crate::{
     recv_opcodes::RecvOpcodes,
@@ -66,7 +64,7 @@ pub struct LoginInfo {
 #[derive(ShroomPacket, Debug)]
 pub struct LoginAccountData {
     pub account_info: AccountInfo,
-    #[pkt(if(field = "account_info", cond = "AccountInfo::has_login_info"))]
+    #[pkt(check(field = "account_info", cond = "AccountInfo::has_login_info"))]
     pub login_info: CondOption<LoginInfo>,
 }
 #[derive(ShroomPacket, Debug)]

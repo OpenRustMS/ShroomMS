@@ -1,6 +1,5 @@
-use shroom_net_derive::ShroomPacket;
-use shroom_net::{packet::{
-    proto::{
+use shroom_net::{
+    packet::proto::{
         conditional::CondEither,
         list::{ShroomIndexList8, ShroomIndexListZ16, ShroomIndexListZ8},
         option::ShroomOption8,
@@ -8,7 +7,9 @@ use shroom_net::{packet::{
         time::{ShroomDurationMs16, ShroomDurationMs32, ShroomExpirationTime, ShroomTime},
         ShroomList16, ShroomList32,
     },
-}, packet_opcode, partial_data};
+    packet_opcode, partial_data,
+};
+use shroom_net_derive::ShroomPacket;
 
 use crate::{
     game::mob::MobId,
@@ -19,7 +20,7 @@ use crate::{
     send_opcodes::SendOpcodes,
 };
 
-use super::{job::Job, Gender, NameStr, item::Item};
+use super::{item::Item, job::Job, Gender, NameStr};
 
 const CHAR_PET_COUNT: usize = 3;
 pub type CashID = u64;
@@ -312,7 +313,7 @@ partial_data!(
     // TODO handle extended SP
     Sp(u16) => 1 << 15,
     Exp(u32) => 1 << 16,
-    Pop(u16) => 1 << 17,
+    Fame(u16) => 1 << 17,
     Money(u32) => 1 << 18,
     TempExp(u32) => 1 << 21
 
@@ -343,6 +344,8 @@ packet_opcode!(CharTempStatResetResp, SendOpcodes::TemporaryStatReset);
 
 // TODO always has combat orders + extra data
 
+pub type InventorySize = [u8; 5];
+
 #[derive(ShroomPacket, Debug)]
 pub struct CharDataHeader {
     pub combat_orders: u8,
@@ -355,7 +358,7 @@ partial_data!(
     u64,
     Stat(CharDataStat) => 1 << 0,
     Money(Money) => 1 << 1,
-    InvSize([u8; 5]) => 1 << 7,
+    InvSize(InventorySize) => 1 << 7,
     EquipExtSlotExpiration(ShroomExpirationTime) => 1 << 20,
     Equipped(CharDataEquipped) => 1 << 2,
     UseInv(ShroomIndexListZ8<Item>) => 1 << 3,

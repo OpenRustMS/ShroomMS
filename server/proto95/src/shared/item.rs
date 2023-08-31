@@ -1,14 +1,30 @@
-use bytes::BufMut;
+use shroom_net::{
+    mark_shroom_bitflags,
+    packet::{proto::CondOption, ShroomExpirationTime, ShroomOption8, ShroomTime},
+    shroom_packet_enum,
+};
 use shroom_net_derive::ShroomPacket;
-use shroom_net::{packet::{
-    proto::{
-        CondOption, DecodePacket, EncodePacket,
-    }, ShroomExpirationTime, ShroomOption8, ShroomTime,
-}, NetResult, shroom_packet_enum, mark_shroom_bitflags};
 
 use crate::id::ItemId;
 
 use super::NameStr;
+
+#[derive(Debug, ShroomPacket)]
+pub struct ItemInfo {
+    pub item_id: ItemId,
+    pub cash_id: ShroomOption8<u64>,
+    pub expiration: ShroomExpirationTime,
+}
+
+impl ItemInfo {
+    pub fn is_rechargable(&self) -> bool {
+        self.item_id.is_rechargable()
+    }
+
+    pub fn has_sn(&self) -> bool {
+        self.cash_id.is_some()
+    }
+}
 
 bitflags::bitflags! {
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -58,15 +74,15 @@ mark_shroom_bitflags!(ItemEquipFlags);
 
 #[derive(Debug, ShroomPacket)]
 pub struct PetItemInfo {
-    pub name: NameStr,
+    pub pet_name: NameStr,
     pub level: u8,
     pub tameness: u16,
-    pub fullness: u8,                /* repleteness */
+    pub fullness: u8,                     /* repleteness */
     pub expiration: ShroomExpirationTime, /* dateDead */
-    pub attribute1: u16,             /* PetAttribute  seems to be only hasStats 2^0*/
+    pub pet_attr: u16,                  /* PetAttribute  pet is only loaded when attr == 1*/
     pub skill: u16,
     pub remain_life: u32,
-    pub attribute2: u16, /* Attribute  Only IsPossibleTrading 2^0 */
+    pub attr: ItemPetFlags,
 }
 #[derive(Debug, ShroomPacket)]
 pub struct EquipStats {
@@ -96,18 +112,7 @@ pub struct EquipAllStats {
     pub flags: ItemFlags,
 }
 
-#[derive(Debug, ShroomPacket)]
-pub struct ItemInfo {
-    pub item_id: ItemId,
-    pub cash_id: ShroomOption8<u64>,
-    pub expiration: ShroomExpirationTime,
-}
 
-impl ItemInfo {
-    pub fn is_rechargable(&self) -> bool {
-        self.item_id.is_rechargable()
-    }
-}
 
 #[derive(Debug, ShroomPacket)]
 pub struct ItemPetData {
@@ -129,68 +134,14 @@ pub struct ItemStackData {
     pub quantity: u16, /* nNumber */
     pub title: String,
     pub flag: ItemFlags,
-    #[pkt(if(field = "info", cond = "ItemInfo::is_rechargable"))]
-    pub serial_number: CondOption<u64>, /* liSN */
-}
-
-#[derive(Debug)]
-pub struct OptionalLevelInfo(pub Option<ItemLevelInfo>);
-
-impl<'de> DecodePacket<'de> for OptionalLevelInfo {
-    fn decode_packet(pr: &mut shroom_net::packet::PacketReader<'de>) -> NetResult<Self> {
-        let ty = pr.read_u8()?;
-        let item_info = match ty {
-            0x40 => {
-                //In total 10 0x40 bytes
-                pr.read_array::<9>()?;
-                None
-            }
-            _ => Some(ItemLevelInfo::decode_packet(pr)?),
-        };
-
-        Ok(Self(item_info))
-    }
-}
-
-impl EncodePacket for OptionalLevelInfo {
-    const SIZE_HINT: Option<usize> = None;
-
-    fn packet_len(&self) -> usize {
-        self.0
-            .as_ref()
-            .map(|info| info.packet_len() + 1)
-            .unwrap_or(10)
-    }
-
-    fn encode_packet<B: BufMut>(
-        &self,
-        pw: &mut shroom_net::packet::PacketWriter<B>,
-    ) -> NetResult<()> {
-        match self.0 {
-            Some(ref info) => {
-                pw.write_u8(0x00)?;
-                info.encode_packet(pw)?;
-            }
-            None => pw.write_array(&[0x40; 10])?,
-        };
-
-        Ok(())
-    }
-}
-
-#[derive(Debug, ShroomPacket)]
-pub struct ItemLevelInfo {
-    pub level: u8,
-    pub exp: u32,
-    pub vicious: u32,
-    pub unknown2: u64, /* nIUC(4) + Durability(4) */
+    #[pkt(check(field = "info", cond = "ItemInfo::is_rechargable"))]
+    pub sn: CondOption<u64>,
 }
 
 #[derive(Debug, ShroomPacket)]
 pub struct EquipItemInfo {
     pub info: ItemInfo,
     pub stats: EquipAllStats,
-
     pub lvl_up_ty: u8,
     pub lvl: u8,
     pub exp: u32,
@@ -200,15 +151,10 @@ pub struct EquipItemInfo {
     pub stars: u8,
     pub options: [u16; 3],
     pub sockets: [u16; 2],
-
-    pub sn: u64,
-
-    /*
-        if ((*(uint *)&this->field_0x18 | *(uint *)&this->field_0x1c) == 0) {
-      COutPacket::EncodeBuffer(param_1,&this->liSN,8);
-    } */
-    pub time_stamp: ShroomTime,    // ftEquipped
-    pub prev_bonus_exp_rate: i32, // nPrevBonusExpRate ?
+    #[pkt(check(field = "info", cond = "ItemInfo::has_sn"))]
+    pub sn: CondOption<u64>,
+    pub equipped_at: ShroomTime,
+    pub prev_bonus_exp_rate: i32,
 }
 
 shroom_packet_enum!(

@@ -7,7 +7,6 @@ pub mod movement;
 
 use std::net::{Ipv4Addr, SocketAddr};
 
-use geo::Coord;
 use shroom_net_derive::ShroomPacket;
 use shroom_net::{packet::{
     proto::{wrapped::PacketWrapped, ShroomList16, string::FixedPacketString},
@@ -99,8 +98,8 @@ impl From<OptionGender> for Option<Gender> {
 }
 mark_shroom_enum!(OptionGender);
 
-pub type Vec2 = Coord<i16>;
-pub type TagPoint = Coord<i32>;
+pub type Vec2 = euclid::default::Vector2D<i16>;
+pub type TagPoint = euclid::default::Point2D<i32>;
 
 pub type FootholdId = u16;
 

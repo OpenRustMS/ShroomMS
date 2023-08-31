@@ -1,6 +1,5 @@
 use std::{ops::Add, time::Duration};
 
-use geo::coord;
 use proto95::{
     game::{
         drop::{
@@ -16,7 +15,8 @@ use proto95::{
 use shroom_net::packet::proto::time::ShroomExpirationTime;
 
 use crate::services::{
-    data::character::CharacterID, meta::fh_tree::Foothold, session::ShroomSessionSet,
+    data::character::CharacterID, meta::fh_tree::Foothold,
+    session::shroom_session_manager::ShroomSessionSet,
 };
 
 use super::{next_id, Pool, PoolItem};
@@ -69,7 +69,7 @@ impl PoolItem for Drop {
         };
 
         let start_pos = (
-            self.start_pos.add((0, -20).into()),
+            self.start_pos.add(Vec2::new(0, -20)),
             Duration::from_millis(100).into(),
         );
 
@@ -113,6 +113,8 @@ impl Pool<Drop> {
             Ok(map) => map,
             Err(_) => return None,
         };
+
+        
         match pool.get(&item) {
             Some(i) => match i.value {
                 DropTypeValue::Item(_) => None,
@@ -141,18 +143,20 @@ impl Pool<Drop> {
         // Get spread for items + mesos, TODO mesos are optional, fix items being zero
         let mut spread = fh.map(|fh| fh.get_item_spread(pos.x as f32, n));
 
-        fn map_coord(c: geo::Coord<f32>) -> geo::Coord<i16> {
-            coord! {x: c.x as i16, y: c.y as i16}
+        fn map_coord(c: geo::Coord<f32>) -> Vec2 {
+            Vec2::new(c.x as i16, c.y as i16)
         }
 
         if money > 0 {
             self.add(
                 Drop {
                     owner: DropOwner::User(killer as u32),
-                    pos: spread
-                        .as_mut()
-                        .and_then(|fh| fh.next().map(map_coord))
-                        .unwrap_or(pos),
+                    pos: Vec2::from(
+                        spread
+                            .as_mut()
+                            .and_then(|fh| fh.next().map(map_coord))
+                            .unwrap_or(pos),
+                    ),
                     start_pos: pos,
                     value: DropTypeValue::Mesos(money),
                     quantity: 1,

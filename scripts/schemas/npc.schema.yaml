@@ -1,0 +1,58 @@
+$schema: "http://json-schema.org/draft-07/schema#"
+
+title: "NPC Dialog Schema"
+description: Shroom NPC Dialog Schema
+
+
+definitions: 
+  messageParamType: 
+    oneOf: 
+      - type: string
+      - type: object
+  messageType: 
+    oneOf: 
+      - type: string
+      - type: object
+        properties: 
+          fmt: 
+            type: string
+          params: 
+            type: array
+            items: 
+              $ref: "#/definitions/messageParamType"
+        
+
+type: object
+properties:
+  name: 
+    type: string
+  id:
+    type: number
+  dialog:
+    type: array
+    items:
+      type: object
+      properties:
+        message:
+          $ref: "#/definitions/messageType"
+        options:
+          type: array
+          items:
+            type: object
+            properties:
+              text:
+                type: string
+              cost:
+                type: integer
+              nextDialog:
+                type: integer
+            required:
+              - text
+              - cost
+              - nextDialog
+      required:
+        - message
+required:
+  - name
+  - id
+  - dialog

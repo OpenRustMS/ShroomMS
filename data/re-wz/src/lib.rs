@@ -16,9 +16,10 @@ mod tests {
 
     use super::*;
 
+    
     #[test]
     fn load() -> anyhow::Result<()> {
-        let mut item =  WzReader::open_file("../test_files/it.wz", version::WzRegion::GMS, WzVersion(95))?;
+        let mut item =  WzReader::open_file("../re-wz-ui/test_files/it.wz", version::WzRegion::GMS, WzVersion(95))?;
         dbg!(item.read_root_dir()?);
         Ok(())
     }

@@ -14,7 +14,7 @@ use proto95::{
     },
 };
 
-use crate::services::{data::character::CharacterID, session::ShroomSessionSet};
+use crate::services::{data::character::CharacterID, session::shroom_session_manager::ShroomSessionSet};
 
 use super::{Pool, PoolItem};
 

@@ -1,5 +1,5 @@
 use proto95::{
-    id::{job_id::JobGroup, FaceId, HairId, ItemId, MapId, Skin},
+    id::{job_id::JobGroup, FaceId, HairId, ItemId, Skin},
     login::char::{DeleteCharResult, SelectCharResultCode},
     shared::Gender,
 };
@@ -163,7 +163,7 @@ impl CharacterService {
         }
 
         let job = create.job_group;
-        let map_id = MapId::AMHERST.0 as i32; //job.get_start_map().0 as i32;
+        let map_id = job.get_start_map().0 as i32;
         let job = job.get_noob_job_id() as u32;
 
         let char = ActiveModel {
@@ -173,13 +173,13 @@ impl CharacterService {
             name: Set(create.name),
             map_id: Set(map_id),
             job: Set(job as i32),
-            level: Set(1),
+            level: Set(50),
             str: Set(13),
             dex: Set(4),
             int: Set(4),
             luk: Set(4),
-            hp: Set(5),
-            max_hp: Set(50),
+            hp: Set(5 * 100),
+            max_hp: Set(50 * 100),
             mp: Set(5),
             max_mp: Set(50),
             equip_slots: Set(24),

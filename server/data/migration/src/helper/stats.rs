@@ -35,7 +35,7 @@ pub const CHAR_STATS: [&str; 27] = [
 pub fn with_char_stats(columns: impl IntoIterator<Item = ColumnDef>) -> Vec<ColumnDef> {
     columns
         .into_iter()
-        .chain(CHAR_STATS.iter().map(|stat| char_stat(Alias::new(stat))))
+        .chain(CHAR_STATS.iter().map(|stat| char_stat(Alias::new(stat.to_string()))))
         .collect()
 }
 
@@ -63,6 +63,6 @@ pub const ITEM_STATS: [&str; 17] = [
 pub fn with_equip_stats(columns: impl IntoIterator<Item = ColumnDef>) -> Vec<ColumnDef> {
     columns
         .into_iter()
-        .chain(ITEM_STATS.iter().map(|stat| char_stat(Alias::new(stat))))
+        .chain(ITEM_STATS.iter().map(|stat| char_stat(Alias::new(stat.to_string()))))
         .collect()
 }

@@ -13,22 +13,22 @@ use proto95::{
     shared::{char::AvatarData, FootholdId, Range2, Vec2},
 };
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort};
-use shroom_net::{net::service::{server_sess::SharedSessionHandle}, PacketBuffer};
+use shroom_net::{net::service::SharedSessionHandle, PacketBuffer};
 
 use super::{
-    character::Character,
     data::character::CharacterID,
     helper::pool::{drop::DropLeaveParam, reactor::Reactor, user::User, Drop, Mob, Npc, Pool},
     meta::{
         fh_tree::FhTree,
         meta_service::{FieldMeta, MetaService},
     },
-    session::ShroomSessionSet,
+    session::shroom_session_manager::ShroomSessionSet,
 };
 
 #[derive(Debug)]
 pub struct FieldData {
     _meta: &'static MetaService,
+    id: MapId,
     field_meta: FieldMeta,
     field_fh: &'static FhTree,
     drop_pool: Pool<Drop>,
@@ -37,6 +37,16 @@ pub struct FieldData {
     reactor_pool: Pool<Reactor>,
     user_pool: Pool<User>,
     sessions: ShroomSessionSet,
+}
+
+impl FieldData {
+    pub fn get_field_id(&self) -> MapId {
+        self.id
+    }
+
+    pub fn get_return_field(&self) -> Option<MapId> {
+        self.field_meta.info.return_map.map(|id| MapId(id as u32))
+    }
 }
 
 pub struct FieldJoinHandle {
@@ -61,6 +71,7 @@ impl std::ops::Drop for FieldJoinHandle {
 impl FieldData {
     pub fn new(
         meta: &'static MetaService,
+        field_id: MapId,
         field_meta: FieldMeta,
         fh_meta: &'static FhTree,
     ) -> Self {
@@ -106,6 +117,7 @@ impl FieldData {
 
         Self {
             _meta: meta,
+            id: field_id,
             field_meta,
             field_fh: fh_meta,
             drop_pool: Pool::new(meta),
@@ -133,7 +145,7 @@ impl FieldData {
             },
             &self.sessions,
         )?;
-        let mut buf = PacketBuffer::new();
+        let mut buf = PacketBuffer::default();
         self.user_pool.on_enter(&mut buf)?;
         self.drop_pool.on_enter(&mut buf)?;
         self.npc_pool.on_enter(&mut buf)?;
@@ -225,9 +237,8 @@ impl FieldData {
         Ok(())
     }
 
-    pub fn remove_drop(&self, id: DropId, param: DropLeaveParam) -> anyhow::Result<()> {
-        self.drop_pool.remove(id, param, &self.sessions)?;
-        Ok(())
+    pub fn remove_drop(&self, id: DropId, param: DropLeaveParam) -> anyhow::Result<Drop> {
+        self.drop_pool.remove(id, param, &self.sessions)
     }
 
     pub fn assign_mob_controller(&self, session: SharedSessionHandle) -> anyhow::Result<()> {
@@ -240,17 +251,6 @@ impl FieldData {
         Ok(())
     }
 
-    // TODO: handle various drop items
-    pub fn handle_pickup(&self, item: DropId, char: &mut Character) -> anyhow::Result<()> {
-        match self.drop_pool.is_money(item) {
-            Some(m) => {
-                char.update_mesos(m.try_into().unwrap());
-            }
-            None => {}
-        };
-        Ok(())
-    }
-
     pub async fn attack_mob(
         &self,
         id: ObjectId,
@@ -258,7 +258,7 @@ impl FieldData {
         attacker: CharacterID,
         session: &mut SharedSessionHandle,
     ) -> anyhow::Result<()> {
-        let mut buf = PacketBuffer::new();
+        let mut buf = PacketBuffer::default();
         let killed = self
             .mob_pool
             .attack_mob(attacker, id, dmg, &mut buf, &self.sessions)?;
@@ -300,7 +300,7 @@ impl Actor for FieldActor {
 
     async fn pre_start(
         &self,
-        _myself: ActorRef<Self>,
+        _msg: ActorRef<FieldMessage>,
         field_data: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
         Ok(field_data)
@@ -309,7 +309,7 @@ impl Actor for FieldActor {
     // This is our main message handler
     async fn handle(
         &self,
-        _myself: ActorRef<Self>,
+        _msg: ractor::ActorRef<FieldMessage>,
         message: Self::Msg,
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
@@ -345,7 +345,9 @@ impl FieldService {
 
         let field_fh = self.meta.get_field_fh_data(field_id).unwrap();
 
-        Ok(Arc::new(FieldData::new(self.meta, field_meta, field_fh)))
+        Ok(Arc::new(FieldData::new(
+            self.meta, field_id, field_meta, field_fh,
+        )))
     }
 
     pub fn get_field(&self, field_id: MapId) -> anyhow::Result<Arc<FieldData>> {

@@ -1,6 +1,6 @@
 use std::future::Future;
 
-use data::{entities::account, services::session::ClientKey};
+use data::{entities::account, services::session::{ClientKey, shroom_session_manager::OwnedShroomLoginSession}};
 use proto95::login::world::{ChannelId, WorldId};
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -21,10 +21,10 @@ enum LoginStage {
 /// the core idea is that the whole login logic
 /// is handled in the state and illegal operations
 /// will result in an error
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct LoginState {
     stage: LoginStage,
-    account: Option<account::Model>,
+    login_session: Option<OwnedShroomLoginSession>,
     client_key: Option<ClientKey>,
 }
 
@@ -32,7 +32,7 @@ impl LoginState {
     pub fn new() -> Self {
         Self {
             stage: LoginStage::Unauthorized,
-            account: None,
+            login_session: None,
             client_key: None,
         }
     }
@@ -48,8 +48,9 @@ impl LoginState {
 
     /// Returns an immutable reference to the account
     fn get_account(&self) -> anyhow::Result<&account::Model> {
-        self.account
+        self.login_session
             .as_ref()
+            .map(|login| &login.acc)
             .ok_or_else(|| anyhow::format_err!("Not authorized"))
     }
 
@@ -59,14 +60,14 @@ impl LoginState {
     }
 
     /// Claim account so It can not be used by the state any longer
-    pub fn claim_account(&mut self) -> anyhow::Result<account::Model> {
+    pub fn claim_session(&mut self) -> anyhow::Result<OwnedShroomLoginSession> {
         self.stage = LoginStage::Unauthorized;
-        Ok(self.account.take().unwrap())
+        Ok(self.login_session.take().unwrap())
     }
 
     
     pub fn reset(&mut self) {
-        self.account = None;
+        self.login_session = None;
         self.client_key = None;
         self.stage = LoginStage::default();
     }
@@ -114,14 +115,14 @@ impl LoginState {
         F: FnOnce(account::Model) -> Fut,
         Fut: Future<Output = anyhow::Result<account::Model>>,
     {
-        let acc = self
-            .account
-            .take()
-            .ok_or_else(|| anyhow::anyhow!("No account"))?;
+        let login = self
+            .login_session
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("Not logged in"))?;
 
-        let new_acc = update(acc).await?;
-        self.account = Some(new_acc);
-        Ok(self.account.as_ref().unwrap())
+        let new_acc = update(login.acc.clone()).await?;
+        login.acc = new_acc;
+        Ok(&login.acc)
     }
 
     pub fn is_accept_tos_stage(&self) -> bool {
@@ -134,10 +135,10 @@ impl LoginState {
 
 
     /// Transitions the stage with the given account
-    pub fn transition_login_with_acc(&mut self, acc: account::Model) -> anyhow::Result<()> {
-        self.client_key = Some((acc.id as u64).to_le_bytes());
-        let has_gender = acc.gender.is_some();
-        let accepted_tos = acc.accepted_tos;
+    pub fn transition_login_with_session(&mut self, session: OwnedShroomLoginSession) -> anyhow::Result<()> {
+        self.client_key = Some((session.acc.id as u64).to_le_bytes());
+        let has_gender = session.acc.gender.is_some();
+        let accepted_tos = session.acc.accepted_tos;
         self.stage = if !accepted_tos {
             LoginStage::AcceptTOS
         } else if !has_gender {
@@ -146,15 +147,8 @@ impl LoginState {
             LoginStage::Pin
         };
 
-        self.account = Some(acc);
+        self.login_session = Some(session);
 
-        Ok(())
-    }
-
-    /// Transitions the stage
-    pub fn transition_login(&mut self) -> anyhow::Result<()> {
-        let acc = self.account.take().unwrap();
-        self.transition_login_with_acc(acc)?;
         Ok(())
     }
 

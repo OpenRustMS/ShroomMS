@@ -1,39 +1,21 @@
-use std::ops::{Deref, DerefMut, RangeInclusive};
+use std::ops::{Deref, DerefMut};
 
 use chrono::NaiveDateTime;
-use enum_map::{enum_map, Enum, EnumMap};
-use shroom_net::packet::proto::time::{ShroomExpirationTime, ShroomTime};
+
 use proto95::{
     id::ItemId,
     shared::item::{self as proto_item},
 };
-use rand::Rng;
+use rand::{thread_rng, Rng};
+use shroom_net::packet::proto::time::{ShroomExpirationTime, ShroomTime};
 
 use crate::{
     entities::{equip_item, item_stack},
-    services::meta::meta_service::{get_equip_stats, ItemMeta}, proto_mapper::db_to_shroom_time,
+    proto_mapper::db_to_shroom_time,
+    services::meta::meta_service::ItemMeta,
 };
 
-#[derive(Debug, Enum, Clone)]
-pub enum EquipStat {
-    Str,
-    Dex,
-    Int,
-    Luk,
-    Hp,
-    Mp,
-    WeaponAtk,
-    MagicAtk,
-    WeaponDef,
-    MagicDef,
-    Accuracy,
-    Avoid,
-    Craft,
-    Speed,
-    Jump,
-}
-
-pub type EquipStats = EnumMap<EquipStat, u16>;
+use super::stats::{EquipStats, StatsExt};
 
 #[derive(Debug, Clone)]
 pub struct ItemLevelInfo {
@@ -73,7 +55,7 @@ impl ItemInfo {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct EquipItem {
     pub info: ItemInfo,
     pub stats: EquipStats,
@@ -85,29 +67,11 @@ pub struct EquipItem {
 
 impl From<equip_item::Model> for EquipItem {
     fn from(value: equip_item::Model) -> Self {
+        let stats = EquipStats::from_db_stats(&value);
         let owner = if value.owner_tag.is_empty() {
             None
         } else {
-            Some(value.owner_tag.clone())
-        };
-
-        //TODO
-        let stats = enum_map! {
-            EquipStat::Str => value.str as u16,
-            EquipStat::Dex => value.dex as u16,
-            EquipStat::Luk => value.luk as u16,
-            EquipStat::Int => value.int as u16,
-            EquipStat::Hp => value.hp as u16,
-            EquipStat::Mp => value.mp as u16,
-            EquipStat::WeaponAtk => value.weapon_atk as u16,
-            EquipStat::WeaponDef => value.weapon_def as u16,
-            EquipStat::MagicAtk => value.magic_atk as u16,
-            EquipStat::MagicDef => value.magic_def as u16,
-            EquipStat::Accuracy => value.accuracy as u16,
-            EquipStat::Avoid => value.avoid as u16,
-            EquipStat::Speed => value.speed as u16,
-            EquipStat::Jump => value.jump as u16,
-            EquipStat::Craft => value.craft as u16,
+            Some(value.owner_tag)
         };
         Self {
             info: ItemInfo {
@@ -121,7 +85,7 @@ impl From<equip_item::Model> for EquipItem {
             },
             hammers_used: value.vicious_hammers as u8,
             level_info: Some(ItemLevelInfo {
-                level: value.level as u8, //TODO
+                level: value.item_level as u8, //TODO
                 exp: value.item_exp as u32,
             }),
             slots: value.upgrade_slots as u8,
@@ -145,18 +109,11 @@ impl DerefMut for EquipItem {
     }
 }
 
-fn rnd_stat(mut rng: impl Rng, stat: u16) -> u16 {
-    if stat == 0 {
-        return 0;
-    }
-
-    rng.gen_range(stat.wrapping_sub(2)..=stat).max(1)
-}
-
 impl EquipItem {
     pub fn from_item_id(item_id: ItemId, meta: ItemMeta) -> Self {
         let mut rng = rand::thread_rng();
-        let stats = get_equip_stats(meta).map(|_, v| rnd_stat(&mut rng, v));
+        let mut stats = EquipStats::from_equip_meta(meta);
+        stats.apply_chaos_scroll(&mut rng, -2..=2);
         Self {
             info: ItemInfo::from_id(item_id),
             stats,
@@ -165,29 +122,6 @@ impl EquipItem {
             level_info: None,
             upgrades: 0,
         }
-    }
-
-    pub fn apply_chaos_scroll(
-        &mut self,
-        mut rng: impl rand::Rng,
-        chance: f64,
-        range: RangeInclusive<i16>,
-    ) -> bool {
-        let success = rng.gen_bool(chance);
-        if !success {
-            return false;
-        }
-
-        for val in self.stats.values_mut() {
-            if *val == 0 {
-                continue;
-            }
-
-            let stat_diff = rng.gen_range(range.clone());
-            *val = val.saturating_add_signed(stat_diff);
-        }
-
-        true
     }
 }
 
@@ -243,17 +177,16 @@ impl From<&EquipItem> for proto_item::EquipItemInfo {
             info: proto_item::ItemInfo {
                 item_id: value.item_id,
                 cash_id: value.cash_id.into(),
-                expiration: value.expiration.map(db_to_shroom_time).into()
+                expiration: value.expiration.map(db_to_shroom_time).into(),
             },
             stats: proto_item::EquipAllStats {
                 remaining_upgrade_slots: value.slots,
                 upgrade_count: value.upgrades,
-                stats: map_eq_stats(&value.stats),
-                title: value.owner.clone().unwrap_or("".to_string()),
+                stats: value.stats.as_game_stats(),
+                title: value.owner.clone().unwrap_or_default(),
                 flags: value.flags,
             },
-            // TODO what's that
-            time_stamp: ShroomTime::now(),
+            equipped_at: ShroomTime::now(),
             lvl_up_ty: 0,
             lvl: value.level_info.as_ref().map(|l| l.level).unwrap_or(0),
             exp: value.level_info.as_ref().map(|l| l.exp).unwrap_or(0),
@@ -263,29 +196,10 @@ impl From<&EquipItem> for proto_item::EquipItemInfo {
             stars: 3,
             options: [0; 3],
             sockets: [0; 2],
-            sn: value.db_id.unwrap() as u64,
+            // TODO handle cashid/sn better
+            sn: Some(value.db_id.unwrap_or(thread_rng().gen()) as u64).into(),
             prev_bonus_exp_rate: -1,
         }
-    }
-}
-
-fn map_eq_stats(stats: &EquipStats) -> proto95::shared::item::EquipStats {
-    proto95::shared::item::EquipStats {
-        str: stats[EquipStat::Str],
-        dex: stats[EquipStat::Dex],
-        int: stats[EquipStat::Int],
-        luk: stats[EquipStat::Luk],
-        hp: stats[EquipStat::Hp],
-        mp: stats[EquipStat::Mp],
-        watk: stats[EquipStat::WeaponAtk],
-        matk: stats[EquipStat::MagicAtk],
-        wdef: stats[EquipStat::WeaponDef],
-        mdef: stats[EquipStat::MagicDef],
-        accuracy: stats[EquipStat::Accuracy],
-        avoid: stats[EquipStat::Avoid],
-        craft: stats[EquipStat::Craft],
-        speed: stats[EquipStat::Speed],
-        jump: stats[EquipStat::Jump],
     }
 }
 
@@ -298,27 +212,9 @@ impl From<&StackItem> for proto_item::ItemStackData {
                 expiration: ShroomExpirationTime::never(),
             },
             quantity: value.quantity,
-            title: value.owner.clone().unwrap_or("aaa".to_string()),
+            title: value.owner.clone().unwrap_or(String::new()),
             flag: value.flags,
-            serial_number: None.into(),
+            sn: None.into(),
         }
     }
 }
-
-/*
-
-fn map_item_info(info: &services::model::item::ItemInfo) -> ItemInfo {
-    todo!()
-}
-
-fn map_item(item: &EquipItem) -> Item {
-    Item::Equip(EquipItemInfo {
-        info: map_item_info(&item.info),
-        stats: enum_map! {
-            array: todo!(),
-        },
-        level_info: OptionalLevelInfo(None),
-        time_stamp: ShroomTime::zero(),
-        unknown1: 0,
-    })
-}*/

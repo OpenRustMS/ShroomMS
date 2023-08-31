@@ -92,7 +92,7 @@ fn has_world_info(world_id: &u8) -> bool {
 #[derive(Debug, ShroomPacket)]
 pub struct WorldInfoResp {
     pub world_id: u8,
-    #[pkt(if(field = "world_id", cond = "has_world_info"))]
+    #[pkt(check(field = "world_id", cond = "has_world_info"))]
     pub world: CondOption<WorldItem>,
 }
 packet_opcode!(WorldInfoResp, SendOpcodes::WorldInformation);

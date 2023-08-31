@@ -18,7 +18,7 @@ use proto95::game::ObjectId;
 use shroom_net::{packet::EncodePacket, HasOpcode, PacketBuffer};
 use std::fmt::Debug;
 
-use crate::services::{meta::meta_service::MetaService, session::ShroomSessionSet};
+use crate::services::{meta::meta_service::MetaService, session::shroom_session_manager::ShroomSessionSet};
 
 pub fn next_id() -> ObjectId {
     static ID: AtomicU32 = AtomicU32::new(0);
@@ -101,7 +101,7 @@ where
 
     pub fn on_enter(&self, packet_buf: &mut PacketBuffer) -> anyhow::Result<()> {
         for (id, pkt) in self.items.read().expect("Pool on enter").iter() {
-            packet_buf.write_packet(pkt.get_enter_pkt(*id))?;
+            packet_buf.encode_packet(pkt.get_enter_pkt(*id))?;
         }
 
         Ok(())

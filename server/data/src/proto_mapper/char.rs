@@ -9,13 +9,16 @@ use crate::entities::character;
 impl From<&character::Model> for CharStat {
     fn from(char: &character::Model) -> Self {
         let job = JobId::try_from(char.job as u16).unwrap();
+
+        // If job has no extended sp only take the first page
         let sp = if !job.has_extended_sp() {
-            Either::Right(char.sp as u16)
+            Either::Right(char.get_skill_points())
         } else {
-            let pages = char.get_skill_pages();
+            let page = char.get_skill_pages();
+            // TODO: handle overflow for u8
             Either::Left(array_init::array_init(|i| SkillPointPage {
                 index: i as u8,
-                value: pages[i],
+                value: page[i] as u8,
             }))
         };
 

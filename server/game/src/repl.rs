@@ -4,9 +4,9 @@ use data::services::helper::pool::{
     user::User,
     Mob,
 };
-use proto95::id::ItemId;
+use proto95::id::{ItemId, MapId};
 
-use crate::GameHandler;
+use crate::{Ctx, GameHandler};
 
 #[derive(Parser, Debug)]
 pub enum ReplCmd {
@@ -17,6 +17,7 @@ pub enum ReplCmd {
     FakeUser { id: u32 },
     Aggro,
     Dispose,
+    Teleport,
 }
 
 pub struct GameRepl {
@@ -58,17 +59,17 @@ impl GameRepl {
 }
 
 impl GameHandler {
-    pub async fn handle_repl_cmd(&mut self, cmd: ReplCmd) -> anyhow::Result<Option<String>> {
+    pub async fn handle_repl_cmd(ctx: &mut Ctx, cmd: ReplCmd) -> anyhow::Result<Option<String>> {
         Ok(match cmd {
             ReplCmd::Mob { id } => {
                 let mob = id.unwrap_or(1110100);
-                let meta = self.services.meta.get_mob_data(mob).unwrap();
-                self.field
+                let meta = ctx.services.meta.get_mob_data(mob).unwrap();
+                ctx.field
                     .add_mob(Mob {
                         meta,
                         tmpl_id: mob,
-                        pos: self.pos,
-                        fh: self.fh,
+                        pos: ctx.pos,
+                        fh: ctx.fh,
                         origin_fh: None,
                         hp: meta.max_hp,
                         perc: 100,
@@ -77,10 +78,10 @@ impl GameHandler {
                 None
             }
             ReplCmd::Mesos { amount } => {
-                self.field.add_drop(Drop {
+                ctx.field.add_drop(Drop {
                     owner: proto95::game::drop::DropOwner::None,
-                    pos: self.pos,
-                    start_pos: self.pos,
+                    pos: ctx.pos,
+                    start_pos: ctx.pos,
                     value: DropTypeValue::Mesos(amount),
                     quantity: 1,
                 })?;
@@ -88,41 +89,45 @@ impl GameHandler {
             }
             ReplCmd::Item { id } => {
                 let item = id.map_or(ItemId::ADVANCED_MONSTER_CRYSTAL_1, ItemId);
-                self.field.add_drop(Drop {
+                ctx.field.add_drop(Drop {
                     owner: proto95::game::drop::DropOwner::None,
-                    pos: self.pos,
-                    start_pos: self.pos,
+                    pos: ctx.pos,
+                    start_pos: ctx.pos,
                     value: DropTypeValue::Item(item),
                     quantity: 1,
                 })?;
                 None
             }
             ReplCmd::FakeUser { id } => {
-                self.field.add_user(User {
-                    avatar_data: self.avatar_data.clone(),
+                ctx.field.add_user(User {
+                    avatar_data: ctx.session.char.get_avatar_data(),
                     char_id: id,
-                    pos: self.pos,
-                    fh: self.fh,
+                    pos: ctx.pos,
+                    fh: ctx.fh,
                 })?;
                 None
             }
             ReplCmd::Aggro => {
-                self.field.assign_mob_controller(self.sess_handle.clone())?;
+                ctx.field
+                    .assign_mob_controller(ctx.session_handle.clone())?;
                 None
             }
             ReplCmd::Dispose => {
-                //TODO send packet
-                self.enable_char();
+                ctx.enable_char();
                 None
             }
             ReplCmd::Chat { msg } => Some(msg),
+            ReplCmd::Teleport => {
+                GameHandler::join_field(ctx, MapId(1010000), None).await?;
+                None
+            }
         })
     }
 
-    pub async fn handle_repl(&mut self, s: &str) -> anyhow::Result<Option<String>> {
-        Ok(match self.repl.match_cmd(s) {
-            Err(_) => Some(self.repl.help()),
-            Ok(cmd) => self.handle_repl_cmd(cmd).await?,
+    pub async fn handle_repl(ctx: &mut Ctx, s: &str) -> anyhow::Result<Option<String>> {
+        Ok(match ctx.repl.match_cmd(s) {
+            Err(_) => Some(ctx.repl.help()),
+            Ok(cmd) => Self::handle_repl_cmd(ctx, cmd).await?,
         })
     }
 }

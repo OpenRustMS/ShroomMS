@@ -21,5 +21,8 @@ game_data/**
 client/moople_ffi
 util/packet_tracer
 
+# tuf
+client_repo/**
+
 *.svg
 *.png

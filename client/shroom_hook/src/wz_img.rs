@@ -1,12 +1,9 @@
 use std::ffi::c_void;
 
-use crate::{fn_ref, fn_ref2, fn_ref_hook};
+use crate::{fn_ref2, fn_ref_hook};
 use bitflags::bitflags;
 use detour::static_detour;
-use windows::{
-    core::{PCSTR, PCWSTR},
-    w,
-};
+use windows::core::{s, w, PCSTR, PCWSTR};
 
 pub type CWvsApp = c_void;
 pub type IResMan = c_void;
@@ -138,17 +135,17 @@ fn cwvs_app_init_res_man_hook(_app: *const CWvsApp) {
         iwz_filesystem_init((*p_fs).0, path);
         //TODO free bstr
 
-        bstr_ctor(&mut path, windows::s!("/"));
+        bstr_ctor(&mut path, s!("/"));
         iwz_namespace_mount((*g_root).0, path, (*p_fs).0, prio);
 
         // Data File System
         pc_create_obj_iwz_filesystem(fs_name, p_fs, unk_outer);
 
-        bstr_ctor(&mut path, windows::s!("./Data"));
+        bstr_ctor(&mut path, s!("./Data"));
         iwz_filesystem_init((*p_fs).0, path);
         //TODO free bstr
 
-        bstr_ctor(&mut path, windows::s!("/"));
+        bstr_ctor(&mut path, s!("/"));
         iwz_namespace_mount((*g_root).0, path, (*p_fs).0, prio);
     };
 }

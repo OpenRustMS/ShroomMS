@@ -1,3 +1,4 @@
+pub mod item;
 pub mod character;
 pub mod data;
 pub mod field;
@@ -26,7 +27,7 @@ use self::{
     },
     field::FieldService,
     meta::meta_service::MetaService,
-    session::{session_data::ShroomSessionBackend, GameSessionManager},
+    session::{ShroomSessionManager, ShroomSessionBackend},
 };
 
 pub type SharedServices = Arc<Services>;
@@ -35,7 +36,7 @@ pub type SharedServices = Arc<Services>;
 pub struct Services {
     pub data: Arc<DataServices>,
     pub server_info: ServerService,
-    pub session_manager: GameSessionManager<ShroomSessionBackend>,
+    pub session_manager: ShroomSessionManager<ShroomSessionBackend>,
     pub field: FieldService,
     pub meta: &'static MetaService,
 }
@@ -48,11 +49,11 @@ impl Services {
     ) -> Self {
         let data = Arc::new(DataServices::new(db, meta));
 
-        let session_backend = ShroomSessionBackend { data: data.clone() };
+        let session_backend = ShroomSessionBackend::new(data.clone());
 
         Self {
-            data,
-            session_manager: GameSessionManager::new(session_backend, Duration::from_secs(30)),
+            data: data.clone(),
+            session_manager: ShroomSessionManager::new(session_backend, Duration::from_secs(30)),
             server_info: ServerService::new(servers),
             field: FieldService::new(meta),
             meta,
@@ -86,7 +87,7 @@ impl Services {
             .account
             .create(
                 "admin",
-                "test123",
+                "test1234",
                 Region::Europe,
                 true,
                 Some(GenderTy::Female),

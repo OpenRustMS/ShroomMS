@@ -1,11 +1,24 @@
 use crate::entities::character;
 
+pub const TOTAL_SKILL_PAGES: usize = 10;
+
+pub type SkillPages = [u16; TOTAL_SKILL_PAGES];
+
 impl character::Model {
-    pub fn get_skill_pages(&self) -> &[u8; 10] {
-        self.skill_points.as_slice().try_into().unwrap()
+    pub fn get_skill_pages(&self) -> &SkillPages {
+        bytemuck::try_from_bytes(self.skill_points.as_slice()).expect("skill pages")
+        
     }
 
-    pub fn get_skill_pages_mut(&mut self) -> &mut [u8; 10] {
-        self.skill_points.as_mut_slice().try_into().unwrap()
+    pub fn get_skill_pages_mut(&mut self) -> &mut SkillPages {
+        bytemuck::try_from_bytes_mut(self.skill_points.as_mut_slice()).expect("skill pages mut")
+    }
+
+    pub fn get_skill_points(&self) -> u16 {
+        self.get_skill_pages()[0]
+    }
+
+    pub fn set_skill_points_mut(&mut self) -> &mut u16 {
+        &mut self.get_skill_pages_mut()[0]
     }
 }

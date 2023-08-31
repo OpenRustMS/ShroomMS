@@ -1,15 +1,16 @@
 #![feature(
     link_llvm_intrinsics,
-    once_cell,
-    abi_thiscall,
     pointer_byte_offsets,
     naked_functions,
     strict_provenance,
-    asm_const
+    asm_const,
+    lazy_cell
 )]
 #![recursion_limit = "512"]
 // The whole library is unsafe no need to document the behaviour for now
 #![allow(clippy::missing_safety_doc)]
+
+pub mod login;
 
 pub mod config;
 pub mod packet_struct;
@@ -27,7 +28,8 @@ use detour::GenericDetour;
 use log::LevelFilter;
 use packet_struct::RECV_PACKET_CTX;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
-use std::ffi::c_void;
+use windows::Win32::Storage::FileSystem::WIN32_FIND_DATAA;
+use std::ffi::{c_void, CString};
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
@@ -37,14 +39,14 @@ use std::time::Duration;
 use windows::core::{IUnknown, GUID, HRESULT, HSTRING, PCSTR};
 use windows::Win32::Foundation::{BOOL, HANDLE, HMODULE};
 use windows::Win32::Security::SECURITY_ATTRIBUTES;
-use windows::Win32::Storage::FileSystem::{FindFileHandle, WIN32_FIND_DATAA};
 use windows::Win32::System::Console::AllocConsole;
 use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 use windows::Win32::System::SystemServices::{DLL_PROCESS_ATTACH, DLL_PROCESS_DETACH};
-use windows::{s, w};
+use windows::core::{s, w};
 
 use crate::config::addr::{AES_BASIC_KEY, AES_USER_KEY, IG_CIPHER_SEED, IG_SHUFFLE_KEY};
 use crate::config::{DATA_DIR, DUMP_KEYS};
+use crate::login::AutoLoginData;
 use crate::packet_struct::SEND_PACKET_CTX;
 use crate::strings::StringPool;
 use crate::util::{nop, return_address};
@@ -72,21 +74,21 @@ static_win32_fn_hook!(
     w!("kernel32.dll"),
     s!("FindFirstFileA"),
     find_first_file_detour,
-    type FnFindFirstFileA = extern "system" fn(PCSTR, *mut WIN32_FIND_DATAA) -> FindFileHandle
+    type FnFindFirstFileA = extern "system" fn(PCSTR, *mut WIN32_FIND_DATAA) -> HANDLE
 );
 
 // Spoof the first call to FindFirstFileA, to hide this proxy DLL
 extern "system" fn find_first_file_detour(
     file_name: PCSTR,
     find_file_data: *mut WIN32_FIND_DATAA,
-) -> FindFileHandle {
+) -> HANDLE {
     static SPOOFED_PROXY_DLL: AtomicBool = AtomicBool::new(false);
     if !file_name.is_null() && unsafe { file_name.as_bytes() } == b"*" {
         //Only spoof once at start
         if !SPOOFED_PROXY_DLL.fetch_or(true, Ordering::SeqCst) {
             log::info!("Spoofing FindFirstFileA for proxy dll");
             // Let it iterate over wz files
-            return FIND_FIRST_FILE_A_HOOK.call(windows::s!("*.wz"), find_file_data);
+            return FIND_FIRST_FILE_A_HOOK.call(s!("*.wz"), find_file_data);
         }
     }
     FIND_FIRST_FILE_A_HOOK.call(file_name, find_file_data)
@@ -106,17 +108,16 @@ extern "system" fn create_mutex_a_detour(
     binitialowner: BOOL,
     name: PCSTR,
 ) -> HANDLE {
-    let ret = ret_addr!();
-    if !name.is_null() {
-        log::info!("Spoofing CreateMutexA for multi client: {ret:X}");
-        let name = std::str::from_utf8(unsafe { name.as_bytes() }).unwrap();
-        // Add pid to the name to support multi client
-        let pid = std::process::id();
-        // Could be made nicer, when the windows crate has interpolation for the s! macro
-        let new_name = format!("{name}_{pid}");
-        let p_new_name = PCSTR::from_raw(new_name.as_ptr());
 
-        return CREATE_MUTEX_A_HOOK.call(lpmutexattributes, binitialowner, p_new_name);
+    let ret = ret_addr!();
+    log::info!("CreateMutexA with name: {name:?} @ {ret:X}");
+    if !name.is_null() {
+        let name_s = unsafe { name.display() };
+        let pid = std::process::id();
+        let spoofed_mtx_name = format!("{name_s}_{pid}\0");
+
+        log::info!("Spoofing Mutex to: {}", spoofed_mtx_name);
+        return CREATE_MUTEX_A_HOOK.call(lpmutexattributes, binitialowner, PCSTR::from_raw(spoofed_mtx_name.as_ptr()));
     }
     CREATE_MUTEX_A_HOOK.call(lpmutexattributes, binitialowner, name)
 }
@@ -162,7 +163,7 @@ fn dump_str_pool() -> anyhow::Result<()> {
 }
 
 fn setup_logs() {
-    unsafe { AllocConsole() };
+    let _ = unsafe { AllocConsole() };
     TermLogger::init(
         LevelFilter::Trace,
         Config::default(),
@@ -204,6 +205,7 @@ pub fn dump_keys() -> anyhow::Result<()> {
     Ok(())
 }
 
+
 fn exec() {
     let data_dir = Path::new(DATA_DIR);
     if !data_dir.exists() {
@@ -222,6 +224,17 @@ fn exec() {
         unsafe { nop(addr::LOGO_BRANCHES as *mut u8, 16).unwrap() };
     }
     init_hooks().unwrap();
+    let login = LazyLock::force(&login::LOGIN);
+    login.init().expect("Login Hooks");
+
+    if let Ok(token) = std::env::var("SHROOM_TOKEN") {
+        log::info!("Login token: {token}");
+        if let Some((id, pw)) = token.split_once(':') {
+            login.set_auto_login_data(id, pw);
+        } else {
+            log::info!("Invalid token format, expected id:pw");
+        }
+    }
 
     // Wait for the instances to be initialized, maybe should wait for the window to be created rather
     std::thread::sleep(Duration::from_secs(1));
@@ -240,6 +253,9 @@ unsafe fn stage_0_hooks() {
 
 fn initialize() {
     setup_logs();
+
+
+    // Get Token
     log::info!("{} - {}", config::NAME, config::VERSION);
 
     // Load original dinput8
@@ -258,6 +274,7 @@ fn initialize() {
 extern "system" fn DllMain(dll_module: HMODULE, call_reason: u32, reserved: *mut c_void) -> BOOL {
     match call_reason {
         DLL_PROCESS_ATTACH => {
+
             #[cfg(feature = "overlay")]
             overlay::init_module(dll_module);
 

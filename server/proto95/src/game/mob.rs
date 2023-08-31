@@ -1,18 +1,23 @@
-use shroom_net_derive::ShroomPacket;
-use shroom_net::{packet::{
-    
-    proto::{
+use shroom_net::{
+    packet::proto::{
         option::ShroomOption8,
+        partial::PartialFlag,
         time::{ShroomDurationMs16, ShroomDurationMs32},
-        CondOption, ShroomList32, PacketWrapped, partial::PartialFlag,
-    }
-}, partial_data, shroom_enum_code, shroom_packet_enum, packet_opcode};
+        CondOption, PacketWrapped, ShroomList32,
+    },
+    packet_opcode, partial_data, shroom_enum_code, shroom_packet_enum,
+};
+use shroom_net_derive::ShroomPacket;
 
 use crate::{
     id::{ItemId, SkillId},
     recv_opcodes::RecvOpcodes,
     send_opcodes::SendOpcodes,
-    shared::{char::CharacterId, movement::{MovePassivePath, MovePath}, FootholdId, TagPoint, Vec2},
+    shared::{
+        char::CharacterId,
+        movement::{MovePassivePath, MovePath},
+        FootholdId, TagPoint, Vec2,
+    },
 };
 
 use super::ObjectId;
@@ -171,18 +176,15 @@ pub struct MobChangeControllerResp {
     //TODO only if level != 0
     //pub seed: CrcSeed,
     pub id: ObjectId,
-    #[pkt(if(field = "level", cond = "has_local_mob_data"))]
+    #[pkt(check(field = "level", cond = "has_local_mob_data"))]
     pub local_mob_data: CondOption<LocalMobData>,
 }
 packet_opcode!(MobChangeControllerResp, SendOpcodes::MobChangeController);
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FlyTargetPoint(pub Option<TagPoint>);
 
-pub const NONE_FLY_TARGET_POS: TagPoint = TagPoint {
-    x: 0xffddcc,
-    y: 0xffddcc,
-};
+pub const NONE_FLY_TARGET_POS: TagPoint = TagPoint::new(0xffddcc, 0xffddcc);
 
 impl PacketWrapped for FlyTargetPoint {
     type Inner = TagPoint;
@@ -192,9 +194,10 @@ impl PacketWrapped for FlyTargetPoint {
     }
 
     fn packet_from(v: Self::Inner) -> Self {
-        match v {
-            NONE_FLY_TARGET_POS => Self(None),
-            _ => Self(Some(v)),
+        if v == NONE_FLY_TARGET_POS {
+            Self(None)
+        } else {
+            Self(Some(v))
         }
     }
 }
@@ -234,6 +237,31 @@ pub struct MobMoveReq {
     pub chase_duration: u32,
 }
 packet_opcode!(MobMoveReq, RecvOpcodes::MobMove);
+
+#[cfg(test)]
+mod tests2 {
+    use shroom_net::DecodePacket;
+
+    use super::MobMoveReq;
+
+    #[test]
+    fn sample_shroom_move() {
+        let data = [
+            0x19u8, 0x1C, 0x53, 0x00, 0xCB, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0xCC, 0xDD, 0xFF,
+            0x00, 0xCC, 0xDD, 0xFF, 0x00, 0x0D, 0x8C, 0xB5, 0x9C, 0xAC, 0x00, 0x64, 0x00, 0x98,
+            0xFF, 0x45, 0x00, 0x03, 0x00, 0x64, 0x00, 0x94, 0x00, 0x78, 0xFF, 0x5A, 0x00, 0x16,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x1C, 0x02, 0x00, 0x5A, 0x00, 0x9B, 0x00, 0x5D,
+            0xFF, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x4A, 0x00, 0x00, 0x1D,
+            0x00, 0x9B, 0x00, 0x83, 0xFF, 0x00, 0x00, 0x13, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03,
+            0xD2, 0x01, 0x00, 0x1D, 0x00, 0x64, 0x00, 0xAC, 0x00, 0x9B, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
+
+        let req = MobMoveReq::decode_from_data_complete(&data);
+        dbg!(req);
+    }
+}
 
 #[derive(ShroomPacket, Debug)]
 pub struct MobMoveCtrlAckResp {
