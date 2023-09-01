@@ -1,5 +1,5 @@
+use shroom_net::{packet::proto::option::ShroomOptionR8, packet_opcode};
 use shroom_net_derive::ShroomPacket;
-use shroom_net::{packet::{proto::option::ShroomOptionR8}, packet_opcode};
 
 use crate::send_opcodes::SendOpcodes;
 
@@ -17,7 +17,9 @@ pub struct FuncKeyMapInitResp {
 
 impl FuncKeyMapInitResp {
     pub fn default_map() -> Self {
-        Self { key_bindings: None.into() }
+        Self {
+            key_bindings: None.into(),
+        }
     }
 }
 

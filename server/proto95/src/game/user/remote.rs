@@ -1,10 +1,11 @@
-use shroom_net_derive::ShroomPacket;
-use shroom_net::{packet::{
-    proto::{
+use shroom_net::{
+    packet::proto::{
         list::ShroomIndexListZ8, option::ShroomOption8, partial::PartialFlag,
         time::ShroomDurationMs32, ShroomList32,
     },
-}, packet_opcode};
+    packet_opcode,
+};
+use shroom_net_derive::ShroomPacket;
 
 use crate::{
     id::{job_id::JobId, ItemId, SkillId},

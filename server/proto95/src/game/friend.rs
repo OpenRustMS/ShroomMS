@@ -1,7 +1,8 @@
+use shroom_net::{
+    packet::proto::{option::ShroomOption8, string::FixedPacketString},
+    packet_opcode, shroom_packet_enum,
+};
 use shroom_net_derive::ShroomPacket;
-use shroom_net::{packet::{
-    proto::{option::ShroomOption8, string::FixedPacketString},
-}, shroom_packet_enum, packet_opcode};
 
 use crate::{
     send_opcodes::SendOpcodes,

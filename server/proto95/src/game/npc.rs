@@ -1,5 +1,5 @@
 use shroom_net_derive::ShroomPacket;
-use shroom_net::{packet::{proto::ShroomList8}, packet_opcode};
+use shroom_net::{packet::proto::ShroomList8, packet_opcode};
 
 use crate::{
     send_opcodes::SendOpcodes,

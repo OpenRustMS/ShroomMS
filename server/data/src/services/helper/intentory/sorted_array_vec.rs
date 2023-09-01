@@ -3,7 +3,7 @@ use arrayvec::ArrayVec;
 #[derive(Debug, Clone)]
 pub struct SortedArrayVec<V, const CAP: usize>(ArrayVec<V, CAP>);
 
-pub trait SortedItemKey {
+pub trait SortedItemKey: Sized {
     type K: PartialOrd + PartialEq + Eq + Ord;
     fn key(&self) -> Self::K;
 }
@@ -19,7 +19,7 @@ where
 
 impl<V, const CAP: usize> SortedArrayVec<V, CAP>
 where
-    V: SortedItemKey + Sized,
+    V: SortedItemKey,
 {
     /// Binary searches the vec for the given Item Key
     /// If an item with the Key is found It returns Ok
@@ -153,17 +153,9 @@ where
 
     /// Returns the index of the reference
     pub fn index_of(&self, item: &V) -> usize {
-        let item_ptr = item as *const V;
-        let slice_ptr = self.0.as_ptr();
-        unsafe { item_ptr.offset_from(slice_ptr) as usize }
-    }
-
-    /// Debug helper to check the assertion
-    #[cfg(test)]
-    pub(crate) fn test_check_sorted(&self) -> bool {
-        use crate::util::slice_by_key_is_sorted;
-        //iter_is_sorted(self.iter().map(|i| i.key()))
-        slice_by_key_is_sorted(self.0.as_slice(), |i| i.key())
+        let item_ptr = item as *const V as usize;
+        let slice_ptr = self.0.as_ptr() as usize;
+        (slice_ptr - item_ptr) / std::mem::size_of::<V>()
     }
 }
 
@@ -172,48 +164,50 @@ impl<const CAP: usize, T> AsRef<[T]> for SortedArrayVec<T, CAP> {
         self.0.as_ref()
     }
 }
+
+impl<V, const CAP: usize> FromIterator<V> for SortedArrayVec<V, CAP>
+where
+    V: SortedItemKey,
+{
+    fn from_iter<I: IntoIterator<Item = V>>(iter: I) -> Self {
+        let mut items = Self::default();
+        for item in iter {
+            items.add(item);
+        }
+        items
+    }
+}
 #[cfg(test)]
 mod tests {
-
-    use crate::services::helper::intentory::sorted_array_vec::SortedArrayVec;
+    use super::SortedArrayVec;
 
     // Test sorted item list
+    const CAP: usize = 32;
 
     #[test]
     fn item_vec_insert_delete() {
-        const CAP: usize = 32;
-        const CAP32: u32 = CAP as u32;
+        let range = 1..=CAP as u32;
 
         // Ascending order insert
-        let mut items = SortedArrayVec::<u32, CAP>::default();
-        assert!(items.is_empty());
-        //Insert in reverse order
-        (1..=CAP).for_each(|i| {
-            items.try_add(i as u32).unwrap();
-        });
+        let mut items = SortedArrayVec::<u32, CAP>::from_iter(range.clone());
         //Check that items are in ascending sorted order
-        itertools::assert_equal(items.iter().cloned(), 1..=CAP32);
+        itertools::assert_equal(items.iter().cloned(), range.clone());
         assert!(items.is_full());
 
         // Delete from start
-        for i in 1..=CAP {
-            assert_eq!(items.remove(0) as usize, i);
+        for i in range.clone() {
+            assert_eq!(items.remove(0), i);
         }
+        assert_eq!(items.len(), 0); 
 
-        // Descending order insert
-        let mut items = SortedArrayVec::<u32, CAP>::default();
         //Insert in reverse order
-        (1..=CAP).rev().for_each(|i| {
-            items.try_add(i as u32).unwrap();
-        });
+        let items = SortedArrayVec::<u32, CAP>::from_iter(range.clone().rev());
         //Check that items are in ascending sorted order
-        itertools::assert_equal(items.iter().cloned(), 1..=CAP32);
+        itertools::assert_equal(items.iter().cloned(), range.clone());
     }
 
     #[test]
     fn item_get_by_id() {
-        const CAP: usize = 32;
-
         let mut items = SortedArrayVec::<u32, CAP>::default();
         // Add 2 ids for 1 to 15 and one 0 + one 16
         for i in 1..=CAP {
