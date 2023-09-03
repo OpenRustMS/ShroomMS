@@ -36,13 +36,14 @@ serde = "1"
 thiserror = "1"
 tokio = { version = "1", features = ["rt", "macros"] }
 shroom_net_derive = "0.2.2"
-shroom_net = "0.2"
+shroom_net = "0.3"
 password-hash = "0.5.0"
 argon2 = "0.5.1"
 bytemuck = "1.13.1"
 euclid = "0.22.9"
 tracker = "0.2.1"
 derive_more = "0.99.17"
+smallvec = "1.11.0"
 
 [dependencies.uuid]
 version = "1"

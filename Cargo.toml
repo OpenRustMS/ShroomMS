@@ -1,12 +1,11 @@
 [workspace]
 members = [
     # Data
-    "data/re-wz",
+    # "data/re-wz",
     "data/game_data",
-    "data/re-wz-ui",
 
     # client
-    "client/shroom_launchar",
+    #"client/shroom_launchar",
 
     # server
     "server/shrooming",
@@ -21,5 +20,5 @@ exclude = ["client/shroom_hook","client/shroom_ffi"]
 
 # Shroom crates for now
 [patch.crates-io]
-shroom_net = { path = "/home/jonas/Dokumente/projects/open-rust-ms/net/crates/shroom_net" }
-shroom_net_derive = { path = "/home/jonas/Dokumente/projects/open-rust-ms/net/crates/shroom_net_derive" }
+shroom_net = { git = "https://github.com/OpenRustMS/net" }
+shroom_net_derive = { git = "https://github.com/OpenRustMS/net" }

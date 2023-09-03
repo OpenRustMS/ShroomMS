@@ -1,13 +1,12 @@
 pub mod char;
-use chrono::NaiveDateTime;
-use sea_orm::prelude::DateTimeUtc;
+use chrono::{NaiveDateTime, TimeZone};
 use shroom_net::packet::proto::time::ShroomTime;
 use proto95::{login::account::AccountInfo, shared::Gender};
 
 use crate::entities::{account, sea_orm_active_enums::GenderTy};
 
 pub fn db_to_shroom_time(dt: NaiveDateTime) -> ShroomTime {
-    ShroomTime::from_datetime(DateTimeUtc::from_utc(dt, chrono::Utc))
+    ShroomTime::from_datetime(chrono::Utc.from_utc_datetime(&dt))
 }
 
 impl From<&GenderTy> for Gender {

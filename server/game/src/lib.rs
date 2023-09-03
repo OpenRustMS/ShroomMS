@@ -22,7 +22,6 @@ use shroom_net::net::service::{SessionHandleResult, ShroomContext};
 use shroom_net::net::ShroomSession;
 use shroom_net::{shroom_router_fn, HasOpcode};
 
-use shroom_net::packet::proto::list::ShroomIndexListZ;
 use shroom_net::packet::proto::partial::PartialFlag;
 use shroom_net::packet::proto::time::ShroomExpirationTime;
 use shroom_net::packet::{

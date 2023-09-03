@@ -21,6 +21,6 @@ shrooming = { version = "0.1", path = "../shrooming" }
 tokio = "1"
 uuid = "1"
 shroom_net_derive = "0.2.2"
-shroom_net = "0.2"
+shroom_net = "0.3"
 dotenv = "0.15"
 proto95 = { version = "0.1.0", path = "../proto95" }

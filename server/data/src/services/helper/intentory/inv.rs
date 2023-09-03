@@ -1,6 +1,5 @@
-use std::fmt::Debug;
-
 use crate::services::helper::intentory::MAX_CAP;
+use std::fmt::Debug;
 
 use super::{
     slot::InventorySlotIndex, sorted_array_vec::SortedArrayVec, InventoryError, InventoryItem,
@@ -207,8 +206,7 @@ where
 
     /// Returns a reference to the item at the given slot
     pub fn get(&self, slot: usize) -> Result<&Item, InventoryError> {
-        self.get_slot(slot)?
-            .ok_or(InventoryError::EmptySlot(slot))
+        self.get_slot(slot)?.ok_or(InventoryError::EmptySlot(slot))
     }
 
     /// Returns a mut reference to the item at the given slot

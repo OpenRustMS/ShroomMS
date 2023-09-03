@@ -211,7 +211,7 @@ impl CharInventory {
             self.invs
                 .equipped
                 .items()
-                .map(|item| item.item.stats.clone())
+                .map(|item| item.item.stats)
         )
     }
 
@@ -248,7 +248,7 @@ impl CharInventory {
             .try_insert(item)
             .map_err(|_| anyhow::format_err!("Insert failed"))?;
 
-        let item = inv.get(slot).expect("Item").into();
+        let item = inv.get(slot).expect("Item");
         log::info!("Stack Item inserted in slot({slot}: {item:?}");
         self.pending_operations.on_add_item(slot, item);
 

@@ -7,14 +7,8 @@ use rand::{distributions::uniform::SampleRange, Rng};
 
 use crate::{entities::equip_item, services::meta::meta_service::ItemMeta};
 
-#[derive(Debug, From, Into, PartialEq, Clone, Copy)]
+#[derive(Debug, From, Into, PartialEq, Clone, Copy, Default)]
 pub struct ItemStat(pub u16);
-
-impl Default for ItemStat {
-    fn default() -> Self {
-        Self(0)
-    }
-}
 
 impl ItemStat {
     pub fn rnd_stat(mut rng: impl Rng, stat: u16) -> Self {

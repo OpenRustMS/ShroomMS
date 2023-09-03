@@ -6,20 +6,6 @@ pub enum TakeResult<Item> {
     Partial((usize, Item)),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum StackInsertResult {
-    // Merged into the (slot, slot new quantity)
-    Merged((usize, usize)),
-    // Inserted into a new slot
-    NewSlot(usize),
-    // Partial inserted in old slot and added a new
-    Partial {
-        slot: usize,
-        slot_quantity: usize,
-        new_slot: usize,
-        new_slot_quantity: usize,
-    },
-}
 
 pub trait StackOperationHandler {
     type Item: StackInventoryItem;
