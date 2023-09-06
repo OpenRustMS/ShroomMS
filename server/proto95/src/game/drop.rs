@@ -1,9 +1,8 @@
+use shroom_net::{
+    packet::proto::{CondOption, PacketTryWrapped, ShroomDurationMs16, ShroomExpirationTime},
+    packet_opcode, shroom_enum_code, shroom_packet_enum, NetError,
+};
 use shroom_net_derive::ShroomPacket;
-use shroom_net::{packet::proto::{
-        ShroomExpirationTime,
-        ShroomDurationMs16,
-        CondOption, PacketTryWrapped,
-    }, NetError, shroom_enum_code, shroom_packet_enum, packet_opcode};
 
 use crate::{
     id::ItemId,

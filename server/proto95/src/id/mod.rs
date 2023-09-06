@@ -8,6 +8,7 @@ use shroom_net::shroom_enum_code;
 
 pub use self::item_id::ItemId;
 pub use self::job_id::JobClass;
+use self::job_id::JobId;
 pub use self::map_id::MapId;
 
 #[macro_export]
@@ -67,13 +68,176 @@ impl HairId {
 shroom_id!(SkillId, u32);
 
 impl SkillId {
-    pub fn is_dispel(&self) -> bool {
-        self.0 == 2311001
+    pub fn is_anti_repeat_buff_skill(&self) -> bool {
+        let mut cond = false;
+        if (self.0 <= 4111001) {
+            if (self.0 == 0x3eba99) {
+                return true;
+            }
+            if (self.0 <= 2121000) {
+                if (self.0 == 0x205d28) {
+                    return true;
+                }
+                if (self.0 <= 0x12a188) {
+                    if (self.0 == 0x12a188) {
+                        return true;
+                    }
+                    if (self.0 > 0x111ae8) {
+                        if (self.0 == 0x12536e) {
+                            return true;
+                        }
+                        if (self.0 <= 0x127a80) {
+                            return false;
+                        }
+                        if (self.0 <= 0x127a82) {
+                            return true;
+                        }
+                        return false;
+                    }
+                    if (self.0 == 0x111ae8) {
+                        return true;
+                    }
+                    if (self.0 == 0xf462b) {
+                        return true;
+                    }
+                    if (self.0 == 0x10ccce) {
+                        return true;
+                    }
+                    cond = self.0 == 0x10f3df;
+                } else if (self.0 > 0x142828) {
+                    if (self.0 == 0x200f09) {
+                        return true;
+                    }
+                    cond = self.0 == 0x200f0b;
+                } else {
+                    if (self.0 == 0x142828) {
+                        return true;
+                    }
+                    if (self.0 < 0x13da0e) {
+                        return false;
+                    }
+                    if (self.0 <= 0x13da0f) {
+                        return true;
+                    }
+                    cond = self.0 == 0x14011f;
+                }
+            } else if (self.0 <= 0x236a68) {
+                if (self.0 == 0x236a68) {
+                    return true;
+                }
+                if (self.0 > 0x231c4c) {
+                    if (self.0 == 0x234359) {
+                        return true;
+                    }
+                    cond = self.0 == 0x23435b;
+                } else {
+                    if (self.0 == 0x231c4c) {
+                        return true;
+                    }
+                    if (self.0 == 0x2195a9) {
+                        return true;
+                    }
+                    if (self.0 == 0x2195ab) {
+                        return true;
+                    }
+                    cond = self.0 == 0x21e3c8;
+                }
+            } else if (self.0 > 0x2f9f6a) {
+                if (self.0 == 0x312608) {
+                    return true;
+                }
+                cond = self.0 == 0x3e938c;
+            } else {
+                if (self.0 == 0x2f9f6a) {
+                    return true;
+                }
+                if (self.0 == 0x236a6d) {
+                    return true;
+                }
+                cond = self.0 == 0x2f9f68;
+            }
+        } else if (self.0 <= 0xa9634b) {
+            if (self.0 == 0xa9634b) {
+                return true;
+            }
+            if (self.0 <= 0x4dfcdf) {
+                if (self.0 == 0x4dfcdf) {
+                    return true;
+                }
+                if (self.0 > 0x41c7d9) {
+                    if (self.0 == 0x423d08) {
+                        return true;
+                    }
+                    cond = self.0 == 0x423d0f;
+                } else {
+                    if (self.0 == 0x41c7d9) {
+                        return true;
+                    }
+                    if (self.0 == 0x3ee1a8) {
+                        return true;
+                    }
+                    if (self.0 == 0x401a2b) {
+                        return true;
+                    }
+                    cond = self.0 == 0x406848;
+                }
+            } else if (self.0 > 0x4f837f) {
+                if self.0 == 0x4faa88 {
+                    return true;
+                }
+                cond = self.0 == 0xa7dca9;
+            } else {
+                if self.0 == 0x4f837f {
+                    return true;
+                }
+                if self.0 == 0x4e23e8 {
+                    return true;
+                }
+                cond = self.0 == 0x4e23f1;
+            }
+        } else if self.0 <= 0x1524d78 {
+            if self.0 == 0x1524d78 {
+                return true;
+            }
+            if self.0 > 0xe6935d {
+                if self.0 == 0x14247e8 {
+                    return true;
+                }
+                cond = self.0 == 0x151d84b;
+            } else {
+                if self.0 == 0xe6935d {
+                    return true;
+                }
+                if self.0 < 0xb8a588 {
+                    return false;
+                }
+                if self.0 <= 0xb8a589 {
+                    return true;
+                }
+                cond = self.0 == 0xd72a0b;
+            }
+        } else if self.0 > 0x1ea20af {
+            if self.0 == 0x1f962ef {
+                return true;
+            }
+            cond = self.0 == 0x217c065;
+        } else {
+            if self.0 == 0x1ea20af {
+                return true;
+            }
+            if self.0 == 0x1527488 {
+                return true;
+            }
+            cond = self.0 == 0x1e9f99c;
+        }
+        if (!cond) {
+            return false;
+        }
+        return true;
     }
 
-    pub fn is_anti_repeat_buff_skill(&self) -> bool {
-        //TODO
-        false
+    pub fn is_dispel(&self) -> bool {
+        self.0 == 2311001
     }
 
     pub fn is_spirit_javelin(&self) -> bool {
@@ -95,6 +259,13 @@ impl SkillId {
 
     pub fn is_grenade_skill(&self) -> bool {
         [14111006].contains(&self.0)
+    }
+
+    pub fn has_master_level(&self) -> bool {
+        let job = self.0 / 10000;
+        let job = JobId::try_from(job as u16).unwrap();
+
+        job.job_level() == 4
     }
 }
 

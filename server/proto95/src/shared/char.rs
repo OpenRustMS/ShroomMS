@@ -1,12 +1,12 @@
 use shroom_net::{
-    packet::proto::{
+    packet::{proto::{
         conditional::CondEither,
         list::{ShroomIndexList8, ShroomIndexListZ16, ShroomIndexListZ8},
         option::ShroomOption8,
         partial::PartialFlag,
         time::{ShroomDurationMs16, ShroomDurationMs32, ShroomExpirationTime, ShroomTime},
         ShroomList16, ShroomList32,
-    },
+    }, CondOption},
     packet_opcode, partial_data,
 };
 use shroom_net_derive::ShroomPacket;
@@ -116,8 +116,8 @@ pub struct SkillInfo {
     pub id: SkillId,
     pub level: u32,
     pub expiration: ShroomExpirationTime,
-    //TODO if is_skill_need_master_level, 4th job only?
-    pub master_level: u32,
+    #[pkt(check(field = "id", cond = "SkillId::has_master_level"))]
+    pub master_level: CondOption<u32>,
 }
 
 #[derive(Debug, ShroomPacket)]

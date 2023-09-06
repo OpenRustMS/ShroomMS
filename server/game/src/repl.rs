@@ -68,8 +68,8 @@ impl GameHandler {
                     .add_mob(Mob {
                         meta,
                         tmpl_id: mob,
-                        pos: ctx.pos,
-                        fh: ctx.fh,
+                        pos: ctx.char().pos,
+                        fh: ctx.char().fh,
                         origin_fh: None,
                         hp: meta.max_hp,
                         perc: 100,
@@ -80,8 +80,8 @@ impl GameHandler {
             ReplCmd::Mesos { amount } => {
                 ctx.field.add_drop(Drop {
                     owner: proto95::game::drop::DropOwner::None,
-                    pos: ctx.pos,
-                    start_pos: ctx.pos,
+                    pos: ctx.char().pos,
+                    start_pos: ctx.char().pos,
                     value: DropTypeValue::Mesos(amount),
                     quantity: 1,
                 })?;
@@ -91,8 +91,8 @@ impl GameHandler {
                 let item = id.map_or(ItemId::ADVANCED_MONSTER_CRYSTAL_1, ItemId);
                 ctx.field.add_drop(Drop {
                     owner: proto95::game::drop::DropOwner::None,
-                    pos: ctx.pos,
-                    start_pos: ctx.pos,
+                    pos: ctx.char().pos,
+                    start_pos: ctx.char().pos,
                     value: DropTypeValue::Item(item),
                     quantity: 1,
                 })?;
@@ -102,8 +102,8 @@ impl GameHandler {
                 ctx.field.add_user(User {
                     avatar_data: ctx.session.char.get_avatar_data(),
                     char_id: id,
-                    pos: ctx.pos,
-                    fh: ctx.fh,
+                    pos: ctx.char().pos,
+                    fh: ctx.char().fh,
                 })?;
                 None
             }

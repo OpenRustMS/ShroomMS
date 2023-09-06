@@ -2,29 +2,85 @@ pub mod index_map;
 pub mod stack;
 
 use index_map::IdIndexMap;
+use thiserror::Error;
+
+pub trait InvEventHandler {
+    type Item: InvItem;
+
+    fn on_add(&mut self, item: &Self::Item, slot: usize);
+    fn on_remove(&mut self, item: &Self::Item, slot: usize);
+    fn on_update(&mut self, item: &Self::Item, slot: usize);
+    fn on_swap(&mut self, slot_a: usize, slot_b: usize);
+}
+
+impl<'a, T: InvEventHandler> InvEventHandler for &'a mut T {
+    type Item = T::Item;
+
+    fn on_add(&mut self, item: &Self::Item, slot: usize) {
+        T::on_add(self, item, slot)
+    }
+
+    fn on_remove(&mut self, item: &Self::Item, slot: usize) {
+        T::on_remove(self, item, slot)
+    }
+
+    fn on_update(&mut self, item: &Self::Item, slot: usize) {
+        T::on_update(self, item, slot)
+    }
+
+    fn on_swap(&mut self, slot_a: usize, slot_b: usize) {
+        T::on_swap(self, slot_a, slot_b)
+    }
+}
 
 pub type InvResult<T> = Result<T, InvError>;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Error)]
 pub enum InvError {
+    #[error("Unique item conflict")]
     UniqueConflict,
+    #[error("Inventory is full")]
     Full,
+    #[error("Slot is full")]
     SlotFull,
+    #[error("Slot has insufficent space")]
     SlotInsufficentSpace,
+    #[error("Invalid slot {0}")]
     InvalidSlot(usize),
+    #[error("Slot is empty")]
     EmptySlot(usize),
+    #[error("Insufficent items in slot {0}")]
     InsufficentItems(usize),
+    #[error("Invalid merge id")]
+    InvalidMergeId,
 }
 
-pub trait InvItemId: Eq + std::hash::Hash + Copy + Clone + Default {
+pub trait InvItemId: Eq + std::hash::Hash + Copy + Clone + Default + std::fmt::Debug {
     fn is_unique(&self) -> bool;
+}
+
+pub trait InvSlotIndex: Copy + Clone + std::fmt::Debug {
+    fn to_slot_index(&self) -> usize;
+    fn from_slot_index(slot: usize) -> Self;
+}
+
+impl InvSlotIndex for usize {
+    fn to_slot_index(&self) -> usize {
+        *self
+    }
+
+    fn from_slot_index(slot: usize) -> Self {
+        slot
+    }
 }
 
 pub trait InvItem {
     type Id: InvItemId;
+    type SlotIndex: InvSlotIndex;
     fn id(&self) -> Self::Id;
 }
 
+#[derive(Debug)]
 pub struct Inv<Item: InvItem, const CAP: usize> {
     slots: [Option<Item>; CAP],
     len: usize,
@@ -44,6 +100,16 @@ impl<Item: InvItem, const CAP: usize> Inv<Item, CAP> {
             len: 0,
             ids: IdIndexMap::default(),
         }
+    }
+
+    pub fn new(_slots: usize) -> Self {
+        //TODO
+        Self::empty()
+    }
+
+    pub fn slots(&self) -> usize {
+        // TODO
+        CAP
     }
 
     fn check_slot(&self, slot: usize) -> InvResult<()> {
@@ -70,18 +136,29 @@ impl<Item: InvItem, const CAP: usize> Inv<Item, CAP> {
         Ok(())
     }
 
-    fn find_free_slot(&mut self) -> Option<usize> {
-        self.slots.iter().position(|slot| slot.is_none())
+    pub fn find_free_slot(&mut self) -> Option<Item::SlotIndex> {
+        self.slots
+            .iter()
+            .position(|slot| slot.is_none())
+            .map(|i| Item::SlotIndex::from_slot_index(i))
     }
 
-    pub fn add(&mut self, item: Item) -> InvResult<usize> {
+    pub fn get_slot_opt(&self, slot: Item::SlotIndex) -> InvResult<Option<&Item>> {
+        let slot = slot.to_slot_index();
+        self.check_slot(slot)?;
+
+        Ok(self.slots[slot].as_ref())
+    }
+
+    pub fn add(&mut self, item: Item) -> InvResult<Item::SlotIndex> {
         self.check_full()?;
         let free_slot = self.find_free_slot().ok_or(InvError::Full)?;
         self.set(free_slot, item)?;
         Ok(free_slot)
     }
 
-    pub fn set(&mut self, slot: usize, item: Item) -> InvResult<()> {
+    pub fn replace(&mut self, slot: Item::SlotIndex, item: Item) -> InvResult<Option<Item>> {
+        let slot = slot.to_slot_index();
         self.check_slot(slot)?;
         self.check_unique(&item.id())?;
 
@@ -95,11 +172,26 @@ impl<Item: InvItem, const CAP: usize> Inv<Item, CAP> {
 
         // Insert the slot into the map
         self.ids.insert(item.id(), slot);
+        Ok(self.slots[slot].replace(item))
+    }
+
+    pub fn set(&mut self, slot: Item::SlotIndex, item: Item) -> InvResult<()> {
+        let s = slot;
+        let slot = s.to_slot_index();
+        self.check_slot(slot)?;
+        self.check_unique(&item.id())?;
+        if self.slots[slot].is_some() {
+            return Err(InvError::SlotFull);
+        }
+
+        self.len += 1;
+        self.ids.insert(item.id(), slot);
         self.slots[slot] = Some(item);
         Ok(())
     }
 
-    pub fn remove(&mut self, slot: usize) -> InvResult<Option<Item>> {
+    pub fn remove(&mut self, slot: Item::SlotIndex) -> InvResult<Option<Item>> {
+        let slot = slot.to_slot_index();
         Ok(if let Some(item) = self.slots[slot].take() {
             self.ids.remove(item.id(), slot);
             self.len -= 1;
@@ -109,11 +201,14 @@ impl<Item: InvItem, const CAP: usize> Inv<Item, CAP> {
         })
     }
 
-    pub fn take(&mut self, slot: usize) -> InvResult<Item> {
-        self.remove(slot)?.ok_or(InvError::EmptySlot(slot))
+    pub fn take(&mut self, slot: Item::SlotIndex) -> InvResult<Item> {
+        self.remove(slot)?
+            .ok_or(InvError::EmptySlot(slot.to_slot_index()))
     }
 
-    pub fn swap(&mut self, slot_a: usize, slot_b: usize) -> InvResult<()> {
+    pub fn swap(&mut self, slot_a: Item::SlotIndex, slot_b: Item::SlotIndex) -> InvResult<()> {
+        let slot_a = slot_a.to_slot_index();
+        let slot_b = slot_b.to_slot_index();
         self.check_slot(slot_a)?;
         self.check_slot(slot_b)?;
         self.slots.swap(slot_a, slot_b);
@@ -131,12 +226,50 @@ impl<Item: InvItem, const CAP: usize> Inv<Item, CAP> {
         Ok(())
     }
 
-    pub fn get(&self, slot: usize) -> InvResult<&Item> {
+    pub fn get_pair(
+        &self,
+        (a, b): (Item::SlotIndex, Item::SlotIndex),
+    ) -> InvResult<(Option<&Item>, Option<&Item>)> {
+        let a = a.to_slot_index();
+        let b = b.to_slot_index();
+        self.check_slot(a)?;
+        self.check_slot(b)?;
+        if a == b {
+            return Err(InvError::InvalidSlot(a));
+        }
+
+        Ok((self.slots[a].as_ref(), self.slots[b].as_ref()))
+    }
+
+    pub fn get_pair_mut(
+        &mut self,
+        (a, b): (Item::SlotIndex, Item::SlotIndex),
+    ) -> InvResult<(Option<&mut Item>, Option<&mut Item>)> {
+        let a = a.to_slot_index();
+        let b = b.to_slot_index();
+        self.check_slot(a)?;
+        self.check_slot(b)?;
+        if a == b {
+            return Err(InvError::InvalidSlot(a));
+        }
+
+        Ok(if b > a {
+            let (x, y) = self.slots.split_at_mut(b);
+            (x[a].as_mut(), y[0].as_mut())
+        } else { // a > b
+            let (x, y) = self.slots.split_at_mut(a);
+            (y[0].as_mut(), x[b].as_mut())
+        })
+    }
+
+    pub fn get(&self, slot: Item::SlotIndex) -> InvResult<&Item> {
+        let slot = slot.to_slot_index();
         self.check_slot(slot)?;
         self.slots[slot].as_ref().ok_or(InvError::EmptySlot(slot))
     }
 
-    pub fn get_mut(&mut self, slot: usize) -> InvResult<&mut Item> {
+    pub fn get_mut(&mut self, slot: Item::SlotIndex) -> InvResult<&mut Item> {
+        let slot = slot.to_slot_index();
         self.check_slot(slot)?;
         self.slots[slot].as_mut().ok_or(InvError::EmptySlot(slot))
     }
@@ -172,6 +305,28 @@ impl<Item: InvItem, const CAP: usize> Inv<Item, CAP> {
         }
     }
 
+    pub fn items(&self) -> impl Iterator<Item = &Item> {
+        self.slots.iter().filter_map(|s| s.as_ref())
+    }
+
+    pub fn items_mut(&mut self) -> impl Iterator<Item = &mut Item> {
+        self.slots.iter_mut().filter_map(|s| s.as_mut())
+    }
+
+    pub fn item_with_slots(&self) -> impl Iterator<Item = (usize, &Item)> {
+        self.slots
+            .iter()
+            .enumerate()
+            .filter_map(|(i, s)| s.as_ref().map(|s| (i, s)))
+    }
+
+    pub fn item_with_slots_mut(&mut self) -> impl Iterator<Item = (usize, &mut Item)> {
+        self.slots
+            .iter_mut()
+            .enumerate()
+            .filter_map(|(i, s)| s.as_mut().map(|s| (i, s)))
+    }
+
     pub fn len(&self) -> usize {
         self.len
     }
@@ -200,7 +355,8 @@ where
     fn from_iter<T: IntoIterator<Item = (usize, Item)>>(iter: T) -> Self {
         let mut inv = Inv::default();
         for (slot, item) in iter {
-            inv.set(slot, item).unwrap();
+            inv.set(Item::SlotIndex::from_slot_index(slot), item)
+                .unwrap();
         }
         inv
     }
@@ -226,6 +382,7 @@ mod tests {
     }
     impl InvItem for DummyItem {
         type Id = u32;
+        type SlotIndex = usize;
 
         fn id(&self) -> Self::Id {
             self.0
@@ -270,6 +427,17 @@ mod tests {
         assert_eq!(inv.len(), 1);
         assert_eq!(inv.remove(1).unwrap().unwrap().id(), 1);
         assert_eq!(inv.len(), 0);
+    }
+
+    #[test]
+    fn pair_mut() {
+        let mut inv = Inv2::empty();
+        inv.add(DummyItem::new(0)).unwrap();
+        inv.add(DummyItem::new(1)).unwrap();
+
+        let (i1, i2) = inv.get_pair_mut((0, 1)).unwrap();
+        assert_eq!(i1.unwrap().id(), 0);
+        assert_eq!(i2.unwrap().id(), 1);
     }
 
     #[test]

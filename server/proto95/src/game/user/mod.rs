@@ -6,9 +6,10 @@ use shroom_net::{
     mark_shroom_bitflags,
     packet::{
         proto::{option::ShroomOption8, CondOption, PacketWrapped, ShroomList16, ShroomList8},
-        DecodePacket, PacketReader, time::Ticks, ShroomDurationMs16, ShroomExpirationTime, ShroomDurationMs32,
+        time::Ticks,
+        DecodePacket, PacketReader, ShroomDurationMs16, ShroomDurationMs32, ShroomExpirationTime,
     },
-    packet_opcode, shroom_packet_enum, NetError, NetResult, EncodePacket, PacketWriter, SizeHint,
+    packet_opcode, shroom_packet_enum, EncodePacket, NetError, NetResult, PacketWriter, SizeHint,
 };
 use shroom_net_derive::{ShroomEncodePacket, ShroomPacket};
 
@@ -388,7 +389,6 @@ impl PacketWrapped for DrHitTargetCount {
     }
 }
 
-
 pub type UserMeleeAttackReq = AttackReq<MeleeAttackInfo, MeleeAttackTail>;
 packet_opcode!(UserMeleeAttackReq, RecvOpcodes::UserMeleeAttack);
 
@@ -583,20 +583,30 @@ pub struct ChangeSkillRecordResp {
 packet_opcode!(ChangeSkillRecordResp, SendOpcodes::ChangeSkillRecordResult);
 
 #[derive(ShroomPacket, Debug)]
-pub struct CharGivePopularityResult {
-    pub code: u8,     // Code 0-5, code 0 and 5 are success
-    pub name: String, // Code 0,5
-    pub up: bool,     // Code 0,5
-    pub pop: u32,     // Only used when code == 0
+pub struct PopularityResult {
+    pub name: String,
+    pub inc: bool,
 }
-packet_opcode!(CharGivePopularityResult, SendOpcodes::GivePopularityResult);
+
+shroom_packet_enum!(
+    #[derive(Debug)]
+    pub enum GivePopularityResp: u8 {
+        Success((PopularityResult, u32)) = 0,
+        InvalidCharacter(()) = 1,
+        LevelTooLow(()) = 2,
+        DailyLimit(()) = 3,
+        TargetLimit(()) = 4,
+        Notify(PopularityResult) = 5
+    }
+
+);
+packet_opcode!(GivePopularityResp, SendOpcodes::GivePopularityResult);
 
 shroom_packet_enum!(
     #[derive(Debug)]
     pub enum DropPickUpMsg: u8 {
-        // item, quantity
-        PickUp((ItemId, u32)) = 0,
-        PickUp1((u8, ItemId, u16)) = 1// What's that?
+        Item((ItemId, u32)) = 0, // Item, quantity
+        Mesos((u8, ItemId, u16)) = 1
         //TODO: PickUpEq(ItemId) = ?
     }
 );

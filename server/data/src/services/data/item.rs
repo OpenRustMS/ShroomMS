@@ -2,10 +2,7 @@ use crate::{
     entities::{equip_item, inventory_slot, item_stack},
     services::{
         character::inventory_set::{InventorySet, INV_ITEM_CAP},
-        helper::intentory::{
-            data::{EquipItemSlot, ShroomStackInventory},
-            inv::{Inventory, InventoryExt},
-        },
+        helper::intentory::data::{EquipInventory, EquippedInventory, ShroomStackInventory},
         item::{
             model::{EquipItem, StackItem},
             stats::EquipStat,
@@ -188,11 +185,11 @@ impl ItemService {
         let mut inv = InventorySet::with_default_slots();
         for (mut item, slot) in items.into_iter().zip(slots) {
             self.create_equip(&mut item).await?;
-            inv.equipped.set(slot, item.into());
+            inv.equipped.set(slot, item.into())?;
         }
 
         inv.etc
-            .set(0, self.get_stack_item_from_id(starter_set.guide, 1)?);
+            .set(0, self.get_stack_item_from_id(starter_set.guide, 1)?)?;
 
         self.save_inventory(&mut inv, char_id).await?;
 
@@ -212,7 +209,7 @@ impl ItemService {
         &self,
         inv_type: InventoryType,
         char_id: i32,
-        inv: &mut Inventory<EquipItemSlot, CAP>,
+        inv: &mut EquipInventory<CAP>,
     ) -> anyhow::Result<()> {
         if inv.is_empty() {
             return Ok(());
@@ -229,10 +226,50 @@ impl ItemService {
         }
 
         let slots = inv
-            .items_with_slots()
+            .item_with_slots()
             .map(|(slot, item)| inventory_slot::ActiveModel {
                 id: NotSet,
                 equip_item_id: Set(Some(item.item.db_id.unwrap())),
+                char_id: Set(char_id),
+                slot: Set(slot as u8 as i32),
+                inv_type: Set(inv_type as i32),
+                stack_item_id: Set(None),
+                pet_item_id: Set(None),
+            });
+
+        let slots = slots.collect_vec();
+        inventory_slot::Entity::insert_many(slots)
+            .exec(&self.db)
+            .await?;
+
+        Ok(())
+    }
+
+    async fn save_eqd_inventory_type<'a, const CAP: usize>(
+        &self,
+        inv_type: InventoryType,
+        char_id: i32,
+        inv: &mut EquippedInventory<CAP>,
+    ) -> anyhow::Result<()> {
+        if inv.is_empty() {
+            return Ok(());
+        }
+
+        // Update items
+        for item_slot in inv.items_mut() {
+            let item = &mut item_slot.0.item;
+            if item.db_id.is_none() {
+                self.create_equip(item).await?;
+            } else if item.last_update > 0 {
+                self.update_equip(item).await?;
+            }
+        }
+
+        let slots = inv
+            .item_with_slots()
+            .map(|(slot, item)| inventory_slot::ActiveModel {
+                id: NotSet,
+                equip_item_id: Set(Some(item.0.item.db_id.unwrap())),
                 char_id: Set(char_id),
                 slot: Set(slot as u8 as i32),
                 inv_type: Set(inv_type as i32),
@@ -267,15 +304,17 @@ impl ItemService {
             }
         }
 
-        let slots = inv.iter().map(|(slot, item)| inventory_slot::ActiveModel {
-            id: NotSet,
-            equip_item_id: Set(None),
-            char_id: Set(char_id),
-            slot: Set(slot as i32),
-            inv_type: Set(inv_type as i32),
-            stack_item_id: Set(Some(item.db_id.unwrap())),
-            pet_item_id: Set(None),
-        });
+        let slots = inv
+            .item_with_slots()
+            .map(|(slot, item)| inventory_slot::ActiveModel {
+                id: NotSet,
+                equip_item_id: Set(None),
+                char_id: Set(char_id),
+                slot: Set(slot as i32),
+                inv_type: Set(inv_type as i32),
+                stack_item_id: Set(Some(item.db_id.unwrap())),
+                pet_item_id: Set(None),
+            });
 
         inventory_slot::Entity::insert_many(slots)
             .exec(&self.db)
@@ -294,19 +333,11 @@ impl ItemService {
             .exec(&self.db)
             .await?;
 
-        self.save_eq_inventory_type(
-            InventoryType::Equipped,
-            char_id,
-            invs.equipped.get_inner_mut(),
-        )
-        .await?;
+        self.save_eqd_inventory_type(InventoryType::Equipped, char_id, &mut invs.equipped)
+            .await?;
 
-        self.save_eq_inventory_type(
-            InventoryType::Special,
-            char_id,
-            invs.masked_equipped.get_inner_mut(),
-        )
-        .await?;
+        self.save_eqd_inventory_type(InventoryType::Special, char_id, &mut invs.masked_equipped)
+            .await?;
 
         self.save_eq_inventory_type(InventoryType::Equip, char_id, &mut invs.equip)
             .await?;
@@ -349,21 +380,22 @@ impl ItemService {
                 InventoryType::Equipped => {
                     let slot = CharEquipSlot::try_from_primitive(slot_info.slot as u8)?;
                     let equip_item: EquipItem = equip_item.into();
-                    inv.equipped.set(slot, equip_item.into())
+                    inv.equipped.set(slot, equip_item.into())?;
                 }
                 InventoryType::Special => {
                     let slot = CharEquipSlot::try_from_primitive(slot_info.slot as u8)?;
                     let equip_item: EquipItem = equip_item.into();
-                    inv.masked_equipped.set(slot, equip_item.into())
+                    inv.masked_equipped.set(slot, equip_item.into())?;
                 }
                 InventoryType::Equip => {
                     let slot = slot_info.slot as usize;
                     let equip_item: EquipItem = equip_item.into();
-                    inv.equip.set_slot(slot, equip_item.into())
+                    inv.equip.set(slot, equip_item.into())?
                 }
                 _ => anyhow::bail!(
                     "Inventory Item({} - {}) with invalid inventory type found: {inv_type:?}",
-                    equip_item.id, equip_item.item_id
+                    equip_item.id,
+                    equip_item.item_id
                 ),
             }
         }
@@ -377,7 +409,7 @@ impl ItemService {
             let slot = slot_info.slot as usize;
 
             inv.get_stack_inventory_mut(inv_type)?
-                .set(slot, stack_item.into());
+                .set(slot, stack_item.into())?;
         }
 
         Ok(inv)
@@ -441,7 +473,7 @@ mod tests {
                 character::{CharacterCreateDTO, CharacterID, ItemStarterSet},
                 AccountService, CharacterService,
             },
-            helper::intentory::{inv::InventoryExt, stack::StackInventoryItem},
+            helper::inv::stack::InvStackItem,
             meta::meta_service::MetaService,
         },
     };
@@ -462,8 +494,10 @@ mod tests {
             .create("test", "hunter3", Region::Europe, true, None)
             .await?;
 
-        let char = CharacterService::new(db.clone());
-        let item_svc = ItemService::new(db.clone(), get_mock_meta());
+        let meta = get_mock_meta();
+
+        let char = CharacterService::new(db.clone(), meta);
+        let item_svc = ItemService::new(db.clone(), meta);
         let job = JobGroup::Legend;
         let char_id = char
             .create_character(
@@ -504,7 +538,7 @@ mod tests {
         let mut inv = svc.load_inventory_for_character(char_id).await.unwrap();
         assert_eq!(inv.equipped.len(), 4);
         assert_eq!(inv.etc.len(), 1);
-        assert!(inv.equipped.remove(CharEquipSlot::Top).is_some());
+        assert!(inv.equipped.remove(CharEquipSlot::Top).unwrap().is_some());
         let stack_1 = inv.etc.get_mut(0).unwrap();
         stack_1.set_quantity(stack_1.quantity() + 5);
 

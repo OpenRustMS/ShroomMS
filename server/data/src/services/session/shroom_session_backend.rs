@@ -1,10 +1,9 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::sync::Arc;
 
 use dashmap::DashSet;
-use proto95::id::SkillId;
 
 use crate::{
-    entities::{self, skill},
+    entities::{self},
     services::{
         character::Character,
         data::{account::AccountId, character::CharacterID, DataServices},
@@ -17,7 +16,6 @@ use super::session_manager::SessionBackend;
 pub struct SessionIngameData {
     pub acc: entities::account::Model,
     pub char: Character,
-    pub skills: BTreeMap<SkillId, skill::Model>,
 }
 
 #[derive(Debug)]
@@ -45,20 +43,13 @@ impl ShroomSessionData {
         let char = Character::new(
             data.char.must_get(login.acc.id).await?,
             data.item.load_inventory_for_character(char_id).await?,
+            data.char.load_skills(char_id).await?,
         );
 
-        let skills = data
-            .char
-            .load_skills(char_id)
-            .await?
-            .into_iter()
-            .map(|skill| (SkillId(skill.id as u32), skill))
-            .collect();
 
         *self = Self::Ingame(SessionIngameData {
             acc: login.acc.clone(),
             char,
-            skills,
         });
 
         Ok(())
@@ -109,6 +100,10 @@ impl SessionBackend for ShroomSessionBackend {
                 self.data
                     .item
                     .save_inventory(&mut ingame.char.inventory.invs, char_id)
+                    .await?;
+                self.data
+                    .char
+                    .save_skills(char_id, dbg!(&ingame.char.skills))
                     .await?;
             }
             ShroomSessionData::Login(_login) => {}

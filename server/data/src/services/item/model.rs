@@ -12,7 +12,7 @@ use shroom_net::packet::proto::time::{ShroomExpirationTime, ShroomTime};
 use crate::{
     entities::{equip_item, item_stack},
     proto_mapper::db_to_shroom_time,
-    services::meta::meta_service::ItemMeta,
+    services::{meta::meta_service::ItemMeta, helper::inv},
 };
 
 use super::stats::{EquipStats, StatsExt};
@@ -129,6 +129,44 @@ impl EquipItem {
 pub struct StackItem {
     pub info: ItemInfo,
     pub quantity: u16,
+}
+
+impl inv::InvItemId for ItemId {
+    fn is_unique(&self) -> bool {
+        false
+    }
+}
+
+impl inv::InvItem for StackItem {
+    type Id = ItemId;
+    type SlotIndex = usize;
+
+    fn id(&self) -> Self::Id {
+        self.info.item_id
+    }
+
+}
+
+impl inv::stack::InvStackItem for StackItem {
+    fn max_stack_size(&self) -> usize {
+        255
+    }
+
+    fn quantity(&self) -> usize {
+        self.quantity as usize
+    }
+
+    fn set_quantity(&mut self, count: usize) {
+        self.quantity = count as u16;
+        self.last_update += 1;
+    }
+
+    fn new_stack(id: Self::Id, quantity: usize) -> Self {
+        Self {
+            info: ItemInfo::from_id(id),
+            quantity: quantity as u16,
+        }
+    }
 }
 
 impl Deref for StackItem {

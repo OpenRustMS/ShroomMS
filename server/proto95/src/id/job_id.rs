@@ -1,10 +1,12 @@
+use std::ops::Range;
+
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use shroom_net::mark_shroom_enum;
 
 //TODO model sub job for dual blade
 // Which is actually a beginner but sub job is set to 1
 
-use super::{FaceId, HairId, ItemId, MapId};
+use super::{FaceId, HairId, ItemId, MapId, SkillId};
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone, TryFromPrimitive, IntoPrimitive)]
 #[repr(u16)]
@@ -139,6 +141,13 @@ pub enum JobId {
 mark_shroom_enum!(JobId);
 
 impl JobId {
+    pub fn skill_range(&self) -> Range<SkillId> {
+        let start = SkillId(*self as u32 * 10_000);
+        let end = SkillId(start.0 + 10_000);
+
+        start..end
+    }
+
     pub fn job_group(&self) -> JobGroup {
         let id = *self as u16;
         match id / 1000 {

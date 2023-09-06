@@ -20,7 +20,7 @@ impl DataServices {
     pub fn new(db: DatabaseConnection, meta: &'static MetaService) -> Self {
         DataServices {
             account: AccountService::new(db.clone()),
-            char: CharacterService::new(db.clone()),
+            char: CharacterService::new(db.clone(), meta),
             item: ItemService::new(db, meta),
         }
     }

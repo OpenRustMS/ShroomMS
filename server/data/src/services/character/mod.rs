@@ -1,22 +1,26 @@
 pub mod inventory_set;
+pub mod skill;
 
 use std::ops::{Add, Div};
 
 use either::Either;
 use itertools::Itertools;
 use proto95::{
-    id::{job_id::JobId, FaceId, HairId, ItemId, MapId, Skin},
+    id::{job_id::JobId, FaceId, HairId, ItemId, MapId, SkillId, Skin},
     shared::{
         char::{AvatarData, AvatarEquips, CharStat, CharStatPartial, PetIds},
         inventory::InventoryOperation,
-        Gender,
+        FootholdId, Gender, Vec2,
     },
 };
 use shroom_net::packet::{CondOption, ShroomIndexList8};
 
 use crate::entities::character::Model;
 
-use self::inventory_set::{CharInventory, InventorySet};
+use self::{
+    inventory_set::{CharInventory, InventorySet},
+    skill::SkillSet,
+};
 
 use super::data::character::CharacterID;
 
@@ -94,10 +98,13 @@ pub struct Character {
     pub hair: HairId,
     pub face: FaceId,
     pub inv_size: [u8; 5],
+    pub skills: SkillSet,
+    pub pos: Vec2,
+    pub fh: FootholdId,
 }
 
 impl Character {
-    pub fn new(model: Model, inventory: InventorySet) -> Self {
+    pub fn new(model: Model, inventory: InventorySet, skills: SkillSet) -> Self {
         Self {
             id: model.id,
             stats: (&model).into(),
@@ -116,6 +123,9 @@ impl Character {
                 model.cash_slots as u8,
             ],
             spawn_point: model.spawn_point as u8,
+            skills,
+            pos: Vec2::new(0, 0),
+            fh: 0,
         }
     }
 
@@ -272,8 +282,8 @@ impl Character {
                     .inventory
                     .invs
                     .equipped
-                    .items_with_slots()
-                    .map(|(slot, item)| (slot as u8, item.item_id))
+                    .item_with_slots()
+                    .map(|(slot, item)| (slot as u8, item.0.item_id))
                     .collect_vec()
                     .into(),
                 masked_equips: ShroomIndexList8::from(vec![]),
@@ -291,5 +301,9 @@ impl Character {
         let mut ops = Vec::new();
         std::mem::swap(&mut ops, &mut self.inventory.pending_operations.ops);
         ops
+    }
+
+    pub fn use_skill(&mut self, skill_id: SkillId) {
+        todo!()
     }
 }

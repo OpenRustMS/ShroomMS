@@ -258,8 +258,7 @@ mod tests2 {
             0x00, 0x00, 0x00, 0x00, 0x00,
         ];
 
-        let req = MobMoveReq::decode_from_data_complete(&data);
-        dbg!(req);
+        let _ = MobMoveReq::decode_from_data_complete(&data).unwrap();
     }
 }
 

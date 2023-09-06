@@ -1,5 +1,6 @@
 use std::{
     net::{IpAddr, SocketAddr},
+    path::PathBuf,
     sync::Arc,
     time::Duration,
 };
@@ -14,15 +15,13 @@ use shroom_net::{
         service::{
             handler::MakeServerSessionHandler,
             server_sess::{ShroomServer, ShroomServerConfig},
-            BasicHandshakeGenerator, HandshakeGenerator, ShroomContext, SharedSessionHandle,
+            BasicHandshakeGenerator, HandshakeGenerator, SharedSessionHandle, ShroomContext,
         },
         ShroomSession,
     },
     PacketWriter, ShroomPacket,
 };
 use tokio::{net::TcpStream, task::JoinSet};
-
-use shrooming::{FileIndex, FileSvr};
 
 use crate::config::Environment;
 
@@ -87,17 +86,13 @@ async fn srv_game_server(
     Ok(())
 }
 
-async fn _srv_shrooming(addr: SocketAddr) -> anyhow::Result<()> {
-    let file_ix = FileIndex::build_index(
-        [
-            "notes.txt",
-            "../../client/shroom_hook/target/i686-pc-windows-gnu/release/dinput8.dll",
-            "../../target/i686-pc-windows-gnu/release/shroom_launchar.exe",
-        ]
-        .iter(),
-    )?;
+async fn srv_tuf(addr: impl Into<SocketAddr>, tuf_repo: impl Into<PathBuf>) -> anyhow::Result<()> {
+    let tuf_repo = tuf_repo.into();
 
-    FileSvr::new(file_ix).serve(addr).await?;
+    /*  let route = warp::path("tuf")
+    .and(warp::fs::dir(tuf_repo));*/
+
+    warp::serve(warp::fs::dir(tuf_repo)).run(addr).await;
 
     Ok(())
 }
@@ -112,6 +107,11 @@ fn get_ping_packet() -> ShroomPacket {
 async fn main() -> anyhow::Result<()> {
     pretty_env_logger::init();
     dotenv().ok();
+
+    tokio::spawn(srv_tuf(
+        ([0, 0, 0, 0], 8000),
+        "../../client_repo/data/tuf-repo",
+    ));
 
     // Load configuration
     let settings = config::get_configuration().expect("Failed to load configuration");

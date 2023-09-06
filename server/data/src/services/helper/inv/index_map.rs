@@ -7,7 +7,7 @@ use super::{InvError, InvResult};
 const INITIAL_INDEX_CAPACITY: usize = 8;
 type IndexList = SmallVec<[u16; INITIAL_INDEX_CAPACITY]>;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct IdIndexMap<Id>(HashMap<Id, IndexList>);
 
 impl<Id: Eq + std::hash::Hash + Copy + Clone> IdIndexMap<Id> {
@@ -64,6 +64,11 @@ impl<Id: Eq + std::hash::Hash + Copy + Clone> IdIndexMap<Id> {
             .map(|i| *i as usize)
     }
 
+    // TODO(!!!) IMPORTANT:
+    // Remove unsafe for the non-mut version 
+
+    /// Iterate over the slots for the given id, yielding references to the items
+    /// # Safety Figure out why the borrow checker complains
     pub fn item_slots_iter<'a, 'slots, T: 'a>(
         &'a self,
         id: Id,

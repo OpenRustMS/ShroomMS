@@ -6,7 +6,6 @@ use std::net::IpAddr;
 
 use async_trait::async_trait;
 
-use data::proto_mapper::db_to_shroom_time;
 use data::services::character::Character;
 use data::services::field::FieldJoinHandle;
 
@@ -15,6 +14,7 @@ use data::services::session::shroom_session_manager::{ClientKey, OwnedShroomGame
 use data::services::session::ShroomMigrationKey;
 use data::services::SharedServices;
 
+use proto95::id::SkillId;
 use shroom_net::net::service::handler::{MakeServerSessionHandler, ShroomSessionHandler};
 use shroom_net::net::service::resp::MigrateResponse;
 use shroom_net::net::service::SharedSessionHandle;
@@ -38,12 +38,12 @@ use data::services::helper::pool::Drop;
 use proto95::game::mob::{MobMoveCtrlAckResp, MobMoveReq};
 use proto95::game::user::{
     ChangeSkillRecordResp, UpdatedSkillRecord, UserDropMoneyReq, UserDropPickUpReq, UserHitReq,
-    UserMeleeAttackReq, UserSkillUpReq, UserStatChangeReq,
+    UserMeleeAttackReq, UserSkillUpReq, UserSkillUseReq, UserStatChangeReq,
 };
 
 use proto95::shared::char::{SkillInfo, TeleportRockInfo};
 use proto95::shared::inventory::{InvChangeSlotPosReq, InventoryOperationsResp};
-use proto95::shared::{ClientDumpLogReq, FootholdId, PongReq, Vec2};
+use proto95::shared::{ClientDumpLogReq, PongReq};
 use proto95::{
     game::{
         chat::{ChatMsgReq, UserChatMsgResp},
@@ -127,8 +127,6 @@ pub struct GameHandler {
     services: SharedServices,
     addr: IpAddr,
     client_key: ClientKey,
-    pos: Vec2,
-    fh: FootholdId,
     field: FieldJoinHandle,
     repl: GameRepl,
 }
@@ -141,37 +139,31 @@ impl GameHandler {
         world_id: WorldId,
         session_handle: SharedSessionHandle,
     ) -> anyhow::Result<Self> {
-        let addr = net_session.peer_addr()?;
-        log::info!("Game sess: {} - waiting abit for session to be free", addr);
-
+        // Read handshake packet
         let pkt = net_session.read_packet().await?;
-        log::info!("Migration: {:?}", pkt);
         let mut pr = pkt.into_reader();
-
         let op = pr.read_opcode::<RecvOpcodes>()?;
-        log::info!("New client with opcode: {:?}", op);
         if op != MigrateInGameReq::OPCODE {
             anyhow::bail!("Wrong client hello packet: {op:?}")
         }
-
         let req = MigrateInGameReq::decode_packet(&mut pr)?;
-        let addr = net_session.peer_addr()?.ip();
 
-        dbg!(ShroomMigrationKey::new(req.client_key, addr));
-
-        let shroom_session = services
+        // Look up session in the migration manager
+        let peer_addr = net_session.peer_addr()?.ip();
+        let migrate_key = ShroomMigrationKey::new(req.client_key, peer_addr);
+        let session = services
             .session_manager
-            .claim_migration_session(ShroomMigrationKey::new(req.client_key, addr))
-            .await?;
-        // TODO result maybe?
-        let session = shroom_session.as_ingame();
+            .claim_migration_session(migrate_key)
+            .await?
+            .as_ingame();
 
         log::info!(
-            "Session for acc: {} - char: {}",
+            "Game session for acc: {} - char: {}",
             session.acc.username,
             session.char.name
         );
 
+        // Join field
         let join_field = services
             .field
             .join_field(
@@ -187,10 +179,8 @@ impl GameHandler {
             services,
             channel_id,
             world_id,
-            addr,
+            addr: peer_addr,
             client_key: req.client_key,
-            pos: Vec2::default(),
-            fh: 0,
             field: join_field,
             repl: GameRepl::new(),
         })
@@ -216,7 +206,6 @@ impl ShroomSessionHandler for GameHandler {
             return Ok(SessionHandleResult::Pong);
         }
 
-        log::info!("Opcode: {op:X}");
         shroom_router_fn!(
             handler,
             GameHandler,
@@ -237,6 +226,7 @@ impl ShroomSessionHandler for GameHandler {
             UserStatChangeReq => GameHandler::handle_stat_change,
             InvChangeSlotPosReq => GameHandler::handle_inv_change_slot,
             ClientDumpLogReq => GameHandler::handle_client_dump_log,
+            UserSkillUseReq => GameHandler::handle_use_skill,
         );
 
         handler(ctx, packet.into_reader()).await?;
@@ -270,6 +260,13 @@ impl ShroomSessionHandler for GameHandler {
 }
 
 impl GameHandler {
+    async fn handle_use_skill(ctx: &mut Ctx, req: UserSkillUseReq) -> anyhow::Result<()> {
+        dbg!(&req);
+        ctx.char_mut().use_skill(req.skill_id);
+
+        Ok(())
+    }
+
     async fn handle_client_dump_log(_ctx: &mut Ctx, req: ClientDumpLogReq) -> anyhow::Result<()> {
         dbg!(req);
         Ok(())
@@ -314,6 +311,10 @@ impl GameHandler {
         &mut self.session.char
     }
 
+    fn char(&self) -> &Character {
+        &self.session.char
+    }
+
     async fn handle_inv_change_slot(ctx: &mut Ctx, req: InvChangeSlotPosReq) -> anyhow::Result<()> {
         let count = (req.count != u16::MAX).then_some(req.count as usize);
         // Check for drop
@@ -341,18 +342,8 @@ impl GameHandler {
     }
 
     async fn handle_skill_up(ctx: &mut Ctx, req: UserSkillUpReq) -> GameResult<()> {
-        ctx.send(ChangeSkillRecordResp {
-            reset_excl: true,
-            skill_records: vec![UpdatedSkillRecord {
-                id: req.skill_id,
-                level: 1,
-                master_level: 0,
-                expiration: ShroomExpirationTime::never(),
-            }]
-            .into(),
-            updated_secondary_stat: false,
-        })
-        .await
+        ctx.session.char.skills.skill_up(req.skill_id)?;
+        Ok(())
     }
 
     pub fn enable_char(&mut self) {
@@ -408,6 +399,15 @@ impl GameHandler {
                 reset_excl: true,
                 operations: ops.into(),
                 secondary_stat_changed: false,
+            })
+            .await?;
+        }
+
+        if let Some(skills) = ctx.session.char.skills.get_updates() {
+            ctx.send(ChangeSkillRecordResp {
+                reset_excl: true,
+                skill_records: skills.into(),
+                updated_secondary_stat: false,
             })
             .await?;
         }
@@ -472,11 +472,12 @@ impl GameHandler {
 
     async fn handle_drop_money(ctx: &mut Ctx, req: UserDropMoneyReq) -> GameResult<()> {
         let ok = ctx.session.char.update_mesos((req.money as i32).neg());
+        let char = &ctx.session.char;
         if ok {
             ctx.field.add_drop(Drop {
-                owner: proto95::game::drop::DropOwner::User(ctx.session.char.id as u32),
-                pos: ctx.pos,
-                start_pos: ctx.pos,
+                owner: proto95::game::drop::DropOwner::User(char.id as u32),
+                pos: char.pos,
+                start_pos: char.pos,
                 value: DropTypeValue::Mesos(req.money),
                 quantity: 1,
             })?;
@@ -552,8 +553,8 @@ impl GameHandler {
             .inventory
             .invs
             .equipped
-            .iter()
-            .map(|(slot, item)| (slot as u16, Item::Equip(item.item.as_ref().into())))
+            .item_with_slots()
+            .map(|(slot, item)| (slot as u16, Item::Equip(item.0.item.as_ref().into())))
             .collect();
 
         let equip: ShroomIndexListZ16<Item> = self
@@ -562,7 +563,7 @@ impl GameHandler {
             .inventory
             .invs
             .equip
-            .items_with_slots()
+            .item_with_slots()
             .map(|(slot, item)| (slot as u16 + 1, Item::Equip(item.item.as_ref().into())))
             .collect();
 
@@ -572,7 +573,7 @@ impl GameHandler {
             .inventory
             .invs
             .etc
-            .iter()
+            .item_with_slots()
             .map(|(slot, item)| (slot as u8 + 1, Item::Stack(item.into())))
             .collect();
 
@@ -582,7 +583,7 @@ impl GameHandler {
             .inventory
             .invs
             .misc
-            .iter()
+            .item_with_slots()
             .map(|(slot, item)| (slot as u8 + 1, Item::Stack(item.into())))
             .collect();
 
@@ -592,7 +593,7 @@ impl GameHandler {
             .inventory
             .invs
             .cash
-            .iter()
+            .item_with_slots()
             .map(|(slot, item)| (slot as u8 + 1, Item::Stack(item.into())))
             .collect();
 
@@ -602,7 +603,7 @@ impl GameHandler {
             .inventory
             .invs
             .use_
-            .iter()
+            .item_with_slots()
             .map(|(slot, item)| (slot as u8 + 1, Item::Stack(item.into())))
             .collect();
 
@@ -612,17 +613,8 @@ impl GameHandler {
             ..Default::default()
         };
 
-        let skill_records: ShroomList16<SkillInfo> = self
-            .session
-            .skills
-            .iter()
-            .map(|(id, skill)| SkillInfo {
-                id: *id,
-                level: skill.skill_level as u32,
-                expiration: skill.expires_at.map(db_to_shroom_time).into(),
-                master_level: skill.master_level as u32,
-            })
-            .collect();
+        let skill_records: ShroomList16<SkillInfo> =
+            self.session.char.skills.get_skill_info().into();
 
         let char_data = CharDataAll {
             stat: CharDataStat {
@@ -750,12 +742,12 @@ impl GameHandler {
     }
 
     async fn handle_movement(ctx: &mut Ctx, req: UserMoveReq) -> anyhow::Result<()> {
-        ctx.pos = req.move_path.pos;
+        ctx.char_mut().pos = req.move_path.pos;
         let last = req.move_path.get_last_pos_fh();
 
         if let Some((pos, fh)) = last {
-            ctx.pos = pos;
-            ctx.fh = fh.unwrap_or(ctx.fh);
+            ctx.char_mut().pos = pos;
+            ctx.char_mut().fh = fh.unwrap_or(ctx.char().fh);
         }
 
         ctx.field.update_user_pos(req, ctx.session.char.id)?;

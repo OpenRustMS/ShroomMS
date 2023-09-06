@@ -13,7 +13,7 @@ pub type NpcId = u32;
 #[derive(ShroomPacket, Debug)]
 pub struct NpcPoolPacket<T> {
     pub id: ObjectId,
-    pub data: T,
+    pub data:T,
 }
 
 #[derive(ShroomPacket, Debug)]

@@ -1,16 +1,23 @@
 use proto95::{
-    id::{job_id::JobGroup, FaceId, HairId, ItemId, Skin},
+    id::{job_id::JobGroup, FaceId, HairId, ItemId, SkillId, Skin},
     login::char::{DeleteCharResult, SelectCharResultCode},
     shared::Gender,
 };
-use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySelect, Set, ActiveModelTrait};
+use sea_orm::{
+    ActiveModelTrait, ActiveValue::NotSet, ColumnTrait, DatabaseConnection, EntityTrait,
+    QueryFilter, QuerySelect, Set,
+};
 
 use crate::{
     created_at,
     entities::{
         account,
-        character::{ActiveModel, Column, Entity, Model, self},
+        character::{self, ActiveModel, Column, Entity, Model},
         skill,
+    },
+    services::{
+        character::skill::{SkillData, SkillSet},
+        meta::meta_service::MetaService,
     },
 };
 
@@ -104,17 +111,19 @@ pub fn check_contains<T: PartialEq + std::fmt::Debug>(
     Ok(check_id)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct CharacterService {
     db: DatabaseConnection,
     account: AccountService,
+    meta: &'static MetaService,
 }
 
 impl CharacterService {
-    pub fn new(db: DatabaseConnection) -> Self {
+    pub fn new(db: DatabaseConnection, meta: &'static MetaService) -> Self {
         Self {
             db: db.clone(),
             account: AccountService::new(db),
+            meta,
         }
     }
 
@@ -164,7 +173,7 @@ impl CharacterService {
 
         let job = create.job_group;
         let map_id = job.get_start_map().0 as i32;
-        let job = job.get_noob_job_id() as u32;
+        let job_id = job.get_noob_job_id() as u32;
 
         let char = ActiveModel {
             acc_id: Set(acc_id),
@@ -172,7 +181,7 @@ impl CharacterService {
             gender: Set((create.gender).into()),
             name: Set(create.name),
             map_id: Set(map_id),
-            job: Set(job as i32),
+            job: Set(job_id as i32),
             level: Set(50),
             str: Set(13),
             dex: Set(4),
@@ -208,6 +217,19 @@ impl CharacterService {
         item_svc
             .create_starter_set(char_id, create.starter_set)
             .await?;
+
+        let mut skill_set = SkillSet::new();
+        for (id, skill) in self.meta.get_skills_for_job(job.get_noob_job_id() ) {
+            skill_set.add_skill(SkillData {
+                id: *id,
+                level: 0,
+                mastery_level: None,
+                expires_at: None,
+                cooldown: None,
+                meta: skill,
+            });
+        }
+        self.save_skills(char_id, &skill_set).await?;
 
         Ok(char_id)
     }
@@ -261,11 +283,52 @@ impl CharacterService {
         Ok(SelectCharResultCode::Success)
     }
 
-    pub async fn load_skills(&self, id: CharacterID) -> anyhow::Result<Vec<skill::Model>> {
-        Ok(skill::Entity::find()
+    pub async fn load_skills(&self, id: CharacterID) -> anyhow::Result<SkillSet> {
+        let skills = skill::Entity::find()
             .filter(skill::Column::CharId.eq(id))
             .all(&self.db)
-            .await?)
+            .await?;
+
+        let mut skill_set = SkillSet::new();
+        for skill in skills {
+            let id = SkillId(skill.skill_id as u32);
+            let meta = self.meta.get_skill(id).unwrap();
+            skill_set.add_skill(SkillData {
+                id,
+                level: skill.skill_level as usize,
+                mastery_level: (skill.master_level != 0).then_some(skill.master_level as usize),
+                expires_at: skill.expires_at.map(|t| t.and_utc()),
+                cooldown: skill.expires_at.map(|t| t.and_utc()),
+                meta,
+            });
+        }
+        dbg!(&skill_set);
+        Ok(skill_set)
+    }
+
+    pub async fn save_skills(&self, char_id: CharacterID, skills: &SkillSet) -> anyhow::Result<()> {
+        // Remove all skills
+        skill::Entity::delete_many()
+            .filter(skill::Column::CharId.eq(char_id))
+            .exec(&self.db)
+            .await?;
+
+        // Insert new skills
+        let skills: Vec<_> = skills
+            .skills()
+            .map(|skill| skill::ActiveModel {
+                id: NotSet,
+                skill_id: Set(skill.id.0 as i32),
+                skill_level: Set(skill.level as i32),
+                master_level: Set(skill.mastery_level.unwrap_or(0) as i32),
+                expires_at: Set(skill.expires_at.map(|t| t.naive_utc())),
+                cooldown: Set(skill.cooldown.map(|t| t.naive_utc())),
+                char_id: Set(char_id),
+            })
+            .collect();
+        skill::Entity::insert_many(skills).exec(&self.db).await?;
+
+        Ok(())
     }
 
     pub async fn save_char(&self, char: character::ActiveModel) -> anyhow::Result<()> {

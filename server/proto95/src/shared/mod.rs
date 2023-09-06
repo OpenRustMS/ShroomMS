@@ -1,4 +1,3 @@
-pub mod skill;
 pub mod char;
 pub mod inventory;
 pub mod item;
@@ -8,9 +7,7 @@ pub mod movement;
 use std::net::{Ipv4Addr, SocketAddr};
 
 use shroom_net_derive::ShroomPacket;
-use shroom_net::{packet::{
-    proto::{wrapped::PacketWrapped, ShroomList16, string::FixedPacketString},
-}, packet_opcode, mark_shroom_enum};
+use shroom_net::{packet::proto::{wrapped::PacketWrapped, ShroomList16, string::FixedPacketString}, packet_opcode, mark_shroom_enum};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use crate::{recv_opcodes::RecvOpcodes, send_opcodes::SendOpcodes};

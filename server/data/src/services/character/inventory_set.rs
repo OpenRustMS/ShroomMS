@@ -10,10 +10,9 @@ use proto95::{
 
 use crate::services::{
     data::character::ItemStarterSet,
-    helper::intentory::{
-        data::{EquipInventory, EquipItemSlot, EquippedInventory, ShroomStackInventory},
-        inv::InventoryExt,
-        stack::StackOperationHandler,
+    helper::{
+        intentory::data::{EquipInventory, EquipItemSlot, EquippedInventory, ShroomStackInventory},
+        inv::{self, InvError, InvEventHandler},
     },
     item::{
         model::{EquipItem, StackItem},
@@ -63,10 +62,10 @@ pub struct PendingOperations {
     inv_type: InventoryType,
 }
 
-impl StackOperationHandler for PendingOperations {
+impl inv::InvEventHandler for PendingOperations {
     type Item = StackItem;
 
-    fn on_add_item(&mut self, slot: usize, item: &Self::Item) {
+    fn on_add(&mut self, item: &Self::Item, slot: usize) {
         self.ops.push(InventoryOperation::add(
             self.inv_type,
             slot as u16 + 1,
@@ -74,25 +73,31 @@ impl StackOperationHandler for PendingOperations {
         ));
     }
 
-    fn on_remove_item(&mut self, slot: usize) {
+    fn on_remove(&mut self, _item: &Self::Item, slot: usize) {
         self.ops
             .push(InventoryOperation::remove(self.inv_type, slot as u16 + 1));
     }
 
-    fn on_update_item(&mut self, slot: usize, q: usize) {
+    fn on_update(&mut self, item: &Self::Item, slot: usize) {
         self.ops.push(InventoryOperation::update_quantity(
             self.inv_type,
             slot as u16 + 1,
-            q as u16,
+            item.quantity as u16,
         ));
     }
 
-    fn on_swap_item(&mut self, src: usize, dst: usize) {
+    fn on_swap(&mut self, slot_a: usize, slot_b: usize) {
         self.ops.push(InventoryOperation::mov(
             self.inv_type,
-            src as u16 + 1,
-            dst as u16 + 1,
+            slot_a as u16 + 1,
+            slot_b as u16 + 1,
         ));
+    }
+}
+
+impl inv::stack::StackInvEventHandler for PendingOperations {
+    fn on_quantity_change(&mut self, item: &Self::Item, slot: usize) {
+        self.on_update(item, slot)
     }
 }
 
@@ -207,12 +212,7 @@ impl CharInventory {
     }
 
     pub fn get_equipped_stats(&self) -> EquipStats {
-        EquipStats::sum(
-            self.invs
-                .equipped
-                .items()
-                .map(|item| item.item.stats)
-        )
+        EquipStats::sum(self.invs.equipped.items().map(|item| item.0.item.stats))
     }
 
     pub fn slots(&self, ty: InventoryType) -> usize {
@@ -220,15 +220,8 @@ impl CharInventory {
     }
 
     pub fn try_add_equip(&mut self, item: EquipItem) -> anyhow::Result<usize> {
-        let slot = self
-            .invs
-            .equip
-            .try_insert(item.into())
-            .map_err(|_| anyhow::format_err!("Insert failed"))?;
-
+        let slot = self.invs.equip.add(item.into())?;
         let item = self.invs.equip.get(slot)?.item.as_ref().into();
-        log::info!("Equip Item inserted in slot({slot}: {item:?}");
-
         self.pending_operations.ops.push(InventoryOperation::add(
             InventoryType::Equip,
             slot as u16 + 1,
@@ -242,17 +235,12 @@ impl CharInventory {
         &mut self,
         item: StackItem,
         inv_type: InventoryType,
-    ) -> anyhow::Result<usize> {
+    ) -> anyhow::Result<()> {
         let inv = self.invs.get_stack_inventory_mut(inv_type)?;
-        let slot = inv
-            .try_insert(item)
-            .map_err(|_| anyhow::format_err!("Insert failed"))?;
+        self.pending_operations.inv_type = inv_type;
+        inv.add(item, &mut self.pending_operations)?;
 
-        let item = inv.get(slot).expect("Item");
-        log::info!("Stack Item inserted in slot({slot}: {item:?}");
-        self.pending_operations.on_add_item(slot, item);
-
-        Ok(slot)
+        Ok(())
     }
 
     pub fn equip_item(
@@ -267,11 +255,13 @@ impl CharInventory {
         let eq_item: EquipItemSlot = equip.take(eq_slot)?;
 
         // Put the item into the equipped slot
-        let prev_item = equipped.replace(char_equip_slot, eq_item).expect("equip");
+        let prev_item = equipped
+            .replace(char_equip_slot, eq_item.into())
+            .expect("equip");
 
         // Put unequipped item back into the equip
         if let Some(item) = prev_item {
-            equip.set_slot(eq_slot, item);
+            equip.set(eq_slot, item.0)?;
         };
 
         let dst = -(char_equip_slot as i16);
@@ -298,20 +288,20 @@ impl CharInventory {
         // Either use the destination slot or create a free slot
         let eq_slot = eq_slot
             .or_else(|| equip.find_free_slot())
-            .ok_or_else(|| anyhow::format_err!("No free slot"))?;
+            .ok_or(InvError::Full)?;
 
         // Ensure the eq slot is free
-        if equip.get_slot(eq_slot)?.is_some() {
+        if equip.get_slot_opt(eq_slot)?.is_some() {
             anyhow::bail!("Slot is not free");
         }
 
         // Remove the equipped item
-        let eq_item: EquipItemSlot = equipped
-            .remove(char_equip_slot)
-            .ok_or_else(|| anyhow::format_err!("Empty slot"))?;
+        let eq_item = equipped
+            .remove(char_equip_slot)?
+            .ok_or(InvError::EmptySlot(eq_slot))?;
 
         // Put the item into the free equip slot
-        equip.set_slot(eq_slot, eq_item);
+        equip.set(eq_slot, eq_item.0)?;
 
         let src = -(char_equip_slot as i16);
         // Add pending operation
@@ -333,7 +323,8 @@ impl CharInventory {
         quantity: Option<usize>,
     ) -> anyhow::Result<StackItem> {
         let inv = self.invs.get_stack_inventory_mut(inv_type)?;
-        let item = inv.take(slot.as_slot(), quantity, &mut self.pending_operations)?;
+        self.pending_operations.inv_type = inv_type;
+        let item = inv.take_from_slot(slot.as_slot(), quantity, &mut self.pending_operations)?;
         Ok(item)
     }
 
@@ -352,14 +343,14 @@ impl CharInventory {
                 let item = self
                     .invs
                     .equipped
-                    .remove(eq_slot)
+                    .remove(eq_slot)?
                     .ok_or_else(|| anyhow::format_err!("Invalid eq"))?;
                 self.pending_operations.ops.push(InventoryOperation::remove(
                     InventoryType::Equip,
                     slot.as_slot_index(),
                 ));
                 self.recalc_eq_stats = true;
-                item
+                item.0
             }
         })
     }
@@ -374,7 +365,7 @@ impl CharInventory {
         if inv_type.is_stack() {
             self.pending_operations.inv_type = inv_type;
             let inv = self.invs.get_stack_inventory_mut(inv_type)?;
-            inv.move_slot(
+            inv.move_stack(
                 src.as_slot(),
                 dst.as_slot(),
                 count,
@@ -404,7 +395,7 @@ impl CharInventory {
                         anyhow::bail!("Unable to swap");
                     }
 
-                    self.invs.equipped.swap(src_, dst_);
+                    self.invs.equipped.swap(src_, dst_)?;
                     self.pending_operations.ops.push(InventoryOperation::mov(
                         inv_type,
                         src.as_slot_index(),
