@@ -1,8 +1,6 @@
-use shroom_net::{
-    packet::proto::{option::ShroomOption8, ShroomList8},
-    packet_opcode, shroom_enum_code, shroom_packet_enum,
+use shroom_pkt::{
+    packet_opcode, shroom_enum_code, ShroomList8, ShroomOption8, ShroomPacket, ShroomPacketEnum,
 };
-use shroom_net_derive::ShroomPacket;
 
 use crate::{
     id::{
@@ -37,13 +35,11 @@ pub struct MigrateStageInfo {
     pub premium_arg: u32,
 }
 
-shroom_packet_enum!(
-    #[derive(Debug)]
-    pub enum SelectCharResult: u8 {
-        Success(MigrateStageInfo) = 0
-        //TODO add the rest
-    }
-);
+#[derive(Debug, ShroomPacketEnum)]
+#[repr(u8)]
+pub enum SelectCharResult {
+    Success(MigrateStageInfo) = 0, //TODO add the rest
+}
 
 #[derive(ShroomPacket, Debug)]
 pub struct SelectCharResp {
@@ -61,39 +57,36 @@ pub struct ViewAllCharReq {
 }
 packet_opcode!(ViewAllCharReq, RecvOpcodes::ViewAllChar);
 
-shroom_packet_enum!(
-    #[derive(Debug)]
-    pub enum ViewAllCharResp: u8 {
-        Success(ViewAllCharList) = 0,
-        Prepare(ViewAllCharPrepare) = 1,
-        Reset(()) = 2,
-        Error3(ViewAllCharCustomError) = 3,
-        Error4(()) = 4,
-        Error5(()) = 5,
-        Error6(ViewAllCharCustomError) = 6,
-        Error7(ViewAllCharCustomError) = 7
-    }
-);
+#[derive(Debug, ShroomPacketEnum)]
+#[repr(u8)]
+pub enum ViewAllCharResp {
+    Success(ViewAllCharList) = 0,
+    Prepare(ViewAllCharPrepare) = 1,
+    Reset(()) = 2,
+    Error3(ViewAllCharCustomError) = 3,
+    Error4(()) = 4,
+    Error5(()) = 5,
+    Error6(ViewAllCharCustomError) = 6,
+    Error7(ViewAllCharCustomError) = 7,
+}
 packet_opcode!(ViewAllCharResp, SendOpcodes::ViewAllCharResult);
 
-shroom_packet_enum!(
-    #[derive(Debug)]
-    pub enum SelectWorldResp: u8 {
-        Success(SelectWorldCharList) = 0,
-        Err(()) = 1 //TODO add more errors
-    }
-);
+#[derive(Debug, ShroomPacketEnum)]
+#[repr(u8)]
+pub enum SelectWorldResp {
+    Success(SelectWorldCharList) = 0,
+    Err(()) = 1, //TODO add more errors
+}
 packet_opcode!(SelectWorldResp, SendOpcodes::SelectWorldResult);
 
-shroom_packet_enum!(
-    pub enum CreateCharResp: u8 {
-        Success(ViewChar) = 0,
-        Timeout(()) = 0xa,
-        SystemError(()) = 0x1a,
-        InvalidCharName(()) = 0x1e
-        //TODO more errors?
-    }
-);
+#[derive(Debug, ShroomPacketEnum)]
+#[repr(u8)]
+pub enum CreateCharResp {
+    Success(ViewChar) = 0,
+    Timeout(()) = 0xa,
+    SystemError(()) = 0x1a,
+    InvalidCharName(()) = 0x1e, //TODO more errors?
+}
 packet_opcode!(CreateCharResp, SendOpcodes::CreateNewCharacterResult);
 
 shroom_enum_code!(

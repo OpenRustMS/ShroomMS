@@ -94,6 +94,7 @@ fn launch_shroom(cmd: &str, addr: &str, port: u16, token: Option<&str>) -> anyho
     let cmd_ = cmd.arg(addr).arg(port.to_string());
 
     if let Some(token) = token {
+        println!("Using token: {}", token);
         cmd_.env("SHROOM_TOKEN", token);
     }
 

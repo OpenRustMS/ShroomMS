@@ -97,7 +97,6 @@ pub struct PacketStructContext {
 
 impl PacketStructContext {
     pub fn new(path: impl AsRef<Path>) -> Self {
-        dbg!(path.as_ref());
         let out_file = Mutex::new(BufWriter::new(File::create(path).unwrap()));
 
         Self {

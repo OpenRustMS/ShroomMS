@@ -1,6 +1,12 @@
 use std::future::Future;
 
-use data::{entities::account, services::session::{ClientKey, shroom_session_manager::OwnedShroomLoginSession}};
+use data::{
+    entities::{account, character},
+    services::{
+        data::character::CharacterID,
+        session::{shroom_session_manager::OwnedShroomLoginSession, ClientKey},
+    },
+};
 use proto95::login::world::{ChannelId, WorldId};
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -14,6 +20,7 @@ enum LoginStage {
     CharSelection {
         world: WorldId,
         channel: ChannelId,
+        chars: Vec<character::Model>,
     },
 }
 
@@ -36,7 +43,6 @@ impl LoginState {
             client_key: None,
         }
     }
-
 
     fn check_stage(&self, stage: LoginStage) -> anyhow::Result<()> {
         if self.stage != stage {
@@ -65,17 +71,62 @@ impl LoginState {
         Ok(self.login_session.take().unwrap())
     }
 
-    
     pub fn reset(&mut self) {
-        self.login_session = None;
-        self.client_key = None;
-        self.stage = LoginStage::default();
+        self.reset_replace();
     }
 
-    pub fn get_char_select(&self) -> anyhow::Result<(&account::Model, WorldId, ChannelId)> {
-        if let LoginStage::CharSelection { world, channel } = self.stage {
-            return Ok((self.get_account().unwrap(), world, channel));
+    fn reset_replace(&mut self) -> LoginStage {
+        self.client_key = None;
+        std::mem::replace(&mut self.stage, LoginStage::default())
+    }
+
+    pub fn transition_game(
+        &mut self,
+        selected_char_id: CharacterID,
+    ) -> anyhow::Result<(character::Model, ClientKey, WorldId, ChannelId)> {
+        // Verify stage
+        let LoginStage::CharSelection { ref chars, .. } = self.stage else {
+            anyhow::bail!(
+                "Expected stage: CharSelect, current stage: {:?}",
+                self.stage
+            );
+        };
+
+        // Find char_ix
+        let Some(char_ix) = chars.iter().position(|c| c.id == selected_char_id) else {
+            anyhow::bail!("Invalid char id: {selected_char_id}");
+        };
+
+        // Claim old state
+        let client_key = self.client_key.expect("client key");
+        let LoginStage::CharSelection {
+            chars,
+            world,
+            channel,
+        } = self.reset_replace()
+        else {
+            anyhow::bail!(
+                "Expected stage: CharSelect, current stage: {:?}",
+                self.stage
+            );
+        };
+        // We now the char list contains the char at the index
+        let char = chars.into_iter().skip(char_ix).next().unwrap();
+        Ok((char, client_key, world, channel))
+    }
+
+    pub fn get_char_select(
+        &self,
+    ) -> anyhow::Result<(&account::Model, WorldId, ChannelId, &[character::Model])> {
+        if let LoginStage::CharSelection {
+            world,
+            channel,
+            chars,
+        } = &self.stage
+        {
+            return Ok((self.get_account().unwrap(), *world, *channel, &chars));
         }
+
         anyhow::bail!(
             "Expected stage: CharSelect, current stage: {:?}",
             self.stage
@@ -133,9 +184,11 @@ impl LoginState {
         matches!(self.stage, LoginStage::SetGender)
     }
 
-
     /// Transitions the stage with the given account
-    pub fn transition_login_with_session(&mut self, session: OwnedShroomLoginSession) -> anyhow::Result<()> {
+    pub fn transition_login_with_session(
+        &mut self,
+        session: OwnedShroomLoginSession,
+    ) -> anyhow::Result<()> {
         self.client_key = Some((session.acc.id as u64).to_le_bytes());
         let has_gender = session.acc.gender.is_some();
         let accepted_tos = session.acc.accepted_tos;
@@ -156,8 +209,13 @@ impl LoginState {
         &mut self,
         world: WorldId,
         channel: ChannelId,
+        chars: Vec<character::Model>,
     ) -> anyhow::Result<()> {
-        self.stage = LoginStage::CharSelection { world, channel };
+        self.stage = LoginStage::CharSelection {
+            world,
+            channel,
+            chars,
+        };
         Ok(())
     }
 

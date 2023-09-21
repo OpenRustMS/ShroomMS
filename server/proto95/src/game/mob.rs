@@ -1,13 +1,8 @@
-use shroom_net::{
-    packet::proto::{
-        option::ShroomOption8,
-        partial::PartialFlag,
-        time::{ShroomDurationMs16, ShroomDurationMs32},
-        CondOption, PacketWrapped, ShroomList32,
-    },
-    packet_opcode, partial_data, shroom_enum_code, shroom_packet_enum,
+use shroom_pkt::{
+    packet_opcode, partial::PartialFlag, partial_data, shroom_enum_code, CondOption, PacketWrapped,
+    ShroomDurationMs16, ShroomDurationMs32, ShroomList32, ShroomOption8, ShroomPacket,
+    ShroomPacketEnum,
 };
-use shroom_net_derive::ShroomPacket;
 
 use crate::{
     id::{ItemId, SkillId},
@@ -24,14 +19,14 @@ use super::ObjectId;
 
 pub type MobId = u32;
 
-#[derive(ShroomPacket, Debug)]
+#[derive(ShroomPacket, Debug, Clone)]
 pub struct TempStatValue {
     pub n: u16,
     pub r: u32,
     pub t: ShroomDurationMs16,
 }
 
-#[derive(ShroomPacket, Debug)]
+#[derive(ShroomPacket, Debug, Clone)]
 pub struct BurnedInfo {
     pub char_id: CharacterId,
     pub skill_id: SkillId,
@@ -45,6 +40,7 @@ partial_data!(
     MobTemporaryStat,
     MobTemporaryStatFlags,
     u128,
+    derive(Debug),
     Pad(TempStatValue) => 1 << 0,
     Pdr(TempStatValue) => 1 << 1,
     Mad(TempStatValue) => 1 << 2,
@@ -101,17 +97,16 @@ pub type PartialMobTemporaryStat = PartialFlag<(), MobTemporaryStatPartial>;
 
 //TODO figure out what the u32 is, summon id?
 
-shroom_packet_enum!(
-    #[derive(Debug)]
-    pub enum MobSummonType: i8 {
-        Effect(u32) = 0,
-        Normal(()) = -1,
-        Regen(()) = -2,
-        Revived(u32) = -3,
-        Suspended(()) = -4,
-        Delay(()) = -5
-    }
-);
+#[derive(ShroomPacketEnum, Debug)]
+#[repr(i8)]
+pub enum MobSummonType {
+    Effect(u32) = 0,
+    Normal(()) = -1,
+    Regen(()) = -2,
+    Revived(u32) = -3,
+    Suspended(()) = -4,
+    Delay(()) = -5,
+}
 
 shroom_enum_code!(CarnivalTeam, u8, None = 0xff, Blue = 0, Red = 1);
 
@@ -137,17 +132,16 @@ pub struct MobEnterFieldResp {
 }
 packet_opcode!(MobEnterFieldResp, SendOpcodes::MobEnterField);
 
-shroom_packet_enum!(
-    #[derive(Debug)]
-    pub enum MobLeaveType: u8 {
-        RemainHp(()) = 0,
-        Etc(()) = 1, //Fadeout?
-        SelfDestruct(()) = 2,
-        DestructByMiss(()) = 3,
-        Swallow(CharacterId) = 4,
-        SummonTimeout(()) = 5
-    }
-);
+#[derive(ShroomPacketEnum, Debug)]
+#[repr(u8)]
+pub enum MobLeaveType {
+    RemainHp(()) = 0,
+    Etc(()) = 1, //Fadeout?
+    SelfDestruct(()) = 2,
+    DestructByMiss(()) = 3,
+    Swallow(CharacterId) = 4,
+    SummonTimeout(()) = 5,
+}
 
 #[derive(ShroomPacket, Debug)]
 pub struct MobLeaveFieldResp {
@@ -240,7 +234,7 @@ packet_opcode!(MobMoveReq, RecvOpcodes::MobMove);
 
 #[cfg(test)]
 mod tests2 {
-    use shroom_net::DecodePacket;
+    use shroom_pkt::{DecodePacket, PacketReader};
 
     use super::MobMoveReq;
 
@@ -258,7 +252,7 @@ mod tests2 {
             0x00, 0x00, 0x00, 0x00, 0x00,
         ];
 
-        let _ = MobMoveReq::decode_from_data_complete(&data).unwrap();
+        let _ = MobMoveReq::decode_complete(&mut PacketReader::from(&data)).unwrap();
     }
 }
 
@@ -434,7 +428,7 @@ packet_opcode!(MobDropPickUpReq, RecvOpcodes::MobDropPickUpRequest);
 
 #[cfg(test)]
 mod tests {
-    use shroom_net::packet::DecodePacket;
+    use shroom_pkt::{DecodePacket, PacketReader};
 
     use super::MobMoveReq;
 
@@ -446,7 +440,7 @@ mod tests {
             0, 0, 1, 231, 255, 43, 0, 0, 0, 46, 0, 0, 0, 0, 0, 2, 56, 4, 0, 211, 0, 231, 255, 0, 1,
             231, 255, 0, 0, 0, 0, 0, 0, 0, 0,
         ];
-        let move_data = MobMoveReq::decode_from_data_complete(&data[2..]).unwrap();
+        let move_data = MobMoveReq::decode_complete(&mut PacketReader::new(&data[2..])).unwrap();
 
         dbg!(move_data);
     }

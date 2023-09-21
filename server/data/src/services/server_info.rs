@@ -1,7 +1,6 @@
 use anyhow::anyhow;
+use shroom_pkt::ShroomList16;
 use std::net::{IpAddr, SocketAddr};
-
-use shroom_net::packet::proto::ShroomList16;
 
 use proto95::login::world::{ChannelId, ChannelItem, WorldId, WorldInfoResp, WorldItem};
 

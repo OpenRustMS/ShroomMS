@@ -140,7 +140,7 @@ impl<Item: InvItem, const CAP: usize> Inv<Item, CAP> {
         self.slots
             .iter()
             .position(|slot| slot.is_none())
-            .map(|i| Item::SlotIndex::from_slot_index(i))
+            .map(Item::SlotIndex::from_slot_index)
     }
 
     pub fn get_slot_opt(&self, slot: Item::SlotIndex) -> InvResult<Option<&Item>> {

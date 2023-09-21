@@ -3,10 +3,10 @@ use std::sync::Arc;
 use dashmap::DashSet;
 
 use crate::{
-    entities::{self},
+    entities::{self, character},
     services::{
         character::Character,
-        data::{account::AccountId, character::CharacterID, DataServices},
+        data::{account::AccountId, DataServices},
     },
 };
 
@@ -32,12 +32,17 @@ pub enum ShroomSessionData {
 impl ShroomSessionData {
     pub async fn transition_ingame(
         &mut self,
-        char_id: CharacterID,
+        char: character::Model,
         data: &DataServices,
     ) -> anyhow::Result<()> {
         let Self::Login(login) = self else {
             anyhow::bail!("Session is not in login state")
         };
+        let acc_id = login.acc.id;
+        let char_id = char.id;
+        if char.acc_id != acc_id {
+            anyhow::bail!("Chracter with id: {char_id}, does not belong to account: {acc_id}");
+        }
 
         //TODO: important verify that char belongs to the account
         let char = Character::new(
@@ -45,7 +50,6 @@ impl ShroomSessionData {
             data.item.load_inventory_for_character(char_id).await?,
             data.char.load_skills(char_id).await?,
         );
-
 
         *self = Self::Ingame(SessionIngameData {
             acc: login.acc.clone(),
@@ -83,7 +87,7 @@ impl SessionBackend for ShroomSessionBackend {
     type Data = ShroomSessionData;
     type LoadParam = entities::account::Model;
     type Error = anyhow::Error;
-    type TransitionInput = CharacterID;
+    type TransitionInput = character::Model;
 
     async fn load(&self, param: Self::LoadParam) -> anyhow::Result<Self::Data> {
         if !self.logged_in.insert(param.id) {
@@ -103,7 +107,7 @@ impl SessionBackend for ShroomSessionBackend {
                     .await?;
                 self.data
                     .char
-                    .save_skills(char_id, dbg!(&ingame.char.skills))
+                    .save_skills(char_id, &ingame.char.skills)
                     .await?;
             }
             ShroomSessionData::Login(_login) => {}

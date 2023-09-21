@@ -1,25 +1,22 @@
-use shroom_net::{
-    packet::proto::{
-        list::ShroomIndexListZ8, option::ShroomOption8, partial::PartialFlag,
-        time::ShroomDurationMs32, ShroomList32,
-    },
-    packet_opcode,
+use shroom_pkt::{
+    packet_opcode, partial::PartialFlag, ShroomDurationMs32, ShroomIndexListZ8, ShroomList32,
+    ShroomOption8, ShroomPacket,
 };
-use shroom_net_derive::ShroomPacket;
 
 use crate::{
     id::{job_id::JobId, ItemId, SkillId},
     send_opcodes::SendOpcodes,
     shared::{
-        char::{
-            AvatarData, CharacterId, RemoteCharSecondaryStatFlags, RemoteCharSecondaryStatPartial,
-        },
+        char::{AvatarData, CharacterId},
         movement::MovePath,
         FootholdId, TagPoint, Vec2,
     },
 };
 
-use super::ActionDir;
+use super::{
+    secondary_stats::{RemoteCharSecondaryStatFlags, RemoteCharSecondaryStatPartial},
+    ActionDir,
+};
 
 #[derive(ShroomPacket, Default, Debug)]
 pub struct GuildMarkData {

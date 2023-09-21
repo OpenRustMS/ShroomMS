@@ -1,22 +1,18 @@
-use shroom_net::{
-    packet::proto::{
-        list::{ShroomList, ShroomListLen},
-        option::ShroomOption8,
-        time::ShroomTime,
-        ShroomList16,
-    },
-    packet_opcode, shroom_packet_enum,
+use shroom_pkt::{
+    list::ShroomListLen, packet_opcode, ShroomList, ShroomList16, ShroomOption8, ShroomPacket,
+    ShroomPacketEnum, ShroomTime,
 };
-use shroom_net_derive::ShroomPacket;
 
 use crate::{
     id::MapId,
     send_opcodes::SendOpcodes,
     shared::{
-        char::{CharDataAll, CharDataFlagsAll, CharDataHeader, CharacterId},
+        char::{CharDataHeader, CharacterId},
         TagPoint,
     },
 };
+
+use super::user::char::{CharDataAll, CharDataFlags};
 
 #[derive(ShroomPacket, Debug)]
 pub struct ClientOption {
@@ -61,7 +57,7 @@ pub type NotificationList = ShroomList<PlusOneListIndex, String>;
 pub struct SetFieldCharData {
     pub notifications: NotificationList,
     pub seed: CrcSeed,
-    pub char_data_flags: CharDataFlagsAll,
+    pub char_data_flags: CharDataFlags,
     pub char_data_hdr: CharDataHeader,
     pub char_data: CharDataAll,
     pub logout_gift_config: LogoutGiftConfig,
@@ -82,13 +78,12 @@ impl SetFieldOtherData {
     }
 }
 
-shroom_packet_enum!(
-    #[derive(Debug)]
-    pub enum SetFieldResult: u8 {
-        TransferField(SetFieldOtherData) = 0,
-        CharData(SetFieldCharData) = 1
-    }
-);
+#[derive(ShroomPacketEnum, Debug)]
+#[repr(u8)]
+pub enum SetFieldResult {
+    TransferField(SetFieldOtherData) = 0,
+    CharData(SetFieldCharData) = 1,
+}
 
 #[derive(ShroomPacket, Debug)]
 pub struct SetFieldResp {

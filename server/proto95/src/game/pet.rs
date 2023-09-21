@@ -1,5 +1,4 @@
-use shroom_net_derive::ShroomPacket;
-use shroom_net::{packet::{proto::time::Ticks}, packet_opcode};
+use shroom_pkt::{packet_opcode, time::Ticks, ShroomPacket};
 
 use crate::{recv_opcodes::RecvOpcodes, shared::Vec2};
 
@@ -12,7 +11,7 @@ pub type PetIx = u8;
 #[derive(ShroomPacket, Debug)]
 pub struct PetDropPickUpReq {
     pub locker_id: PetLockerId,
-    pub u1: u8,// Pet id?
+    pub u1: u8, // Pet id?
     pub ticks: Ticks,
     pub point: Vec2,
     pub drop_id: ObjectId,
@@ -23,9 +22,6 @@ pub struct PetDropPickUpReq {
     // TOdo: drop_id / 0xd * 0xd == drop_id, figure this out
     pub drop_pos: Vec2,
     pub pos_crc: u32,
-    pub rect_crc: u32
-
-
-    
+    pub rect_crc: u32,
 }
 packet_opcode!(PetDropPickUpReq, RecvOpcodes::PetDropPickUpRequest);

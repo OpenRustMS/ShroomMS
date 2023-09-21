@@ -1,6 +1,5 @@
 pub mod pin;
-use shroom_net::{shroom_enum_code, packet_opcode, packet::CondOption};
-use shroom_net_derive::ShroomPacket;
+use shroom_pkt::{packet_opcode, shroom_enum_code, CondOption, ShroomPacket};
 
 use crate::recv_opcodes::RecvOpcodes;
 

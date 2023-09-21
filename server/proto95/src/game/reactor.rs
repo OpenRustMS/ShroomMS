@@ -1,7 +1,6 @@
-use shroom_net_derive::ShroomPacket;
-use shroom_net::{packet::{proto::time::ShroomDurationMs16}, packet_opcode};
+use shroom_pkt::{packet_opcode, ShroomDurationMs16, ShroomPacket};
 
-use crate::{send_opcodes::SendOpcodes, shared::Vec2, recv_opcodes::RecvOpcodes};
+use crate::{recv_opcodes::RecvOpcodes, send_opcodes::SendOpcodes, shared::Vec2};
 
 use super::ObjectId;
 
@@ -14,7 +13,7 @@ pub struct ReactorEnterFieldResp {
     pub state: u8,
     pub pos: Vec2,
     pub flipped: bool,
-    pub name: String
+    pub name: String,
 }
 packet_opcode!(ReactorEnterFieldResp, SendOpcodes::ReactorEnterField);
 
@@ -22,14 +21,14 @@ packet_opcode!(ReactorEnterFieldResp, SendOpcodes::ReactorEnterField);
 pub struct ReactorLeaveFieldResp {
     pub id: ObjectId,
     pub state: u8,
-    pub pos: Vec2
+    pub pos: Vec2,
 }
 packet_opcode!(ReactorLeaveFieldResp, SendOpcodes::ReactorLeaveField);
 
 #[derive(ShroomPacket, Debug)]
 pub struct ReactorMoveResp {
     pub id: ObjectId,
-    pub pos: Vec2
+    pub pos: Vec2,
 }
 packet_opcode!(ReactorMoveResp, SendOpcodes::ReactorMove);
 
@@ -40,7 +39,7 @@ pub struct ReactorChangeStateResp {
     pub pos: Vec2,
     pub animation_delay: ShroomDurationMs16,
     pub proper_event_id: u8,
-    pub end_state: u8
+    pub end_state: u8,
 }
 packet_opcode!(ReactorChangeStateResp, SendOpcodes::ReactorChangeState);
 
@@ -50,8 +49,7 @@ pub struct ReactorHitReq {
     pub skill_reactor: u32,
     pub hit_option: u32,
     pub action_delay: ShroomDurationMs16,
-    pub skill_id: u32
-
+    pub skill_id: u32,
 }
 packet_opcode!(ReactorHitReq, RecvOpcodes::ReactorHit);
 
@@ -59,6 +57,5 @@ packet_opcode!(ReactorHitReq, RecvOpcodes::ReactorHit);
 pub struct ReactorTouchReq {
     pub id: ObjectId,
     pub has_reactor: bool, // TODO
-
 }
 packet_opcode!(ReactorTouchReq, RecvOpcodes::ReactorTouch);

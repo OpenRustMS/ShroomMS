@@ -1,8 +1,6 @@
-use shroom_net::{
-    packet::proto::{time::Ticks, ShroomList8},
-    packet_opcode, shroom_enum_code, shroom_packet_enum,
+use shroom_pkt::{
+    packet_opcode, shroom_enum_code, time::Ticks, ShroomList8, ShroomPacket, ShroomPacketEnum,
 };
-use shroom_net_derive::ShroomPacket;
 
 use crate::{
     id::ItemId, recv_opcodes::RecvOpcodes, send_opcodes::SendOpcodes, shared::char::CharacterId,
@@ -41,18 +39,17 @@ pub struct WispherData {
     message: String,
 }
 
-shroom_packet_enum!(
-    #[derive(Debug)]
-    pub enum WispherMessageType: u8 {
-        Location(String) = 1,
-        Whispher(WispherData) = 2,
-        Request(String) = 0x04,
-        Result(String) = 0x08,
-        Receiver(String) = 0x10,
-        Blocked(String) = 0x20,
-        LocationFriend(String) = 0x40
-    }
-);
+#[derive(Debug, ShroomPacketEnum)]
+#[repr(u8)]
+pub enum WispherMessageType {
+    Location(String) = 1,
+    Whispher(WispherData) = 2,
+    Request(String) = 0x04,
+    Result(String) = 0x08,
+    Receiver(String) = 0x10,
+    Blocked(String) = 0x20,
+    LocationFriend(String) = 0x40,
+}
 
 #[derive(Debug, ShroomPacket)]
 pub struct ItemGainInfoData {
@@ -67,21 +64,19 @@ pub struct ItemGainItemData {
     quantity: u32,
 }
 
-
-shroom_packet_enum!(
-    #[derive(Debug)]
-    pub enum SlashChatMsgType: u8 {
-        CmdStrF9(()) = 0x3A,
-        //lvl
-        CmdStr725(u8) = 0x1E,
-        // som id?
-        Create(u32) = 0,
-        // /
-        CmdStr717(u8) = 1,
-        // /ex
-        CmdStr718(u32) = 2
-    }
-);
+#[derive(Debug, ShroomPacketEnum)]
+#[repr(u8)]
+pub enum SlashChatMsgType {
+    CmdStrF9(()) = 0x3A,
+    //lvl
+    CmdStr725(u8) = 0x1E,
+    // som id?
+    Create(u32) = 0,
+    // /
+    CmdStr717(u8) = 1,
+    // /ex
+    CmdStr718(u32) = 2,
+}
 
 #[derive(Debug, ShroomPacket)]
 pub struct SlashChatMsg {
@@ -109,13 +104,13 @@ pub struct WhisperFindData {
     pub target: String,
 }
 
-shroom_packet_enum!(
-    pub enum WhiperMsgReq: u8 {
-        Unknown(WhisperData) = 0x86,
-        Whisper(WhisperData) = 6,
-        WhisperFind(WhisperFindData) = 5
-    }
-);
+#[derive(Debug, ShroomPacketEnum)]
+#[repr(u8)]
+pub enum WhiperMsgReq {
+    Unknown(WhisperData) = 0x86,
+    Whisper(WhisperData) = 6,
+    WhisperFind(WhisperFindData) = 5,
+}
 packet_opcode!(WhiperMsgReq, RecvOpcodes::Whisper);
 
 #[derive(ShroomPacket, Debug)]

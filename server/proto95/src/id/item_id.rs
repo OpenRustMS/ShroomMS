@@ -1,6 +1,6 @@
 use std::ops::RangeInclusive;
 
-use shroom_net::shroom_enum_code;
+use shroom_pkt::shroom_enum_code;
 
 use crate::shroom_id;
 
@@ -22,10 +22,7 @@ shroom_enum_code!(
 
 impl InventoryType {
     pub fn is_equip(&self) -> bool {
-        matches!(
-            self,
-            InventoryType::Equipped | InventoryType::Equip
-        )
+        matches!(self, InventoryType::Equipped | InventoryType::Equip)
     }
 
     pub fn is_stack(&self) -> bool {
@@ -45,7 +42,7 @@ impl ItemId {
             _ => anyhow::bail!("Unknown inv type for item: {self}"),
         })
     }
-    
+
     pub fn is_arrow_for_bow(&self) -> bool {
         (2060000..=2061000).contains(&self.0)
     }

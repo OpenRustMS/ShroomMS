@@ -1,5 +1,6 @@
-use shroom_net_derive::ShroomPacket;
-use shroom_net::{packet::proto::{option::ShroomOption8, time::ShroomTime, CondOption}, packet_opcode, shroom_packet_enum};
+use shroom_pkt::{
+    packet_opcode, CondOption, ShroomOption8, ShroomPacket, ShroomPacketEnum, ShroomTime,
+};
 
 use crate::{
     recv_opcodes::RecvOpcodes,
@@ -7,7 +8,7 @@ use crate::{
     shared::{Gender, OptionGender},
 };
 
-use super::{BanReason, ClientKey, LoginResultHeader, MachineId, StartMode, LoginOpt};
+use super::{BanReason, ClientKey, LoginOpt, LoginResultHeader, MachineId, StartMode};
 
 pub type AccountId = u32;
 
@@ -84,8 +85,6 @@ pub struct GuestAccountInfo {
     guest_id_url: String,
 }
 
-
-
 #[derive(ShroomPacket, Debug)]
 pub struct SuccessResult {
     //TODO reg has to be either 0/1 for having an acc
@@ -94,21 +93,20 @@ pub struct SuccessResult {
     pub account: LoginAccountData,
 }
 
-shroom_packet_enum!(
-    #[derive(Debug)]
-    pub enum CheckPasswordResp: u8 {
-        Success(SuccessResult) = 0,
-        BlockedIp(BlockedIp) = 2,
-        IdDeleted(LoginResultHeader) = 3,
-        InvalidPassword(LoginResultHeader) = 4,
-        InvalidUserName(LoginResultHeader) = 5,
-        SystemError(LoginResultHeader) = 6,
-        AlreadyLoggedIn(LoginResultHeader) = 7,
-        UnableToLoginWithIp(LoginResultHeader) = 13,
-        TOS(LoginResultHeader) = 23,
-        Unknown(LoginResultHeader) = 255
-    }
-);
+#[derive(ShroomPacketEnum, Debug)]
+#[repr(u8)]
+pub enum CheckPasswordResp {
+    Success(SuccessResult) = 0,
+    BlockedIp(BlockedIp) = 2,
+    IdDeleted(LoginResultHeader) = 3,
+    InvalidPassword(LoginResultHeader) = 4,
+    InvalidUserName(LoginResultHeader) = 5,
+    SystemError(LoginResultHeader) = 6,
+    AlreadyLoggedIn(LoginResultHeader) = 7,
+    UnableToLoginWithIp(LoginResultHeader) = 13,
+    TOS(LoginResultHeader) = 23,
+    Unknown(LoginResultHeader) = 255,
+}
 packet_opcode!(CheckPasswordResp, SendOpcodes::CheckPasswordResult);
 
 #[derive(Debug, ShroomPacket)]

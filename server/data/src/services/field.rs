@@ -1,45 +1,104 @@
-use std::{ops::Deref, sync::Arc};
+use std::sync::Arc;
 
-use dashmap::DashMap;
+use dashmap::{mapref::entry::Entry, DashMap};
 use proto95::{
     game::{
         chat::UserChatMsgResp,
         drop::DropId,
         mob::{MobLeaveType, MobMoveReq},
-        user::UserMoveReq,
         ObjectId,
     },
     id::MapId,
-    shared::{char::AvatarData, FootholdId, Range2, Vec2},
+    shared::{char::AvatarData, movement::MovePath, FootholdId, Range2, Vec2},
 };
-use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort};
-use shroom_net::{net::service::SharedSessionHandle, PacketBuffer};
+use shroom_net::server::{
+    room::{Room, RoomJoinHandle, RoomSet, RoomState},
+    tick::Tick,
+};
+use shroom_pkt::{
+    util::packet_buf::PacketBuf, EncodePacket, HasOpcode, PacketWriter, ShroomPacketData,
+};
+use tokio::sync::{mpsc, oneshot};
 
 use super::{
     data::character::CharacterID,
-    helper::pool::{drop::DropLeaveParam, reactor::Reactor, user::User, Drop, Mob, Npc, Pool},
+    helper::pool::{
+        drop::{DropLeaveParam, DropTypeValue},
+        reactor::Reactor,
+        user::User,
+        Drop, Mob, Npc, Pool,
+    },
     meta::{
         fh_tree::FhTree,
         meta_service::{FieldMeta, MetaService},
     },
-    session::shroom_session_manager::ShroomSessionSet,
 };
 
 #[derive(Debug)]
-pub struct FieldData {
-    _meta: &'static MetaService,
+pub struct SharedFieldState {
     id: MapId,
     field_meta: FieldMeta,
     field_fh: &'static FhTree,
+    drops: DashMap<DropId, Drop>,
+}
+
+impl SharedFieldState {
+    /// Fast way to loot items
+    pub fn try_claim_drop(
+        &self,
+        drop_id: DropId,
+        check: impl FnOnce(&Drop) -> bool,
+    ) -> Option<Drop> {
+        let Entry::Occupied(drop) = self.drops.entry(drop_id) else {
+            return None;
+        };
+
+        if check(drop.get()) {
+            Some(drop.remove())
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct FieldData {
+    shared: Arc<SharedFieldState>,
     drop_pool: Pool<Drop>,
     mob_pool: Pool<Mob>,
     npc_pool: Pool<Npc>,
     reactor_pool: Pool<Reactor>,
     user_pool: Pool<User>,
-    sessions: ShroomSessionSet,
+    sessions: FieldRoomSet,
+    drop_spam: Option<Vec2>,
 }
 
-impl FieldData {
+#[derive(Clone, Debug)]
+pub enum SessionMsg {
+    Pkt(ShroomPacketData),
+    PktBuf(Arc<PacketBuf>),
+}
+
+impl SessionMsg {
+    pub fn from_packet<T: EncodePacket + HasOpcode>(pkt: T) -> Self {
+        let mut pw = PacketWriter::default();
+        pw.write_opcode(T::OPCODE).expect("op");
+        pkt.encode_packet(&mut pw).expect("pw");
+
+        Self::Pkt(ShroomPacketData::from_writer(pw))
+    }
+}
+
+impl From<PacketBuf> for SessionMsg {
+    fn from(pkt: PacketBuf) -> Self {
+        Self::PktBuf(Arc::new(pkt))
+    }
+}
+
+pub type FieldRoomSet = RoomSet<CharacterID, SessionMsg>;
+pub type FieldSessionHandle = mpsc::Sender<SessionMsg>;
+
+impl SharedFieldState {
     pub fn get_field_id(&self) -> MapId {
         self.id
     }
@@ -49,33 +108,118 @@ impl FieldData {
     }
 }
 
-pub struct FieldJoinHandle {
-    field_data: Arc<FieldData>,
-    char_id: CharacterID,
+pub enum FieldMsg {
+    UserUpdatePos(MovePath),
+    NpcAdd(Npc),
+    NpcRemove(ObjectId),
+    MobAdd(Mob),
+    MobRemove(ObjectId, MobLeaveType),
+    MobUpdatePos(MobMoveReq, CharacterID),
+    MobAssignController(CharacterID),
+    MobAttack { id: ObjectId, dmg: u32 },
+    DropAdd(Drop),
+    DropRemove(DropId, DropLeaveParam),
+    Chat(UserChatMsgResp),
+    SlowLoot(DropId, DropLeaveParam, oneshot::Sender<Option<Drop>>),
+    StartSpamDrop(Vec2),
+    StopSpamDrop,
 }
 
-impl Deref for FieldJoinHandle {
-    type Target = FieldData;
+impl RoomState for FieldData {
+    type ConnMsg = SessionMsg;
+    type Key = CharacterID;
+    type Msg = FieldMsg;
+    type JoinData = AvatarData;
 
-    fn deref(&self) -> &Self::Target {
-        &self.field_data
+    fn session_mut(&mut self) -> &mut RoomSet<Self::Key, Self::ConnMsg> {
+        &mut self.sessions
     }
-}
 
-impl std::ops::Drop for FieldJoinHandle {
-    fn drop(&mut self) {
-        self.field_data.leave_field(self.char_id)
+    fn sessions(&self) -> &RoomSet<Self::Key, Self::ConnMsg> {
+        &self.sessions
+    }
+
+    fn handle_leave(&mut self, id: Self::Key) -> anyhow::Result<()> {
+        self.leave_field(id);
+        Ok(())
+    }
+
+    fn handle_join(&mut self, id: Self::Key, data: Self::JoinData) -> anyhow::Result<()> {
+        self.enter_field(id, data)
+    }
+
+    fn handle_msg(&mut self, src: Option<Self::Key>, msg: Self::Msg) -> anyhow::Result<()> {
+        match msg {
+            FieldMsg::UserUpdatePos(move_path) => {
+                self.update_user_pos(move_path, src.expect("user pos"))?;
+            }
+            FieldMsg::NpcAdd(npc) => {
+                self.add_npc(npc)?;
+            }
+            FieldMsg::NpcRemove(id) => {
+                self.remove_npc(id, ())?;
+            }
+            FieldMsg::MobAdd(mob) => {
+                self.add_mob(mob)?;
+            }
+            FieldMsg::MobRemove(id, leave) => {
+                self.remove_mob(id, leave)?;
+            }
+            FieldMsg::MobUpdatePos(movement, id) => {
+                self.update_mob_pos(movement, id)?;
+            }
+            FieldMsg::MobAssignController(id) => {
+                self.assign_mob_controller(id)?;
+            }
+            FieldMsg::MobAttack { id, dmg } => {
+                self.attack_mob(id, dmg, src.expect("attacker"))?;
+            }
+            FieldMsg::DropAdd(drop) => {
+                self.add_drop(drop)?;
+            }
+            FieldMsg::DropRemove(id, param) => {
+                self.remove_drop(id, param)?;
+            }
+            FieldMsg::Chat(msg) => {
+                self.add_chat(msg)?;
+            }
+            FieldMsg::SlowLoot(id, reason, tx) => {
+                let drop = self.remove_drop(id, reason).ok();
+                tx.send(drop).ok();
+            }
+            FieldMsg::StartSpamDrop(pos) => self.drop_spam = Some(pos),
+            FieldMsg::StopSpamDrop => {
+                self.drop_spam = None;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn handle_tick(&mut self) -> anyhow::Result<()> {
+        if let Some(pos) = self.drop_spam.clone() {
+            for _ in 0..10 {
+                self.drop_pool.add(
+                    Drop {
+                        owner: proto95::game::drop::DropOwner::None,
+                        pos: pos.into(),
+                        start_pos: pos.into(),
+                        value: DropTypeValue::Mesos(100),
+                        quantity: 1,
+                    },
+                    &self.sessions,
+                )?;
+            }
+        }
+
+        Ok(())
     }
 }
 
 impl FieldData {
-    pub fn new(
-        meta: &'static MetaService,
-        field_id: MapId,
-        field_meta: FieldMeta,
-        fh_meta: &'static FhTree,
-    ) -> Self {
-        let npcs = field_meta
+    pub fn new(meta_svc: &'static MetaService, shared: Arc<SharedFieldState>) -> Self {
+        let meta = shared.field_meta;
+        let npcs = meta
             .life
             .values()
             .filter(|life| life._type == "n")
@@ -91,13 +235,13 @@ impl FieldData {
                 enabled: true,
             });
 
-        let mobs = field_meta
+        let mobs = meta
             .life
             .values()
             .filter(|life| life._type == "m" && life.hide != Some(1))
             .map(|mob| {
                 let tmpl_id = mob.id.parse().unwrap();
-                let meta = meta.get_mob_data(tmpl_id).unwrap();
+                let meta = meta_svc.get_mob_data(tmpl_id).unwrap();
                 Mob {
                     meta,
                     tmpl_id,
@@ -109,34 +253,30 @@ impl FieldData {
                 }
             });
 
-        let reactors = field_meta.reactor.values().map(|r| Reactor {
+        let reactors = meta.reactor.values().map(|r| Reactor {
             pos: Vec2::from((r.x as i16, r.y as i16)),
             tmpl_id: r.id.parse().unwrap(),
             state: 0,
         });
 
         Self {
-            _meta: meta,
-            id: field_id,
-            field_meta,
-            field_fh: fh_meta,
-            drop_pool: Pool::new(meta),
-            sessions: ShroomSessionSet::new(),
-            mob_pool: Pool::from_elems(meta, mobs),
-            npc_pool: Pool::from_elems(meta, npcs),
-            reactor_pool: Pool::from_elems(meta, reactors),
-            user_pool: Pool::new(meta),
+            shared,
+            drop_pool: Pool::new(meta_svc),
+            mob_pool: Pool::from_elems(meta_svc, mobs),
+            npc_pool: Pool::from_elems(meta_svc, npcs),
+            reactor_pool: Pool::from_elems(meta_svc, reactors),
+            user_pool: Pool::new(meta_svc),
+            sessions: FieldRoomSet::default(),
+            drop_spam: None,
         }
     }
 
-    pub async fn enter_field(
-        &self,
+    pub fn enter_field(
+        &mut self,
         char_id: CharacterID,
-        mut session: SharedSessionHandle,
         avatar_data: AvatarData,
     ) -> anyhow::Result<()> {
-        self.sessions.add(char_id, session.clone());
-        self.user_pool.add(
+        self.user_pool.add_filter(
             User {
                 char_id: char_id as u32,
                 pos: Vec2::from((0, 0)),
@@ -144,58 +284,58 @@ impl FieldData {
                 avatar_data,
             },
             &self.sessions,
+            char_id,
         )?;
-        let mut buf = PacketBuffer::default();
+        let mut buf = PacketBuf::default();
         self.user_pool.on_enter(&mut buf)?;
         self.drop_pool.on_enter(&mut buf)?;
         self.npc_pool.on_enter(&mut buf)?;
         self.mob_pool.on_enter(&mut buf)?;
         self.reactor_pool.on_enter(&mut buf)?;
-
-        session.try_send_pkt_buf(&buf)?;
+        self.sessions
+            .send_to(&char_id, SessionMsg::PktBuf(Arc::new(buf)))?;
 
         Ok(())
     }
 
-    pub fn leave_field(&self, id: CharacterID) {
-        self.sessions.remove(id);
+    pub fn leave_field(&mut self, id: CharacterID) {
         self.user_pool
             .remove(id as u32, (), &self.sessions)
             .expect("Must remove user");
     }
 
-    pub fn add_user(&self, user: User) -> anyhow::Result<()> {
+    pub fn add_user(&mut self, user: User) -> anyhow::Result<()> {
         self.user_pool.add(user, &self.sessions)?;
         Ok(())
     }
 
-    pub fn remove_user(&self, id: CharacterID) -> anyhow::Result<()> {
+    pub fn remove_user(&mut self, id: CharacterID) -> anyhow::Result<()> {
         self.user_pool.remove(id as u32, (), &self.sessions)?;
         Ok(())
     }
 
-    pub fn add_npc(&self, npc: Npc) -> anyhow::Result<()> {
+    pub fn add_npc(&mut self, npc: Npc) -> anyhow::Result<()> {
         self.npc_pool.add(npc, &self.sessions)?;
         Ok(())
     }
 
-    pub fn remove_npc(&self, id: u32, param: ()) -> anyhow::Result<()> {
+    pub fn remove_npc(&mut self, id: u32, param: ()) -> anyhow::Result<()> {
         self.npc_pool.remove(id, param, &self.sessions)?;
         Ok(())
     }
 
-    pub async fn add_mob(&self, drop: Mob) -> anyhow::Result<()> {
+    pub fn add_mob(&mut self, drop: Mob) -> anyhow::Result<()> {
         self.mob_pool.add(drop, &self.sessions)?;
         Ok(())
     }
 
-    pub fn remove_mob(&self, id: u32, param: MobLeaveType) -> anyhow::Result<()> {
+    pub fn remove_mob(&mut self, id: u32, param: MobLeaveType) -> anyhow::Result<()> {
         self.mob_pool.remove(id, param, &self.sessions)?;
         Ok(())
     }
 
-    pub fn update_user_pos(&self, movement: UserMoveReq, id: CharacterID) -> anyhow::Result<()> {
-        let last_pos_fh = movement.move_path.get_last_pos_fh();
+    pub fn update_user_pos(&mut self, move_path: MovePath, id: CharacterID) -> anyhow::Result<()> {
+        let last_pos_fh = move_path.get_last_pos_fh();
 
         if let Some((pos, fh)) = last_pos_fh {
             //TODO post mob state to msg state here
@@ -205,13 +345,13 @@ impl FieldData {
             });
         }
 
-        self.user_pool.user_move(id, movement, &self.sessions)?;
+        self.user_pool.user_move(id, move_path, &self.sessions)?;
 
         Ok(())
     }
 
     pub fn update_mob_pos(
-        &self,
+        &mut self,
         movement: MobMoveReq,
         controller: CharacterID,
     ) -> anyhow::Result<()> {
@@ -232,37 +372,38 @@ impl FieldData {
         Ok(())
     }
 
-    pub fn add_drop(&self, drop: Drop) -> anyhow::Result<()> {
+    pub fn add_drop(&mut self, drop: Drop) -> anyhow::Result<()> {
         self.drop_pool.add(drop, &self.sessions)?;
         Ok(())
     }
 
-    pub fn remove_drop(&self, id: DropId, param: DropLeaveParam) -> anyhow::Result<Drop> {
+    pub fn remove_drop(&mut self, id: DropId, param: DropLeaveParam) -> anyhow::Result<Drop> {
         self.drop_pool.remove(id, param, &self.sessions)
     }
 
-    pub fn assign_mob_controller(&self, session: SharedSessionHandle) -> anyhow::Result<()> {
-        self.mob_pool.assign_controller(session)?;
+    pub fn assign_mob_controller(&self, session_id: CharacterID) -> anyhow::Result<()> {
+        self.mob_pool
+            .assign_controller(session_id, &self.sessions)?;
         Ok(())
     }
 
     pub fn add_chat(&self, chat: UserChatMsgResp) -> anyhow::Result<()> {
-        self.sessions.broadcast_pkt(chat, -1)?;
+        self.sessions.broadcast(SessionMsg::from_packet(chat))?;
         Ok(())
     }
 
-    pub async fn attack_mob(
-        &self,
+    pub fn attack_mob(
+        &mut self,
         id: ObjectId,
         dmg: u32,
         attacker: CharacterID,
-        session: &mut SharedSessionHandle,
     ) -> anyhow::Result<()> {
-        let mut buf = PacketBuffer::default();
+        let mut buf = PacketBuf::default();
         let killed = self
             .mob_pool
             .attack_mob(attacker, id, dmg, &mut buf, &self.sessions)?;
-        session.try_send_pkt_buf(&buf)?;
+        self.sessions
+            .send_to(&attacker, SessionMsg::PktBuf(Arc::new(buf)))?;
 
         if killed {
             let mob = self
@@ -270,6 +411,7 @@ impl FieldData {
                 .remove(id, MobLeaveType::Etc(()), &self.sessions)?;
 
             let fh = self
+                .shared
                 .field_fh
                 .get_foothold_below((mob.pos.x as f32, mob.pos.y as f32 - 20.).into());
 
@@ -279,78 +421,67 @@ impl FieldData {
 
         Ok(())
     }
-
-    pub fn get_meta(&self) -> FieldMeta {
-        self.field_meta
-    }
 }
 
-pub enum FieldMessage {
-    UserEnter(User, RpcReplyPort<FieldJoinHandle>),
-    UserLeave(CharacterID),
+pub type FieldRoom = Room<FieldData>;
+
+pub struct FieldJoinHandle {
+    room_handle: RoomJoinHandle<FieldData>,
+    pub field_id: MapId,
+    pub field_meta: FieldMeta,
 }
 
-pub struct FieldActor;
-
-#[async_trait::async_trait]
-impl Actor for FieldActor {
-    type Msg = FieldMessage;
-    type State = FieldData;
-    type Arguments = FieldData;
-
-    async fn pre_start(
-        &self,
-        _msg: ActorRef<FieldMessage>,
-        field_data: Self::Arguments,
-    ) -> Result<Self::State, ActorProcessingErr> {
-        Ok(field_data)
-    }
-
-    // This is our main message handler
-    async fn handle(
-        &self,
-        _msg: ractor::ActorRef<FieldMessage>,
-        message: Self::Msg,
-        state: &mut Self::State,
-    ) -> Result<(), ActorProcessingErr> {
-        match message {
-            FieldMessage::UserEnter(user, _reply) => {
-                state.add_user(user).unwrap();
-            }
-            FieldMessage::UserLeave(id) => state.remove_user(id)?,
-        }
+impl FieldJoinHandle {
+    pub async fn send(&self, msg: FieldMsg) -> anyhow::Result<()> {
+        self.room_handle.send(msg).await?;
         Ok(())
+    }
+
+    pub async fn leave(self) -> anyhow::Result<()> {
+        self.room_handle.leave().await?;
+        Ok(())
+    }
+
+    pub async fn recv(&mut self) -> Option<SessionMsg> {
+        self.room_handle.recv().await
     }
 }
 
 #[derive(Debug)]
 pub struct FieldService {
-    fields: DashMap<MapId, Arc<FieldData>>,
+    fields: DashMap<MapId, Arc<FieldRoom>>,
     meta: &'static MetaService,
+    tick: Tick,
 }
 
 impl FieldService {
-    pub fn new(meta: &'static MetaService) -> Self {
+    pub fn new(tick: Tick, meta: &'static MetaService) -> Self {
         Self {
             fields: DashMap::new(),
             meta,
+            tick,
         }
     }
 
-    fn create_field(&self, field_id: MapId) -> anyhow::Result<Arc<FieldData>> {
+    fn create_field(&self, field_id: MapId) -> anyhow::Result<Arc<FieldRoom>> {
         let field_meta = self
             .meta
             .get_field_data(field_id)
             .ok_or_else(|| anyhow::format_err!("Invalid field id: {field_id:?}"))?;
 
-        let field_fh = self.meta.get_field_fh_data(field_id).unwrap();
+        let shared = Arc::new(SharedFieldState {
+            id: field_id,
+            field_meta,
+            field_fh: self.meta.get_field_fh_data(field_id).expect("Field fh"),
+            drops: DashMap::new(),
+        });
 
-        Ok(Arc::new(FieldData::new(
-            self.meta, field_id, field_meta, field_fh,
-        )))
+        let state = FieldData::new(self.meta, shared);
+
+        Ok(Arc::new(FieldRoom::spawn(state, self.tick.clone())))
     }
 
-    pub fn get_field(&self, field_id: MapId) -> anyhow::Result<Arc<FieldData>> {
+    pub fn get_field(&self, field_id: MapId) -> anyhow::Result<Arc<FieldRoom>> {
         Ok(self
             .fields
             .entry(field_id)
@@ -362,15 +493,31 @@ impl FieldService {
         &self,
         char_id: CharacterID,
         avatar_data: AvatarData,
-        session: SharedSessionHandle,
         field_id: MapId,
     ) -> anyhow::Result<FieldJoinHandle> {
         let field = self.get_field(field_id)?;
-        field.enter_field(char_id, session, avatar_data).await?;
+        let field_meta = self.meta.get_field_data(field_id).unwrap();
+        let room_handle = field.join_with_channel(char_id, avatar_data).await?;
 
         Ok(FieldJoinHandle {
-            field_data: field.clone(),
-            char_id,
+            room_handle,
+            field_id,
+            field_meta,
         })
+    }
+
+    pub async fn switch_field(
+        &self,
+        avatar_data: AvatarData,
+        field_id: MapId,
+        handle: &mut FieldJoinHandle,
+    ) -> anyhow::Result<()> {
+        let field = self.get_field(field_id)?;
+        let field_meta = self.meta.get_field_data(field_id).unwrap();
+
+        handle.room_handle.switch_to(&field, avatar_data).await?;
+        handle.field_id = field_id;
+        handle.field_meta = field_meta;
+        Ok(())
     }
 }

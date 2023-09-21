@@ -26,3 +26,6 @@ client_repo/**
 
 *.svg
 *.png
+*.tar
+*.tar.xz
+**/deploy.sh

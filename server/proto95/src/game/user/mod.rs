@@ -1,23 +1,26 @@
+pub mod char;
 pub mod remote;
+pub mod secondary_stats;
+pub mod stats;
 
 use bitflags::bitflags;
 use bytes::BufMut;
-use shroom_net::{
-    mark_shroom_bitflags,
-    packet::{
-        proto::{option::ShroomOption8, CondOption, PacketWrapped, ShroomList16, ShroomList8},
-        time::Ticks,
-        DecodePacket, PacketReader, ShroomDurationMs16, ShroomDurationMs32, ShroomExpirationTime,
-    },
-    packet_opcode, shroom_packet_enum, EncodePacket, NetError, NetResult, PacketWriter, SizeHint,
+use shroom_pkt::{
+    mark_shroom_bitflags, packet_opcode, time::Ticks, CondOption, DecodePacket, EncodePacket,
+    PacketReader, PacketResult, PacketWrapped, PacketWriter, ShroomDurationMs16,
+    ShroomDurationMs32, ShroomEncodePacket, ShroomExpirationTime, ShroomList16, ShroomList8,
+    ShroomOption8, ShroomPacket, ShroomPacketEnum, SizeHint,
 };
-use shroom_net_derive::{ShroomEncodePacket, ShroomPacket};
 
 use crate::{
     id::{ItemId, MapId, SkillId},
     recv_opcodes::RecvOpcodes,
     send_opcodes::SendOpcodes,
-    shared::{movement::MovePath, TagPoint, Vec2},
+    shared::{
+        char::{CharacterId, QuestId},
+        movement::MovePath,
+        TagPoint, Vec2,
+    },
 };
 
 use super::{mob::MobId, ObjectId};
@@ -223,7 +226,7 @@ impl AttackTargetInfo {
         pr: &mut PacketReader<'_>,
         targets: usize,
         hits: usize,
-    ) -> Result<Vec<Self>, NetError> {
+    ) -> Result<Vec<Self>, shroom_pkt::Error> {
         (0..targets)
             .map(|_| {
                 Ok(AttackTargetInfo {
@@ -263,7 +266,7 @@ where
     Info: AttackInfo + DecodePacket<'de>,
     Extra: DecodePacket<'de>,
 {
-    fn decode_packet(pr: &mut PacketReader<'de>) -> NetResult<Self> {
+    fn decode_packet(pr: &mut PacketReader<'de>) -> PacketResult<Self> {
         let info = Info::decode_packet(pr)?;
         let targets = AttackTargetInfo::decode(pr, info.targets(), info.hits())?;
         let extra = Extra::decode_packet(pr)?;
@@ -289,15 +292,15 @@ pub struct AttackReq<Info: AttackInfo, Extra> {
 pub struct ReactorFlag(pub bool);
 
 impl EncodePacket for ReactorFlag {
-    fn encode_packet<B: BufMut>(&self, pw: &mut PacketWriter<B>) -> NetResult<()> {
+    const SIZE_HINT: SizeHint = SizeHint::NONE;
+
+    fn encode_packet<B: BufMut>(&self, pw: &mut PacketWriter<B>) -> PacketResult<()> {
         if self.0 {
             self.0.encode_packet(pw)?;
         }
 
         Ok(())
     }
-
-    const SIZE_HINT: SizeHint = SizeHint::NONE;
 
     fn packet_len(&self) -> usize {
         if self.0 {
@@ -309,7 +312,7 @@ impl EncodePacket for ReactorFlag {
 }
 
 impl<'de> DecodePacket<'de> for ReactorFlag {
-    fn decode_packet(pr: &mut PacketReader<'de>) -> NetResult<Self> {
+    fn decode_packet(pr: &mut PacketReader<'de>) -> PacketResult<Self> {
         let n = pr.remaining_slice().len();
         if n == 60 {
             let _ = pr.read_u8()?;
@@ -337,7 +340,7 @@ pub struct MeleeAttackInfo {
     pub unknown_crc_1: u32,
     pub attack_action_type: u8,
     pub atk_speed: u8,
-    pub atk_time: u32,
+    pub atk_time: u32, // update time
     //Special bmage handling
     pub affected_area_id: u32,
 }
@@ -550,18 +553,65 @@ pub struct UserSkillUpReq {
 }
 packet_opcode!(UserSkillUpReq, RecvOpcodes::UserSkillUpRequest);
 
+#[derive(Debug, ShroomEncodePacket)]
+pub struct AffectedMembers(Option<u8>);
+
+impl AffectedMembers {
+    pub fn iter(&self) -> impl Iterator<Item = usize> {
+        let val = self.0.unwrap_or(0x80);
+        (0..6).filter(move |v| val & (1 << v) != 0)
+    }
+}
+
+impl<'de> DecodePacket<'de> for AffectedMembers {
+    fn decode_packet(pr: &mut PacketReader<'de>) -> PacketResult<Self> {
+        let rem = pr.remaining();
+        Ok(Self(match rem {
+            // Either without Dispel(3) or with Dispel(+2) the remaining + the delay at the end
+            _ if rem.checked_sub(3 + 1).map_or(false, |n| n % 4 == 0)
+                || rem.checked_sub(5 + 1).map_or(false, |n| n % 4 == 0) =>
+            {
+                Some(u8::decode_packet(pr)?)
+            }
+            _ => None,
+        }))
+    }
+}
+
+#[derive(Debug, ShroomEncodePacket)]
+pub struct AffectedMobs(Option<ShroomList8<ObjectId>>);
+
+impl AffectedMobs {
+    pub fn iter(&self) -> impl Iterator<Item = &ObjectId> {
+        self.0.iter().map(|v| v.iter()).flatten()
+    }
+}
+
+impl<'de> DecodePacket<'de> for AffectedMobs {
+    fn decode_packet(pr: &mut PacketReader<'de>) -> PacketResult<Self> {
+        // Remaining must be 2 + 1(n) + 4*n
+        let rem = pr.remaining().saturating_sub(3);
+        Ok(Self(if rem != 0 && rem % 4 == 0 {
+            Some(ShroomList8::decode_packet(pr)?)
+        } else {
+            None
+        }))
+    }
+}
+
 #[derive(ShroomPacket, Debug)]
 pub struct UserSkillUseReq {
     pub ticks: Ticks,
     pub skill_id: SkillId,
+    pub skill_level: u8,
     #[pkt(check(field = "skill_id", cond = "SkillId::is_anti_repeat_buff_skill"))]
     pub pos: CondOption<Vec2>,
     #[pkt(check(field = "skill_id", cond = "SkillId::is_spirit_javelin"))]
     pub spirit_javelin_item: CondOption<ItemId>,
-    // If has affected -> u8 affectedMemberBitmap, this is tricky
-    // cause no way to detect if affectedMemberBitmap is not encoded
-    // if skill id == 2311001 -> dispel => Delay
-    pub affected_mobs: ShroomList8<ObjectId>,
+    pub affected: AffectedMembers, // TODO use affected check later
+    #[pkt(check(field = "skill_id", cond = "SkillId::is_dispel"))]
+    pub dispel_delay: CondOption<ShroomDurationMs16>,
+    pub affected_mobs: AffectedMobs,
     pub delay: ShroomDurationMs16,
 }
 packet_opcode!(UserSkillUseReq, RecvOpcodes::UserSkillUseRequest);
@@ -582,49 +632,106 @@ pub struct ChangeSkillRecordResp {
 }
 packet_opcode!(ChangeSkillRecordResp, SendOpcodes::ChangeSkillRecordResult);
 
+#[derive(Debug, ShroomPacket)]
+pub struct SkillUseResultResp {
+    // Unused, the client reset excl regardless
+    pub unknown: u8,
+}
+packet_opcode!(SkillUseResultResp, SendOpcodes::SkillUseResult);
+
+#[derive(ShroomPacket, Debug)]
+pub struct SkillCooldownSetResp {
+    pub skill_id: SkillId,
+    pub cooldown_s: u16, //TODO ShroomDurationSec16
+}
+packet_opcode!(SkillCooldownSetResp, SendOpcodes::SkillCooltimeSet);
+
 #[derive(ShroomPacket, Debug)]
 pub struct PopularityResult {
     pub name: String,
     pub inc: bool,
 }
 
-shroom_packet_enum!(
-    #[derive(Debug)]
-    pub enum GivePopularityResp: u8 {
-        Success((PopularityResult, u32)) = 0,
-        InvalidCharacter(()) = 1,
-        LevelTooLow(()) = 2,
-        DailyLimit(()) = 3,
-        TargetLimit(()) = 4,
-        Notify(PopularityResult) = 5
-    }
+#[derive(ShroomPacketEnum, Debug)]
+#[repr(u8)]
+pub enum GivePopularityResp {
+    Success(PopularityResult, u32) = 0,
+    InvalidCharacter(()) = 1,
+    LevelTooLow(()) = 2,
+    DailyLimit(()) = 3,
+    TargetLimit(()) = 4,
+    Notify(PopularityResult) = 5,
+}
 
-);
 packet_opcode!(GivePopularityResp, SendOpcodes::GivePopularityResult);
 
-shroom_packet_enum!(
-    #[derive(Debug)]
-    pub enum DropPickUpMsg: u8 {
-        Item((ItemId, u32)) = 0, // Item, quantity
-        Mesos((u8, ItemId, u16)) = 1
-        //TODO: PickUpEq(ItemId) = ?
-    }
-);
+#[derive(ShroomPacketEnum, Debug)]
+#[repr(u8)]
+pub enum DropPickUpMsg {
+    Item((ItemId, u32)) = 0, // Item, quantity
+    Mesos((u8, ItemId, u16)) = 1,
+    Equip(ItemId) = 2,
+}
 
-shroom_packet_enum!(
-    #[derive(Debug)]
-    pub enum MessageResp: u8 {
-        DropPickUp(DropPickUpMsg) = 0
-    }
-);
+fn is_true(b: &bool) -> bool {
+    *b
+}
+
+#[derive(Debug, ShroomPacket)]
+pub struct IncExpMsg {
+    pub last_hit: bool,
+    pub gain: u32,
+    pub chat: bool,
+    pub event_bonus: u32,
+    pub unknown1: bool,
+    pub unknown2: u8,
+    pub wedding_bonus: u32,
+    #[pkt(check(field = "unknown1", cond = "is_true"))]
+    pub unknown_bonus: CondOption<u8>,
+    #[pkt(check(field = "chat", cond = "is_true"))]
+    pub chat_bonus: CondOption<u8>,
+    pub unknown3: u8, // TODO: BONUX type ?
+    pub party_bonus: u32,
+    pub equip_bonus: u32,
+    pub internet_cafe_bonus: u32,
+    pub rainbow_week_bonus: u32,
+    pub unknown1_bonus: u32,
+    pub unknown2_bonus: u32,
+}
+
+#[derive(Debug, ShroomPacket)]
+pub struct QuestRecordEx {
+    pub quest_id: QuestId,
+    pub raw_str: String,
+}
+
+#[derive(Debug, ShroomPacketEnum)]
+#[repr(u8)]
+pub enum MessageResp {
+    DropPickUp(DropPickUpMsg) = 0,
+    // Quest Record = 1
+    CashItemExpire(ItemId) = 2,
+    IncExp(IncExpMsg) = 3,
+    IncSp((u16, u8)) = 4,
+    IncPop(CharacterId) = 5,
+    IncMoney(u32) = 6,
+    IncGp(u32) = 7,
+    GiveBuff(u32) = 8,
+    ItemExpire(ShroomList8<ItemId>) = 9,
+    System(String) = 10,
+    QueryRecordEx(QuestRecordEx) = 11,
+    ItemProtectExpire(ShroomList8<ItemId>) = 12,
+    ItemExpireReplace(ShroomList8<String>) = 13,
+    SkillExpire(ShroomList8<SkillId>) = 14,
+}
 
 packet_opcode!(MessageResp, SendOpcodes::Message);
 
 #[cfg(test)]
 mod tests {
-    use shroom_net::packet::DecodePacket;
+    use shroom_pkt::{DecodePacket, PacketReader};
 
-    use crate::game::user::{UserMagicAttackReq, UserMeleeAttackReq};
+    use crate::game::user::UserMagicAttackReq;
 
     use super::UserHitReq;
 
@@ -633,7 +740,7 @@ mod tests {
         let data = [
             52, 0, 232, 211, 221, 3, 255, 0, 1, 0, 0, 0, 160, 134, 1, 0, 18, 0, 0, 0, 0, 0, 0, 0, 0,
         ];
-        let hit = UserHitReq::decode_from_data_complete(&data[2..]).unwrap();
+        let hit = UserHitReq::decode_complete(&mut PacketReader::new(&data[2..])).unwrap();
         dbg!(hit);
     }
 
@@ -646,7 +753,7 @@ mod tests {
             187, 2, 139, 1, 187, 2, 139, 1, 137, 1, 10, 0, 0, 0, 225, 199, 157, 247, 241, 2, 139,
             1,
         ];
-        let atk = UserMeleeAttackReq::decode_from_data_complete(&data[2..]).unwrap();
+        let atk = UserMagicAttackReq::decode_complete(&mut PacketReader::new(&data[2..])).unwrap();
         dbg!(atk);
     }
 
@@ -660,7 +767,7 @@ mod tests {
             198, 119, 238, 211, 198, 119, 0, 37, 0, 194, 165, 88, 168, 1, 6, 45, 220, 157, 2, 0, 0,
             0, 0, 58, 1, 18, 1, 0,
         ];
-        let atk = UserMagicAttackReq::decode_from_data_complete(&data[2..]).unwrap();
+        let atk = UserMagicAttackReq::decode_complete(&mut PacketReader::new(&data[2..])).unwrap();
         dbg!(atk);
 
         // 1 targets
@@ -672,7 +779,7 @@ mod tests {
             0, 0, 0, 14, 0, 0, 0, 7, 128, 6, 5, 187, 2, 139, 1, 187, 2, 139, 1, 8, 2, 10, 0, 0, 0,
             225, 199, 157, 247, 29, 3, 139, 1, 0,
         ];
-        let atk = UserMagicAttackReq::decode_from_data_complete(&data[2..]).unwrap();
+        let atk = UserMagicAttackReq::decode_complete(&mut PacketReader::new(&data[2..])).unwrap();
         dbg!(atk);
     }
     /*

@@ -20,8 +20,15 @@ serde = { version = "1", features = ["derive"] }
 shrooming = { version = "0.1", path = "../shrooming" }
 tokio = "1"
 uuid = "1"
-shroom_net_derive = "0.2.2"
-shroom_net = "0.3"
+shroom-pkt = "0.1.1"
+shroom-net = "0.4"
 dotenv = "0.15"
 proto95 = { version = "0.1.0", path = "../proto95" }
 warp = "0.3.5"
+
+
+[dependencies.openssl]
+version = "0.10"
+#features = [
+#    "vendored"
+#]

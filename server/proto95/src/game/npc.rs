@@ -1,5 +1,4 @@
-use shroom_net_derive::ShroomPacket;
-use shroom_net::{packet::proto::ShroomList8, packet_opcode};
+use shroom_pkt::{packet_opcode, ShroomList8, ShroomPacket};
 
 use crate::{
     send_opcodes::SendOpcodes,
@@ -13,7 +12,7 @@ pub type NpcId = u32;
 #[derive(ShroomPacket, Debug)]
 pub struct NpcPoolPacket<T> {
     pub id: ObjectId,
-    pub data:T,
+    pub data: T,
 }
 
 #[derive(ShroomPacket, Debug)]
@@ -108,7 +107,7 @@ packet_opcode!(NpcUpdateLimitedInfoResp, SendOpcodes::NpcUpdateLimitedInfo);
 
 #[derive(ShroomPacket, Debug)]
 pub struct NpcSetSpecialAction {
-    pub action: String
+    pub action: String,
 }
 pub type NpcSetSpecialActionResp = NpcPoolPacket<NpcSetSpecialAction>;
 packet_opcode!(NpcSetSpecialActionResp, SendOpcodes::NpcSpecialAction);

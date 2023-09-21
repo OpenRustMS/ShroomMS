@@ -1,5 +1,4 @@
-use shroom_net::{packet::proto::ShroomList8, packet_opcode};
-use shroom_net_derive::ShroomPacket;
+use shroom_pkt::{packet_opcode, ShroomList8, ShroomPacket};
 
 use crate::{id::SkillId, send_opcodes::SendOpcodes};
 

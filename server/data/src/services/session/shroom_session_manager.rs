@@ -1,6 +1,5 @@
 use std::{net::IpAddr, time::Duration};
 
-use shroom_net::net::service::session_set::SessionSet;
 use uuid::Uuid;
 
 use super::{
@@ -8,15 +7,13 @@ use super::{
     session_manager::{OwnedMappedSession, OwnedSession, SessionBackend, SessionManager},
     shroom_session_backend::{SessionIngameData, SessionLoginData, ShroomSessionData},
 };
-
-pub type ShroomSessionSet = SessionSet<i32>;
 pub type OwnedShroomSession = OwnedSession<Uuid, ShroomSessionData>;
 
 pub type OwnedShroomLoginSession = OwnedMappedSession<Uuid, ShroomSessionData, SessionLoginData>;
 pub type OwnedShroomGameSession = OwnedMappedSession<Uuid, ShroomSessionData, SessionIngameData>;
 
 impl OwnedShroomSession {
-    pub fn as_login(self) -> OwnedShroomLoginSession{
+    pub fn as_login(self) -> OwnedShroomLoginSession {
         Self::map(self, |session| match session {
             ShroomSessionData::Login(login) => login,
             _ => panic!("Session is not a login session"),
@@ -76,7 +73,8 @@ where
         &self,
         param: Backend::LoadParam,
     ) -> anyhow::Result<OwnedSession<uuid::Uuid, Backend::Data>> {
-        Ok(self.session_man
+        Ok(self
+            .session_man
             .create_claimed_session(Self::gen_key(), param)
             .await?)
     }

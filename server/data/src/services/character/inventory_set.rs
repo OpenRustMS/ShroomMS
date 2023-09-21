@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 
 use proto95::{
-    id::item_id::InventoryType,
+    id::{item_id::InventoryType, ItemId},
     shared::{
         inventory::{CharEquipSlot, InventoryOperation},
         item::Item,
@@ -9,7 +9,7 @@ use proto95::{
 };
 
 use crate::services::{
-    data::character::ItemStarterSet,
+    data::{character::ItemStarterSet, ItemService},
     helper::{
         intentory::data::{EquipInventory, EquipItemSlot, EquippedInventory, ShroomStackInventory},
         inv::{self, InvError, InvEventHandler},
@@ -82,7 +82,7 @@ impl inv::InvEventHandler for PendingOperations {
         self.ops.push(InventoryOperation::update_quantity(
             self.inv_type,
             slot as u16 + 1,
-            item.quantity as u16,
+            item.quantity,
         ));
     }
 
@@ -209,6 +209,11 @@ impl CharInventory {
             },
             recalc_eq_stats: false,
         }
+    }
+
+    pub fn add_equip_by_id(&mut self, id: ItemId, data: &ItemService) -> anyhow::Result<usize> {
+        let item = data.get_eq_item_from_id(id)?;
+        self.try_add_equip(item)
     }
 
     pub fn get_equipped_stats(&self) -> EquipStats {

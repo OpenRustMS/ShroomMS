@@ -1,20 +1,20 @@
-use shroom_net::packet::proto::list::ShroomIndexListZ;
 use proto95::{
     game::user::{
         remote::{
             GuildMarkData, TamingMobData, UserEnterFieldResp, UserLeaveFieldResp, UserMoveResp,
             UserRemoteInitData,
         },
-        UserMoveReq,
+        secondary_stats::RemoteCharSecondaryStatPartial,
     },
     id::{job_id::JobId, ItemId},
     shared::{
-        char::{AvatarData, CharacterId, RemoteCharSecondaryStatPartial},
-        Vec2,
+        char::{AvatarData, CharacterId},
+        Vec2, movement::MovePath,
     },
 };
+use shroom_pkt::ShroomIndexListZ;
 
-use crate::services::{data::character::CharacterID, session::shroom_session_manager::ShroomSessionSet};
+use crate::services::{data::character::CharacterID, field::{FieldRoomSet, SessionMsg}};
 
 use super::{Pool, PoolItem};
 
@@ -96,15 +96,15 @@ impl Pool<User> {
     pub fn user_move(
         &self,
         id: CharacterID,
-        req: UserMoveReq,
-        sessions: &ShroomSessionSet,
+        move_path: MovePath,
+        sessions: &FieldRoomSet,
     ) -> anyhow::Result<()> {
         let pkt = UserMoveResp {
             char_id: id as u32,
-            move_path: req.move_path,
+            move_path,
         };
 
-        sessions.broadcast_pkt(pkt, id)?;
+        sessions.broadcast_filter(SessionMsg::from_packet(pkt), &id)?;
         Ok(())
     }
 }

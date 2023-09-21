@@ -1,7 +1,4 @@
-use shroom_net_derive::ShroomPacket;
-use shroom_net::{packet::{
-    proto::{conditional::CondOption, ShroomList16, ShroomList8},
-}, packet_opcode};
+use shroom_pkt::{packet_opcode, CondOption, ShroomList16, ShroomList8, ShroomPacket};
 
 use crate::{recv_opcodes::RecvOpcodes, send_opcodes::SendOpcodes, shared::Vec2};
 

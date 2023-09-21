@@ -189,7 +189,7 @@ impl CharacterService {
             luk: Set(4),
             hp: Set(5 * 100),
             max_hp: Set(50 * 100),
-            mp: Set(5),
+            mp: Set(50),
             max_mp: Set(50),
             equip_slots: Set(24),
             use_slots: Set(24),
@@ -218,17 +218,11 @@ impl CharacterService {
             .create_starter_set(char_id, create.starter_set)
             .await?;
 
-        let mut skill_set = SkillSet::new();
-        for (id, skill) in self.meta.get_skills_for_job(job.get_noob_job_id() ) {
-            skill_set.add_skill(SkillData {
-                id: *id,
-                level: 0,
-                mastery_level: None,
-                expires_at: None,
-                cooldown: None,
-                meta: skill,
-            });
-        }
+        let skills = self
+            .meta
+            .get_skills_for_job(job.get_noob_job_id())
+            .map(SkillData::from);
+        let skill_set = SkillSet::from_skills(skills)?;
         self.save_skills(char_id, &skill_set).await?;
 
         Ok(char_id)
@@ -289,21 +283,18 @@ impl CharacterService {
             .all(&self.db)
             .await?;
 
-        let mut skill_set = SkillSet::new();
-        for skill in skills {
+        SkillSet::from_skills(skills.iter().map(|skill| {
             let id = SkillId(skill.skill_id as u32);
             let meta = self.meta.get_skill(id).unwrap();
-            skill_set.add_skill(SkillData {
+            SkillData {
                 id,
                 level: skill.skill_level as usize,
                 mastery_level: (skill.master_level != 0).then_some(skill.master_level as usize),
                 expires_at: skill.expires_at.map(|t| t.and_utc()),
                 cooldown: skill.expires_at.map(|t| t.and_utc()),
                 meta,
-            });
-        }
-        dbg!(&skill_set);
-        Ok(skill_set)
+            }
+        }))
     }
 
     pub async fn save_skills(&self, char_id: CharacterID, skills: &SkillSet) -> anyhow::Result<()> {

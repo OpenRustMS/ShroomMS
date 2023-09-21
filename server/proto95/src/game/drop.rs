@@ -1,8 +1,7 @@
-use shroom_net::{
-    packet::proto::{CondOption, PacketTryWrapped, ShroomDurationMs16, ShroomExpirationTime},
-    packet_opcode, shroom_enum_code, shroom_packet_enum, NetError,
+use shroom_pkt::{
+    packet_opcode, shroom_enum_code, CondOption, PacketResult, PacketTryWrapped,
+    ShroomDurationMs16, ShroomExpirationTime, ShroomPacket, ShroomPacketEnum,
 };
-use shroom_net_derive::ShroomPacket;
 
 use crate::{
     id::ItemId,
@@ -33,13 +32,13 @@ impl PacketTryWrapped for DropOwner {
         }
     }
 
-    fn packet_try_from(v: Self::Inner) -> shroom_net::NetResult<Self> {
+    fn packet_try_from(v: Self::Inner) -> PacketResult<Self> {
         Ok(match v.1 {
             0 => Self::User(v.0),
             1 => Self::Party(v.0),
             2 => Self::None,
             3 => Self::Explosive,
-            _ => return Err(NetError::InvalidEnumPrimitive(v.1 as u32)),
+            _ => return Err(shroom_pkt::Error::InvalidEnumPrimitive(v.1 as u32)),
         })
     }
 }
@@ -47,30 +46,27 @@ impl PacketTryWrapped for DropOwner {
 shroom_enum_code!(
     DropEnterType,
     u8,
-    None = 0,
-    Create = 1,
-    OnFoothold = 2,
-    FadingOut = 3,
-    Unknown4 = 4
+    Default = 0,
+    Create = 1,     // Basic floating
+    OnFoothold = 2, // Instant attached to fh
+    FadingOut = 3,  // Fading away
+    Unknown4 = 4    // ?
 );
 
 impl DropEnterType {
     fn has_start_pos(&self) -> bool {
         matches!(
             self,
-            Self::None | Self::Create | Self::FadingOut | Self::Unknown4
+            Self::Default | Self::Create | Self::FadingOut | Self::Unknown4
         )
     }
 }
-
-shroom_packet_enum!(
-    #[derive(Debug)]
-    pub enum DropType: u8 {
-        Item(ItemId) = 0,
-        Money(u32) = 1
-    }
-);
-
+#[derive(Debug, ShroomPacketEnum)]
+#[repr(u8)]
+pub enum DropType {
+    Item(ItemId) = 0,
+    Money(u32) = 1,
+}
 impl DropType {
     fn has_expiration(&self) -> bool {
         !matches!(self, DropType::Money(_))

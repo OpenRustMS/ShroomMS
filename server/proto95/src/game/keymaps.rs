@@ -1,5 +1,4 @@
-use shroom_net::{packet::proto::option::ShroomOptionR8, packet_opcode};
-use shroom_net_derive::ShroomPacket;
+use shroom_pkt::{packet_opcode, ShroomOptionR8, ShroomPacket};
 
 use crate::send_opcodes::SendOpcodes;
 
@@ -11,7 +10,7 @@ pub struct KeyBinding {
 
 #[derive(Debug, ShroomPacket)]
 pub struct FuncKeyMapInitResp {
-    // Reversed option, if set to none the default key map is used
+    /// None means the default key map is used
     pub key_bindings: ShroomOptionR8<[KeyBinding; 90]>,
 }
 

@@ -7,43 +7,36 @@ use std::net::IpAddr;
 use async_trait::async_trait;
 
 use data::services::character::Character;
-use data::services::field::FieldJoinHandle;
+use data::services::field::{FieldJoinHandle, FieldMsg, SessionMsg};
 
 use data::services::helper::pool::drop::{DropLeaveParam, DropTypeValue};
+
 use data::services::session::shroom_session_manager::{ClientKey, OwnedShroomGameSession};
 use data::services::session::ShroomMigrationKey;
 use data::services::SharedServices;
 
-use proto95::id::SkillId;
-use shroom_net::net::service::handler::{MakeServerSessionHandler, ShroomSessionHandler};
-use shroom_net::net::service::resp::MigrateResponse;
-use shroom_net::net::service::SharedSessionHandle;
-use shroom_net::net::service::{SessionHandleResult, ShroomContext};
-use shroom_net::net::ShroomSession;
-use shroom_net::{shroom_router_fn, HasOpcode};
-
-use shroom_net::packet::proto::partial::PartialFlag;
-use shroom_net::packet::proto::time::ShroomExpirationTime;
-use shroom_net::packet::{
-    proto::{
-        list::{ShroomIndexListZ16, ShroomIndexListZ8},
-        time::ShroomTime,
-        ShroomList16,
-    },
-    DecodePacket, PacketReader, ShroomPacket,
+use proto95::game::user::char::{CharDataAll, CharDataFlags};
+use proto95::game::user::secondary_stats::{
+    CharSecondaryStatFlags, CharSecondaryTwoStatesPartial, LocalSecondaryStatResetResp,
+    LocalSecondaryStatSetResp,
 };
+use shroom_net::codec::legacy::LegacyCodec;
+
+use shroom_net::server::server_conn::{ShroomConnEvent, ShroomConnHandler};
+use shroom_net::server::{ServerHandleResult, SharedConnHandle};
+use shroom_net::shroom_router_fn;
 
 use data::services::helper::pool::Drop;
 
 use proto95::game::mob::{MobMoveCtrlAckResp, MobMoveReq};
 use proto95::game::user::{
-    ChangeSkillRecordResp, UpdatedSkillRecord, UserDropMoneyReq, UserDropPickUpReq, UserHitReq,
-    UserMeleeAttackReq, UserSkillUpReq, UserSkillUseReq, UserStatChangeReq,
+    ChangeSkillRecordResp, UserDropMoneyReq, UserDropPickUpReq, UserHitReq, UserMeleeAttackReq,
+    UserSkillUpReq, UserSkillUseReq, UserStatChangeReq,
 };
 
 use proto95::shared::char::{SkillInfo, TeleportRockInfo};
 use proto95::shared::inventory::{InvChangeSlotPosReq, InventoryOperationsResp};
-use proto95::shared::{ClientDumpLogReq, PongReq};
+use proto95::shared::{ClientDumpLogReq, PingResp, PongReq};
 use proto95::{
     game::{
         chat::{ChatMsgReq, UserChatMsgResp},
@@ -61,18 +54,23 @@ use proto95::{
     login::world::{ChannelId, WorldId},
     recv_opcodes::RecvOpcodes,
     shared::{
-        char::{
-            CharDataAll, CharDataEquipped, CharDataFlagsAll, CharDataHeader, CharDataStat,
-            CharStatChangedResp,
-        },
+        char::{CharDataEquipped, CharDataHeader, CharDataStat, CharStatChangedResp},
         item::Item,
         UpdateScreenSettingReq,
     },
 };
 use repl::GameRepl;
+use shroom_pkt::partial::PartialFlag;
+use shroom_pkt::time::DurationMs;
+use shroom_pkt::{
+    DecodePacket, HasOpcode, PacketReader, ShroomExpirationTime, ShroomIndexListZ16,
+    ShroomIndexListZ8, ShroomList16, ShroomPacketData, ShroomTime,
+};
 use tokio::net::TcpStream;
+use tokio::sync::oneshot;
 
 pub type GameResult<T> = Result<T, anyhow::Error>;
+pub type GameMsg = SessionMsg;
 
 #[derive(Debug, Clone)]
 pub struct MakeGameHandler {
@@ -91,34 +89,7 @@ impl MakeGameHandler {
     }
 }
 
-type Ctx = ShroomContext<GameHandler>;
-
-#[async_trait::async_trait]
-impl MakeServerSessionHandler for MakeGameHandler {
-    type Transport = TcpStream;
-    type Error = anyhow::Error;
-    type Handler = GameHandler;
-
-    async fn make_handler(
-        &mut self,
-        mut sess: ShroomSession<Self::Transport>,
-        session_handle: SharedSessionHandle,
-    ) -> Result<Ctx, Self::Error> {
-        let handler = GameHandler::from_session(
-            &mut sess,
-            self.services.clone(),
-            self.channel_id,
-            self.world_id,
-            session_handle.clone(),
-        )
-        .await?;
-        sess.send_encode_packet(handler.set_field()).await?;
-        let mut ctx = ShroomContext::new(sess, handler, session_handle);
-        GameHandler::init_char(&mut ctx).await?;
-
-        Ok(ctx)
-    }
-}
+type Ctx = shroom_net::server::ServerConnCtx<GameHandler>;
 
 pub struct GameHandler {
     session: OwnedShroomGameSession,
@@ -132,15 +103,15 @@ pub struct GameHandler {
 }
 
 impl GameHandler {
-    pub async fn from_session(
-        net_session: &mut ShroomSession<TcpStream>,
+    pub async fn from_ctx(
+        ctx: &mut Ctx,
         services: SharedServices,
         channel_id: ChannelId,
         world_id: WorldId,
-        session_handle: SharedSessionHandle,
+        _session_handle: SharedConnHandle<GameMsg>,
     ) -> anyhow::Result<Self> {
         // Read handshake packet
-        let pkt = net_session.read_packet().await?;
+        let pkt = ctx.session_mut().read_packet().await?;
         let mut pr = pkt.into_reader();
         let op = pr.read_opcode::<RecvOpcodes>()?;
         if op != MigrateInGameReq::OPCODE {
@@ -149,7 +120,7 @@ impl GameHandler {
         let req = MigrateInGameReq::decode_packet(&mut pr)?;
 
         // Look up session in the migration manager
-        let peer_addr = net_session.peer_addr()?.ip();
+        let peer_addr = ctx.session().peer_addr().ip();
         let migrate_key = ShroomMigrationKey::new(req.client_key, peer_addr);
         let session = services
             .session_manager
@@ -169,7 +140,6 @@ impl GameHandler {
             .join_field(
                 session.char.id,
                 session.char.get_avatar_data(),
-                session_handle,
                 session.char.map_id,
             )
             .await?;
@@ -185,127 +155,6 @@ impl GameHandler {
             repl: GameRepl::new(),
         })
     }
-}
-
-#[async_trait]
-impl ShroomSessionHandler for GameHandler {
-    type Transport = TcpStream;
-    type Error = anyhow::Error;
-    type Msg = ();
-
-    async fn handle_msg(_ctx: &mut Ctx, _msg: Self::Msg) -> Result<(), Self::Error> {
-        Ok(())
-    }
-
-    async fn handle_packet(
-        ctx: &mut Ctx,
-        packet: ShroomPacket,
-    ) -> Result<SessionHandleResult, Self::Error> {
-        let op = packet.read_opcode()?;
-        if op == u16::from(PongReq::OPCODE) {
-            return Ok(SessionHandleResult::Pong);
-        }
-
-        shroom_router_fn!(
-            handler,
-            GameHandler,
-            anyhow::Error,
-            GameHandler::handle_default,
-            UpdateScreenSettingReq => GameHandler::handle_update_screen_setting,
-            ChatMsgReq => GameHandler::handle_chat_msg,
-            UserMoveReq => GameHandler::handle_movement,
-            UserPortalScriptReq => GameHandler::handle_portal_script,
-            UserTransferFieldReq => GameHandler::handle_field_transfer,
-            TransferChannelReq => GameHandler::handle_channel_transfer,
-            UserDropPickUpReq => GameHandler::handle_drop_pick_up,
-            UserDropMoneyReq => GameHandler::handle_drop_money,
-            MobMoveReq => GameHandler::handle_mob_move,
-            UserMeleeAttackReq => GameHandler::handle_melee_attack,
-            UserSkillUpReq => GameHandler::handle_skill_up,
-            UserHitReq => GameHandler::handle_user_hit,
-            UserStatChangeReq => GameHandler::handle_stat_change,
-            InvChangeSlotPosReq => GameHandler::handle_inv_change_slot,
-            ClientDumpLogReq => GameHandler::handle_client_dump_log,
-            UserSkillUseReq => GameHandler::handle_use_skill,
-        );
-
-        handler(ctx, packet.into_reader()).await?;
-
-        if ctx.is_migrating() {
-            ctx.set_migrate(false);
-            return Ok(SessionHandleResult::Migrate);
-        }
-
-        Self::update_char_stats(ctx).await?;
-
-        Ok(SessionHandleResult::Ok)
-    }
-
-    async fn finish(self, is_migrating: bool) -> Result<(), Self::Error> {
-        log::info!("Finishing game session...");
-        if is_migrating {
-            self.services.session_manager.migrate_session(
-                ShroomMigrationKey::new(self.client_key, self.addr),
-                self.session.unmap(),
-            )?;
-        } else {
-            self.services
-                .session_manager
-                .close_session(self.session.unmap())
-                .await?;
-        }
-
-        Ok(())
-    }
-}
-
-impl GameHandler {
-    async fn handle_use_skill(ctx: &mut Ctx, req: UserSkillUseReq) -> anyhow::Result<()> {
-        dbg!(&req);
-        ctx.char_mut().use_skill(req.skill_id);
-
-        Ok(())
-    }
-
-    async fn handle_client_dump_log(_ctx: &mut Ctx, req: ClientDumpLogReq) -> anyhow::Result<()> {
-        dbg!(req);
-        Ok(())
-    }
-
-    async fn handle_user_hit(ctx: &mut Ctx, req: UserHitReq) -> GameResult<()> {
-        ctx.session.char.update_hp((req.dmg_internal as i16).neg());
-
-        let stats = ctx.session.char.get_stats_partial();
-
-        ctx.send(CharStatChangedResp {
-            excl: false,
-            stats: PartialFlag {
-                hdr: (),
-                data: stats,
-            },
-            secondary_stat: false,
-            battle_recovery: false,
-        })
-        .await
-    }
-
-    async fn handle_stat_change(ctx: &mut Ctx, req: UserStatChangeReq) -> GameResult<()> {
-        //TODO ?
-        ctx.session.char.update_hp(req.hp as i16);
-        ctx.session.char.update_mp(req.mp as i16);
-        let stats = ctx.session.char.get_stats_partial();
-
-        ctx.send(CharStatChangedResp {
-            excl: false,
-            stats: PartialFlag {
-                hdr: (),
-                data: stats,
-            },
-            secondary_stat: false,
-            battle_recovery: false,
-        })
-        .await
-    }
 
     fn char_mut(&mut self) -> &mut Character {
         &mut self.session.char
@@ -315,233 +164,8 @@ impl GameHandler {
         &self.session.char
     }
 
-    async fn handle_inv_change_slot(ctx: &mut Ctx, req: InvChangeSlotPosReq) -> anyhow::Result<()> {
-        let count = (req.count != u16::MAX).then_some(req.count as usize);
-        // Check for drop
-        if req.to == 0 {
-            let slot = (req.from as i16).try_into()?;
-            if req.inv_type.is_equip() {
-                ctx.char_mut().inventory.drop_equip_item(slot)?;
-            } else {
-                ctx.char_mut()
-                    .inventory
-                    .drop_stack_item(req.inv_type, slot, count)?;
-            }
-        } else {
-            let src = (req.from as i16).try_into()?;
-            let dst = (req.to as i16).try_into()?;
-            ctx.session
-                .char
-                .inventory
-                .move_item(req.inv_type, src, dst, count)?;
-        }
-        dbg!(&ctx.session.char.inventory.pending_operations);
-
-        ctx.session.char.unlock_char();
-        Ok(())
-    }
-
-    async fn handle_skill_up(ctx: &mut Ctx, req: UserSkillUpReq) -> GameResult<()> {
-        ctx.session.char.skills.skill_up(req.skill_id)?;
-        Ok(())
-    }
-
     pub fn enable_char(&mut self) {
         self.session.char.unlock_char()
-    }
-
-    pub async fn handle_default(
-        _ctx: &mut Ctx,
-        op: RecvOpcodes,
-        pr: PacketReader<'_>,
-    ) -> anyhow::Result<()> {
-        log::info!("Unhandled packet: {:?} {:?}", op, pr.into_inner());
-        Ok(())
-    }
-
-    async fn init_char(ctx: &mut Ctx) -> anyhow::Result<()> {
-        ctx.send(FriendResultResp::Reset3(FriendList::empty()))
-            .await?;
-        ctx.send(FuncKeyMapInitResp::default_map()).await?;
-        ctx.send(ClaimSvrStatusChangedResp { connected: true })
-            .await?;
-        ctx.send(CtxSetGenderResp {
-            gender: ctx.session.char.gender,
-        })
-        .await?;
-
-        ctx.send(BroadcastMessageResp::PinkMessage("Hello".to_string()))
-            .await?;
-
-        ctx.session.char.unlock_char();
-
-        Ok(())
-    }
-
-    async fn update_char_stats(ctx: &mut Ctx) -> GameResult<()> {
-        if ctx.session.char.stats_changed() {
-            let partial = ctx.session.char.get_stats_partial();
-            ctx.send(CharStatChangedResp {
-                excl: true, //TODO handle this
-                stats: PartialFlag {
-                    hdr: (),
-                    data: partial,
-                },
-                secondary_stat: false,
-                battle_recovery: false,
-            })
-            .await?;
-        }
-
-        if ctx.session.char.is_inventory_changed() {
-            let ops = ctx.session.char.get_inventory_ops();
-            ctx.send(InventoryOperationsResp {
-                reset_excl: true,
-                operations: ops.into(),
-                secondary_stat_changed: false,
-            })
-            .await?;
-        }
-
-        if let Some(skills) = ctx.session.char.skills.get_updates() {
-            ctx.send(ChangeSkillRecordResp {
-                reset_excl: true,
-                skill_records: skills.into(),
-                updated_secondary_stat: false,
-            })
-            .await?;
-        }
-
-        Ok(())
-    }
-
-    async fn handle_update_screen_setting(
-        _ctx: &mut Ctx,
-        _req: UpdateScreenSettingReq,
-    ) -> anyhow::Result<()> {
-        Ok(())
-    }
-
-    async fn handle_melee_attack(ctx: &mut Ctx, req: UserMeleeAttackReq) -> anyhow::Result<()> {
-        for target in req.targets {
-            let dmg = target.hits.iter().sum::<u32>();
-            let mut sess_handle = ctx.session_handle.clone();
-            ctx.field
-                .attack_mob(target.mob_id, dmg, ctx.session.char.id, &mut sess_handle)
-                .await?;
-        }
-
-        Ok(())
-    }
-
-    async fn handle_drop_pick_up(ctx: &mut Ctx, req: UserDropPickUpReq) -> GameResult<()> {
-        /*ctx.field
-        .handle_pickup(req.drop_id, &mut ctx.session.char)?;*/
-        let drop = ctx.field.remove_drop(
-            req.drop_id,
-            DropLeaveParam::UserPickup(ctx.session.char.id as u32),
-        )?;
-
-        match drop.value {
-            DropTypeValue::Mesos(money) => {
-                ctx.session.char.update_mesos(money as i32);
-            }
-            DropTypeValue::Item(item_id) => {
-                let inv_ty = item_id.get_inv_type()?;
-                if !inv_ty.is_stack() {
-                    let item = ctx.services.data.item.get_eq_item_from_id(item_id)?;
-
-                    ctx.session.char.inventory.try_add_equip(item)?;
-                } else {
-                    let item = ctx
-                        .services
-                        .data
-                        .item
-                        .get_stack_item_from_id(item_id, drop.quantity)?;
-
-                    ctx.session
-                        .char
-                        .inventory
-                        .try_add_stack_item(item, inv_ty)?;
-                };
-            }
-        }
-
-        Ok(())
-    }
-
-    async fn handle_drop_money(ctx: &mut Ctx, req: UserDropMoneyReq) -> GameResult<()> {
-        let ok = ctx.session.char.update_mesos((req.money as i32).neg());
-        let char = &ctx.session.char;
-        if ok {
-            ctx.field.add_drop(Drop {
-                owner: proto95::game::drop::DropOwner::User(char.id as u32),
-                pos: char.pos,
-                start_pos: char.pos,
-                value: DropTypeValue::Mesos(req.money),
-                quantity: 1,
-            })?;
-        }
-
-        let stats = ctx.session.char.get_stats_partial();
-        ctx.send(CharStatChangedResp {
-            excl: true,
-            stats: PartialFlag {
-                hdr: (),
-                data: stats,
-            },
-            secondary_stat: false,
-            battle_recovery: false,
-        })
-        .await
-    }
-
-    async fn handle_chat_msg(ctx: &mut Ctx, req: ChatMsgReq) -> anyhow::Result<()> {
-        let admin = false;
-        if let Some(s) = req.msg.strip_prefix('@') {
-            let repl_resp = Self::handle_repl(ctx, s).await?;
-            let Some(msg) = repl_resp else {
-                return Ok(())
-            };
-            let resp = UserChatMsgResp {
-                char: ctx.session.char.id as u32,
-                is_admin: admin,
-                msg,
-                only_balloon: false,
-            };
-
-            ctx.send(resp).await?;
-        } else {
-            ctx.field.add_chat(UserChatMsgResp {
-                char: ctx.session.char.id as u32,
-                is_admin: admin,
-                msg: req.msg,
-                only_balloon: req.only_balloon,
-            })?;
-        };
-        Ok(())
-    }
-
-    async fn handle_mob_move(ctx: &mut Ctx, req: MobMoveReq) -> GameResult<()> {
-        let ctrl_sn = req.ctrl_sn;
-        let id = req.id;
-
-        ctx.field.update_mob_pos(req, ctx.session.char.id)?;
-
-        ctx.send(MobMoveCtrlAckResp {
-            id,
-            ctrl_sn,
-            next_atk_possible: false,
-            mp: 0,
-            skill_id: 0,
-            slv: 0,
-        })
-        .await
-    }
-
-    async fn handle_portal_script(ctx: &mut Ctx, _req: UserPortalScriptReq) -> GameResult<()> {
-        ctx.enable_char();
-        Ok(())
     }
 
     fn set_field(&self) -> SetFieldResp {
@@ -659,7 +283,7 @@ impl GameHandler {
                 extra_data: None.into(),
             },
             char_data,
-            char_data_flags: CharDataFlagsAll,
+            char_data_flags: CharDataFlags::all(),
         };
 
         SetFieldResp {
@@ -673,31 +297,469 @@ impl GameHandler {
         }
     }
 
-    async fn join_field(ctx: &mut Ctx, map: MapId, spawn_point: Option<u8>) -> GameResult<()> {
-        ctx.session.char.transfer_map(map, spawn_point.unwrap_or(0));
+    async fn join_field(
+        &mut self,
+        ctx: &mut Ctx,
+        map: MapId,
+        spawn_point: Option<u8>,
+    ) -> GameResult<()> {
+        self.session
+            .char
+            .transfer_map(map, spawn_point.unwrap_or(0));
 
         // Only get a new handle, when the map is new
-        if map != ctx.field.get_field_id() {
-            ctx.field = ctx
-                .services
+        if map != self.field.field_id {
+            self.services
                 .field
-                .join_field(
-                    ctx.session.char.id,
-                    ctx.session.char.get_avatar_data(),
-                    ctx.session_handle.clone(),
-                    ctx.session.char.map_id,
-                )
+                .switch_field(self.session.char.get_avatar_data(), map, &mut self.field)
                 .await?;
         }
 
-        ctx.send(ctx.set_field()).await
+        ctx.send(self.set_field()).await
     }
 
-    async fn handle_field_transfer(ctx: &mut Ctx, req: UserTransferFieldReq) -> GameResult<()> {
-        let (map, spawn) = if ctx.session.char.is_dead() {
-            let return_map = MapId(ctx.field.get_meta().info.return_map.unwrap_or_default() as u32);
+    async fn init_char(&mut self, ctx: &mut Ctx) -> anyhow::Result<()> {
+        ctx.send(self.set_field()).await?;
 
-            let spawn_point = ctx
+        ctx.send(FriendResultResp::Reset3(FriendList::empty()))
+            .await?;
+        ctx.send(FuncKeyMapInitResp::default_map()).await?;
+        ctx.send(ClaimSvrStatusChangedResp { connected: true })
+            .await?;
+        ctx.send(CtxSetGenderResp {
+            gender: self.session.char.gender,
+        })
+        .await?;
+
+        ctx.send(BroadcastMessageResp::PinkMessage("Hello".to_string()))
+            .await?;
+
+        self.session.char.unlock_char();
+
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl ShroomConnHandler for GameHandler {
+    type Codec = LegacyCodec<TcpStream>;
+    type Error = anyhow::Error;
+    type Msg = SessionMsg;
+    type MakeState = MakeGameHandler;
+
+    async fn make_handler(
+        state: &Self::MakeState,
+        ctx: &mut Ctx,
+        handle: SharedConnHandle<Self::Msg>,
+    ) -> Result<Self, Self::Error> {
+        let mut handler = GameHandler::from_ctx(
+            ctx,
+            state.services.clone(),
+            state.channel_id,
+            state.world_id,
+            handle.clone(),
+        )
+        .await?;
+        handler.init_char(ctx).await?;
+
+        //Ok(ctx)
+
+        Ok(handler)
+    }
+
+    async fn recv_msg(&mut self) -> Option<Self::Msg> {
+        self.field.recv().await
+    }
+
+    async fn handle_msg(
+        &mut self,
+        ctx: &mut Ctx,
+        msg: ShroomConnEvent<Self::Msg>,
+    ) -> Result<ServerHandleResult, Self::Error> {
+        Ok(match msg {
+            ShroomConnEvent::IncomingPacket(pkt) => self.handle_packet(&pkt, ctx).await?,
+            ShroomConnEvent::Message(msg) => {
+                log::info!("Sending msg: {msg:?}");
+                match msg {
+                    SessionMsg::Pkt(pkt) => ctx.session_mut().send_packet(pkt.as_ref()).await?,
+                    SessionMsg::PktBuf(pkt_buf) => {
+                        ctx.session_mut().send_packet_buffer(&pkt_buf).await?
+                    }
+                }
+                ServerHandleResult::Ok
+            }
+            ShroomConnEvent::Ping => {
+                log::info!("Sending ping...");
+                ctx.send(PingResp).await?;
+                ServerHandleResult::Ok
+            }
+            ShroomConnEvent::Tick(_) => ServerHandleResult::Ok,
+        })
+    }
+
+    async fn finish(self, is_migrating: bool) -> Result<(), Self::Error> {
+        log::info!("Finishing game session...");
+        if is_migrating {
+            self.services.session_manager.migrate_session(
+                ShroomMigrationKey::new(self.client_key, self.addr),
+                self.session.unmap(),
+            )?;
+        } else {
+            self.services
+                .session_manager
+                .close_session(self.session.unmap())
+                .await?;
+        }
+
+        Ok(())
+    }
+}
+
+impl GameHandler {
+    pub async fn send_field_msg(&mut self, msg: FieldMsg) -> anyhow::Result<()> {
+        self.field.send(msg).await?;
+        Ok(())
+    }
+
+    pub async fn handle_packet(
+        &mut self,
+        pkt: &ShroomPacketData,
+        ctx: &mut Ctx,
+    ) -> anyhow::Result<ServerHandleResult> {
+        shroom_router_fn!(
+            handler,
+            GameHandler,
+            anyhow::Error,
+            GameHandler::handle_default,
+            PongReq => GameHandler::handle_pong,
+            UpdateScreenSettingReq => GameHandler::handle_update_screen_setting,
+            ChatMsgReq => GameHandler::handle_chat_msg,
+            UserMoveReq => GameHandler::handle_movement,
+            UserPortalScriptReq => GameHandler::handle_portal_script,
+            UserTransferFieldReq => GameHandler::handle_field_transfer,
+            TransferChannelReq => GameHandler::handle_channel_transfer,
+            UserDropPickUpReq => GameHandler::handle_drop_pick_up,
+            UserDropMoneyReq => GameHandler::handle_drop_money,
+            MobMoveReq => GameHandler::handle_mob_move,
+            UserMeleeAttackReq => GameHandler::handle_melee_attack,
+            UserSkillUpReq => GameHandler::handle_skill_up,
+            UserHitReq => GameHandler::handle_user_hit,
+            UserStatChangeReq => GameHandler::handle_stat_change,
+            InvChangeSlotPosReq => GameHandler::handle_inv_change_slot,
+            ClientDumpLogReq => GameHandler::handle_client_dump_log,
+            UserSkillUseReq => GameHandler::handle_use_skill,
+        );
+
+        let res = handler(self, ctx, pkt.into_reader()).await?;
+        self.update_char_stats(ctx).await?;
+        Ok(res)
+    }
+
+    async fn handle_pong(
+        &mut self,
+        _ctx: &mut Ctx,
+        _req: PongReq,
+    ) -> anyhow::Result<ServerHandleResult> {
+        log::info!("Got pong");
+        Ok(ServerHandleResult::Pong)
+    }
+
+    pub async fn handle_default(
+        &mut self,
+        _ctx: &mut Ctx,
+        op: RecvOpcodes,
+        pr: PacketReader<'_>,
+    ) -> anyhow::Result<ServerHandleResult> {
+        log::info!("Unhandled packet: {:?} {:?}", op, pr.into_inner());
+        Ok(ServerHandleResult::Ok)
+    }
+
+    async fn handle_use_skill(
+        &mut self,
+        _ctx: &mut Ctx,
+        req: UserSkillUseReq,
+    ) -> anyhow::Result<()> {
+        self.char_mut().use_skill(req.skill_id)?;
+
+        Ok(())
+    }
+
+    async fn handle_client_dump_log(
+        &mut self,
+        _ctx: &mut Ctx,
+        req: ClientDumpLogReq,
+    ) -> anyhow::Result<()> {
+        dbg!(req);
+        Ok(())
+    }
+
+    async fn handle_user_hit(&mut self, _ctx: &mut Ctx, req: UserHitReq) -> GameResult<()> {
+        self.char_mut()
+            .stats
+            .update_hp((req.dmg_internal as i16).neg());
+        Ok(())
+    }
+
+    async fn handle_stat_change(
+        &mut self,
+        _ctx: &mut Ctx,
+        req: UserStatChangeReq,
+    ) -> GameResult<()> {
+        //TODO ?
+        self.session.char.stats.update_hp(req.hp as i16);
+        self.session.char.stats.update_mp(req.mp as i16);
+
+        Ok(())
+    }
+
+    async fn handle_inv_change_slot(
+        &mut self,
+        _ctx: &mut Ctx,
+        req: InvChangeSlotPosReq,
+    ) -> anyhow::Result<()> {
+        let count = (req.count != u16::MAX).then_some(req.count as usize);
+        // Check for drop
+        if req.to == 0 {
+            let slot = (req.from as i16).try_into()?;
+            if req.inv_type.is_equip() {
+                self.char_mut().inventory.drop_equip_item(slot)?;
+            } else {
+                self.char_mut()
+                    .inventory
+                    .drop_stack_item(req.inv_type, slot, count)?;
+            }
+        } else {
+            let src = (req.from as i16).try_into()?;
+            let dst = (req.to as i16).try_into()?;
+            self.session
+                .char
+                .inventory
+                .move_item(req.inv_type, src, dst, count)?;
+        }
+
+        self.session.char.unlock_char();
+        Ok(())
+    }
+
+    async fn handle_skill_up(&mut self, _ctx: &mut Ctx, req: UserSkillUpReq) -> GameResult<()> {
+        self.session.char.skills.skill_up(req.skill_id, 1)?;
+        Ok(())
+    }
+
+    async fn update_char_stats(&mut self, ctx: &mut Ctx) -> GameResult<()> {
+        if let Some(partial) = self.session.char.get_stats_update() {
+            ctx.send(CharStatChangedResp {
+                excl: true, //TODO handle this
+                stats: PartialFlag {
+                    hdr: (),
+                    data: partial,
+                },
+                secondary_stat: false,
+                battle_recovery: false,
+            })
+            .await?;
+        }
+
+        if let Some(ops) = self.session.char.get_inv_op_updates() {
+            ctx.send(InventoryOperationsResp {
+                reset_excl: true,
+                operations: ops.into(),
+                secondary_stat_changed: false,
+            })
+            .await?;
+        }
+
+        if let Some(skills) = self.session.char.skills.get_updates() {
+            ctx.send(ChangeSkillRecordResp {
+                reset_excl: true,
+                skill_records: skills.into(),
+                updated_secondary_stat: false,
+            })
+            .await?;
+        }
+
+        if let Some(skill_cd) = self.char_mut().skills.get_cooldown_updates() {
+            for cd in skill_cd {
+                ctx.send(dbg!(cd)).await?;
+            }
+        }
+
+        if !self.char_mut().secondary_stats_flags.is_empty() {
+            let stats = std::mem::replace(&mut self.char_mut().secondary_stats, Default::default());
+            ctx.send(LocalSecondaryStatSetResp {
+                stats: stats.into(),
+                defense_atk: 0,
+                defense_state: 0,
+                swallow_buff_time: None.into(),
+                dice_info: Default::default(),
+                blessing_armor_inc_pad: None.into(),
+                two_states: CharSecondaryTwoStatesPartial::default(),
+                delay: DurationMs(0),
+                movement_affecting: Some(true).into(),
+            })
+            .await?;
+
+            self.char_mut().secondary_stats_flags = CharSecondaryStatFlags::empty();
+        }
+
+        if let Some(flags) = self.char_mut().get_secondary_stats_timeout() {
+            ctx.send(LocalSecondaryStatResetResp {
+                flags,
+                movement_affecting: true,
+            })
+            .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn handle_update_screen_setting(
+        &mut self,
+        _ctx: &mut Ctx,
+        _req: UpdateScreenSettingReq,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn handle_melee_attack(
+        &mut self,
+        _ctx: &mut Ctx,
+        req: UserMeleeAttackReq,
+    ) -> anyhow::Result<()> {
+        for target in req.targets {
+            let dmg = target.hits.iter().sum::<u32>();
+            self.send_field_msg(FieldMsg::MobAttack {
+                id: target.mob_id,
+                dmg: dmg,
+            })
+            .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn handle_drop_pick_up(
+        &mut self,
+        _ctx: &mut Ctx,
+        req: UserDropPickUpReq,
+    ) -> GameResult<()> {
+        let (tx, rx) = oneshot::channel();
+        self.send_field_msg(FieldMsg::SlowLoot(
+            req.drop_id,
+            DropLeaveParam::UserPickup(self.session.char.id as u32),
+            tx,
+        ))
+        .await?;
+        let drop = rx.await?.unwrap();
+
+        match drop.value {
+            DropTypeValue::Mesos(money) => {
+                self.session.char.update_mesos(money as i32);
+            }
+            DropTypeValue::Item(item_id) => {
+                let inv_ty = item_id.get_inv_type()?;
+                if !inv_ty.is_stack() {
+                    let item = self.services.data.item.get_eq_item_from_id(item_id)?;
+
+                    self.session.char.inventory.try_add_equip(item)?;
+                } else {
+                    let item = self
+                        .services
+                        .data
+                        .item
+                        .get_stack_item_from_id(item_id, drop.quantity)?;
+
+                    self.session
+                        .char
+                        .inventory
+                        .try_add_stack_item(item, inv_ty)?;
+                };
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn handle_drop_money(&mut self, _ctx: &mut Ctx, req: UserDropMoneyReq) -> GameResult<()> {
+        let ok = self.session.char.update_mesos((req.money as i32).neg());
+        let char = &self.session.char;
+        if ok {
+            self.send_field_msg(FieldMsg::DropAdd(Drop {
+                owner: proto95::game::drop::DropOwner::User(char.id as u32),
+                pos: char.pos,
+                start_pos: char.pos,
+                value: DropTypeValue::Mesos(req.money),
+                quantity: 1,
+            }))
+            .await?;
+        }
+
+        self.session.char.unlock_char();
+        Ok(())
+    }
+
+    async fn handle_chat_msg(&mut self, ctx: &mut Ctx, req: ChatMsgReq) -> anyhow::Result<()> {
+        let admin = false;
+        if let Some(s) = req.msg.strip_prefix('@') {
+            let repl_resp = self.handle_repl(ctx, s).await?;
+            let Some(msg) = repl_resp else { return Ok(()) };
+            let resp = UserChatMsgResp {
+                char: self.session.char.id as u32,
+                is_admin: admin,
+                msg,
+                only_balloon: false,
+            };
+
+            ctx.send(resp).await?;
+        } else {
+            self.send_field_msg(FieldMsg::Chat(UserChatMsgResp {
+                char: self.session.char.id as u32,
+                is_admin: admin,
+                msg: req.msg,
+                only_balloon: req.only_balloon,
+            }))
+            .await?;
+        };
+        Ok(())
+    }
+
+    async fn handle_mob_move(&mut self, ctx: &mut Ctx, req: MobMoveReq) -> GameResult<()> {
+        let ctrl_sn = req.ctrl_sn;
+        let id = req.id;
+
+        self.send_field_msg(FieldMsg::MobUpdatePos(req, self.session.char.id))
+            .await?;
+
+        ctx.send(MobMoveCtrlAckResp {
+            id,
+            ctrl_sn,
+            next_atk_possible: false,
+            mp: 0,
+            skill_id: 0,
+            slv: 0,
+        })
+        .await
+    }
+
+    async fn handle_portal_script(
+        &mut self,
+        _ctx: &mut Ctx,
+        _req: UserPortalScriptReq,
+    ) -> GameResult<()> {
+        self.enable_char();
+        Ok(())
+    }
+
+    async fn handle_field_transfer(
+        &mut self,
+        ctx: &mut Ctx,
+        req: UserTransferFieldReq,
+    ) -> GameResult<()> {
+        let (map, spawn) = if self.session.char.is_dead() {
+            let return_map =
+                MapId(self.field.field_meta.info.return_map.unwrap_or_default() as u32);
+
+            let spawn_point = self
                 .services
                 .meta
                 .get_field_data(return_map)
@@ -706,13 +768,13 @@ impl GameHandler {
                 .first_key_value()
                 .map(|(k, _)| *k)
                 .unwrap_or_default() as u8;
-            ctx.session.char.respawn();
+            self.session.char.respawn();
 
             (return_map, spawn_point)
         } else {
-            let portal = ctx
+            let portal = self
                 .field
-                .get_meta()
+                .field_meta
                 .portal
                 .values()
                 .find(|p| p.pn == req.portal)
@@ -720,11 +782,11 @@ impl GameHandler {
 
             // TODO(!) tm should be an option as mapid 999999 is invalid
             let map_id = if portal.tm == 999999 {
-                ctx.field.get_field_id()
+                self.field.field_id
             } else {
                 MapId(portal.tm as u32)
             };
-            let spawn_point = ctx
+            let spawn_point = self
                 .services
                 .meta
                 .get_field_data(map_id)
@@ -738,33 +800,39 @@ impl GameHandler {
             (map_id, spawn_point)
         };
 
-        Self::join_field(ctx, map, Some(spawn)).await
+        self.join_field(ctx, map, Some(spawn)).await
     }
 
-    async fn handle_movement(ctx: &mut Ctx, req: UserMoveReq) -> anyhow::Result<()> {
-        ctx.char_mut().pos = req.move_path.pos;
+    async fn handle_movement(&mut self, _ctx: &mut Ctx, req: UserMoveReq) -> anyhow::Result<()> {
+        self.char_mut().pos = req.move_path.pos;
         let last = req.move_path.get_last_pos_fh();
 
         if let Some((pos, fh)) = last {
-            ctx.char_mut().pos = pos;
-            ctx.char_mut().fh = fh.unwrap_or(ctx.char().fh);
+            self.char_mut().pos = pos;
+            self.char_mut().fh = fh.unwrap_or(self.char().fh);
         }
 
-        ctx.field.update_user_pos(req, ctx.session.char.id)?;
+        self.send_field_msg(FieldMsg::UserUpdatePos(req.move_path))
+            .await?;
         Ok(())
     }
 
-    async fn handle_channel_transfer(ctx: &mut Ctx, req: TransferChannelReq) -> GameResult<()> {
-        log::info!("Transfer channel: {:?}", req);
-        let addr = ctx
+    async fn handle_channel_transfer(
+        &mut self,
+        ctx: &mut Ctx,
+        req: TransferChannelReq,
+    ) -> GameResult<ServerHandleResult> {
+        let addr = self
             .services
             .server_info
-            .get_channel_addr(ctx.world_id, req.channel_id as ChannelId)?;
+            .get_channel_addr(self.world_id, req.channel_id as ChannelId)?;
 
-        ctx.reply(MigrateResponse(MigrateCommandResp {
+        ctx.send(MigrateCommandResp {
             unknown: true,
             addr: addr.try_into()?,
-        }))
-        .await
+        })
+        .await?;
+
+        Ok(ServerHandleResult::Migrate)
     }
 }

@@ -9,8 +9,7 @@ pub mod npc;
 pub mod pet;
 pub mod reactor;
 pub mod user;
-use shroom_net::{packet::proto::time::Ticks, packet_opcode, shroom_packet_enum};
-use shroom_net_derive::ShroomPacket;
+use shroom_pkt::{packet_opcode, time::Ticks, ShroomPacket, ShroomPacketEnum};
 
 use crate::{
     id::job_id::JobId,
@@ -19,6 +18,8 @@ use crate::{
     send_opcodes::SendOpcodes,
     shared::{char::CharacterId, Gender, ServerSocketAddr, Vec2},
 };
+
+use self::npc::NpcId;
 
 use super::login::ClientKey;
 
@@ -104,11 +105,41 @@ pub struct ServerMessage {
     pub msg: String,
 }
 
-shroom_packet_enum!(
-    #[derive(Debug)]
-    pub enum BroadcastMessageResp: u8 {
-        ServerMessage(ServerMessage) = 4,
-        PinkMessage(String) = 5
-    }
-);
+#[derive(ShroomPacket, Debug)]
+pub struct NoticeMessage {
+    pub msg: String,
+    pub unknown: i32,
+}
+
+#[derive(ShroomPacket, Debug)]
+pub struct UtilDlgExMessage {
+    pub msg: String,
+    pub npc: NpcId,
+}
+
+#[derive(ShroomPacketEnum, Debug)]
+#[repr(u8)]
+pub enum BroadcastMessageResp {
+    Notice(String) = 0,
+    Alert(String) = 1,
+    Channel(String) = 2,
+    World(String) = 3,
+    ServerMessage(ServerMessage) = 4,
+    PinkMessage(String) = 5,
+    NoticeWithoutPrefix(NoticeMessage) = 6,
+    UtilDlgEx(UtilDlgExMessage) = 7,
+    ItemSpeaker(()) = 8,
+    SpeakerBridge(()) = 9,
+    ArtSpeakerWorld(()) = 10,
+    BlowWeather(()) = 11,
+    GachaponAnnounce(()) = 12,
+    GachaponAnnounceOpen(()) = 13,
+    GachaponAnnounceClose(()) = 14,
+    UListClip(()) = 15,
+    FreeMarketClip(()) = 16,
+    DestroyShop(()) = 17,
+    CashShopAd(()) = 18,
+    HeartSpeaker(()) = 19,
+    SkillSpeaker(()) = 20,
+}
 packet_opcode!(BroadcastMessageResp, SendOpcodes::BroadcastMsg);

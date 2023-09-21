@@ -1,9 +1,7 @@
-use shroom_net::{
-    mark_shroom_bitflags,
-    packet::{proto::CondOption, ShroomExpirationTime, ShroomOption8, ShroomTime},
-    shroom_packet_enum,
+use shroom_pkt::{
+    mark_shroom_bitflags, CondOption, ShroomExpirationTime, ShroomOption8, ShroomPacket,
+    ShroomPacketEnum, ShroomTime,
 };
-use shroom_net_derive::ShroomPacket;
 
 use crate::id::ItemId;
 
@@ -79,7 +77,7 @@ pub struct PetItemInfo {
     pub tameness: u16,
     pub fullness: u8,                     /* repleteness */
     pub expiration: ShroomExpirationTime, /* dateDead */
-    pub pet_attr: u16,                  /* PetAttribute  pet is only loaded when attr == 1*/
+    pub pet_attr: u16,                    /* PetAttribute  pet is only loaded when attr == 1*/
     pub skill: u16,
     pub remain_life: u32,
     pub attr: ItemPetFlags,
@@ -111,8 +109,6 @@ pub struct EquipAllStats {
     pub title: String, /* stitle */
     pub flags: ItemFlags,
 }
-
-
 
 #[derive(Debug, ShroomPacket)]
 pub struct ItemPetData {
@@ -157,12 +153,11 @@ pub struct EquipItemInfo {
     pub prev_bonus_exp_rate: i32,
 }
 
-shroom_packet_enum!(
-    #[derive(Debug)]
-    pub enum Item: u8 {
-        Equip(EquipItemInfo) = 1,
-        Stack(ItemStackData) = 2,
-        Pet(ItemPetData) = 3,
-        Equipped(()) = 255
-    }
-);
+#[derive(Debug, ShroomPacketEnum)]
+#[repr(u8)]
+pub enum Item {
+    Equip(EquipItemInfo) = 1,
+    Stack(ItemStackData) = 2,
+    Pet(ItemPetData) = 3,
+    Equipped(()) = 255,
+}

@@ -1,8 +1,8 @@
-pub mod item;
 pub mod character;
 pub mod data;
 pub mod field;
 pub mod helper;
+pub mod item;
 pub mod meta;
 pub mod model;
 pub mod server_info;
@@ -16,6 +16,8 @@ use proto95::{
 };
 use sea_orm::{DatabaseConnection, DbErr};
 use server_info::{ServerInfo, ServerService};
+use shroom_net::server::tick::Tick;
+use shroom_pkt::{util::packet_buf::PacketBuf, ShroomPacketData};
 
 use crate::entities::sea_orm_active_enums::GenderTy;
 
@@ -27,8 +29,14 @@ use self::{
     },
     field::FieldService,
     meta::meta_service::MetaService,
-    session::{ShroomSessionManager, ShroomSessionBackend},
+    session::{ShroomSessionBackend, ShroomSessionManager},
 };
+
+#[derive(Debug)]
+pub enum SessionMsg {
+    Pkt(ShroomPacketData),
+    PktBuf(PacketBuf),
+}
 
 pub type SharedServices = Arc<Services>;
 
@@ -45,6 +53,7 @@ impl Services {
     pub fn new(
         db: DatabaseConnection,
         servers: impl IntoIterator<Item = ServerInfo>,
+        tick: Tick,
         meta: &'static MetaService,
     ) -> Self {
         let data = Arc::new(DataServices::new(db, meta));
@@ -55,26 +64,28 @@ impl Services {
             data: data.clone(),
             session_manager: ShroomSessionManager::new(session_backend, Duration::from_secs(30)),
             server_info: ServerService::new(servers),
-            field: FieldService::new(meta),
+            field: FieldService::new(tick, meta),
             meta,
         }
     }
 
     pub async fn seeded_in_memory(
         servers: impl IntoIterator<Item = ServerInfo>,
+        tick: Tick,
         meta: &'static MetaService,
     ) -> Result<Self, DbErr> {
         let db = crate::gen_sqlite(crate::SQL_OPT_MEMORY).await?;
-        Ok(Self::new(db, servers, meta))
+        Ok(Self::new(db, servers, tick, meta))
     }
 
     pub async fn seeded_in_db(
         servers: impl IntoIterator<Item = ServerInfo>,
+        tick: Tick,
         meta: &'static MetaService,
+        db_url: &str,
     ) -> Result<Self, DbErr> {
-        let opt = std::env::var("DATABASE_URL").expect("DATABASE_URL not set");
-        let db = crate::gen_psql(&opt).await?;
-        Ok(Self::new(db, servers, meta))
+        let db = crate::gen_psql(&db_url).await?;
+        Ok(Self::new(db, servers, tick, meta))
     }
 
     pub fn as_shared(self) -> SharedServices {

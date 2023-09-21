@@ -1,5 +1,5 @@
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use shroom_net::NetOpcode;
+use shroom_pkt::NetOpcode;
 
 impl NetOpcode for RecvOpcodes {}
 

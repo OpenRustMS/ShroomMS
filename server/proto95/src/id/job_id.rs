@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use shroom_net::mark_shroom_enum;
+use shroom_pkt::mark_shroom_enum;
 
 //TODO model sub job for dual blade
 // Which is actually a beginner but sub job is set to 1

@@ -1,10 +1,12 @@
 use clap::{Command, FromArgMatches, Parser, Subcommand};
-use data::services::helper::pool::{
-    drop::{Drop, DropTypeValue},
-    user::User,
-    Mob,
+use data::services::{
+    field::FieldMsg,
+    helper::pool::{
+        drop::{Drop, DropTypeValue},
+        Mob,
+    },
 };
-use proto95::id::{ItemId, MapId};
+use proto95::id::{job_id::JobId, ItemId, MapId};
 
 use crate::{Ctx, GameHandler};
 
@@ -18,6 +20,13 @@ pub enum ReplCmd {
     Aggro,
     Dispose,
     Teleport,
+    Sp { add: u32 },
+    Job { id: u32 },
+    TestSet,
+    Level { level: u8 },
+    MaxSkills,
+    SpamDrop,
+    StopSpamDrop,
 }
 
 pub struct GameRepl {
@@ -59,75 +68,114 @@ impl GameRepl {
 }
 
 impl GameHandler {
-    pub async fn handle_repl_cmd(ctx: &mut Ctx, cmd: ReplCmd) -> anyhow::Result<Option<String>> {
+    pub async fn handle_repl_cmd(
+        &mut self,
+        ctx: &mut Ctx,
+        cmd: ReplCmd,
+    ) -> anyhow::Result<Option<String>> {
         Ok(match cmd {
             ReplCmd::Mob { id } => {
                 let mob = id.unwrap_or(1110100);
-                let meta = ctx.services.meta.get_mob_data(mob).unwrap();
-                ctx.field
-                    .add_mob(Mob {
-                        meta,
-                        tmpl_id: mob,
-                        pos: ctx.char().pos,
-                        fh: ctx.char().fh,
-                        origin_fh: None,
-                        hp: meta.max_hp,
-                        perc: 100,
-                    })
-                    .await?;
+                let meta = self.services.meta.get_mob_data(mob).unwrap();
+                self.send_field_msg(FieldMsg::MobAdd(Mob {
+                    meta,
+                    tmpl_id: mob,
+                    pos: self.char().pos,
+                    fh: self.char().fh,
+                    origin_fh: None,
+                    hp: meta.max_hp,
+                    perc: 100,
+                }))
+                .await?;
                 None
             }
             ReplCmd::Mesos { amount } => {
-                ctx.field.add_drop(Drop {
+                self.send_field_msg(FieldMsg::DropAdd(Drop {
                     owner: proto95::game::drop::DropOwner::None,
-                    pos: ctx.char().pos,
-                    start_pos: ctx.char().pos,
+                    pos: self.char().pos,
+                    start_pos: self.char().pos,
                     value: DropTypeValue::Mesos(amount),
                     quantity: 1,
-                })?;
+                }))
+                .await?;
                 None
             }
             ReplCmd::Item { id } => {
                 let item = id.map_or(ItemId::ADVANCED_MONSTER_CRYSTAL_1, ItemId);
-                ctx.field.add_drop(Drop {
+
+                self.send_field_msg(FieldMsg::DropAdd(Drop {
                     owner: proto95::game::drop::DropOwner::None,
-                    pos: ctx.char().pos,
-                    start_pos: ctx.char().pos,
+                    pos: self.char().pos,
+                    start_pos: self.char().pos,
                     value: DropTypeValue::Item(item),
                     quantity: 1,
-                })?;
+                }))
+                .await?;
                 None
             }
             ReplCmd::FakeUser { id } => {
-                ctx.field.add_user(User {
-                    avatar_data: ctx.session.char.get_avatar_data(),
+                log::info!("Adding fake user {id} not implemented yet");
+                /*self.field.add_user(User {
+                    avatar_data: self.session.char.get_avatar_data(),
                     char_id: id,
-                    pos: ctx.char().pos,
-                    fh: ctx.char().fh,
-                })?;
+                    pos: self.char().pos,
+                    fh: self.char().fh,
+                })?;*/
                 None
             }
             ReplCmd::Aggro => {
-                ctx.field
-                    .assign_mob_controller(ctx.session_handle.clone())?;
+                self.send_field_msg(FieldMsg::MobAssignController(self.char().id))
+                    .await?;
                 None
             }
             ReplCmd::Dispose => {
-                ctx.enable_char();
+                self.enable_char();
                 None
             }
             ReplCmd::Chat { msg } => Some(msg),
             ReplCmd::Teleport => {
-                GameHandler::join_field(ctx, MapId(1010000), None).await?;
+                self.join_field(ctx, MapId(1010000), None).await?;
+                None
+            }
+            ReplCmd::Sp { add } => {
+                self.char_mut().add_sp(add);
+                None
+            }
+            ReplCmd::Job { id } => {
+                let svc = self.services.clone();
+                self.char_mut()
+                    .change_job(JobId::try_from(id as u16).unwrap(), &svc)?;
+                None
+            }
+            ReplCmd::Level { level } => {
+                *self.char_mut().stats.level_mut() = level;
+                None
+            }
+            ReplCmd::TestSet => {
+                let item = self.services.data.item.clone();
+                self.char_mut().give_test_set(&item)?;
+                None
+            }
+            ReplCmd::MaxSkills => {
+                self.char_mut().skills.max_skills();
+                None
+            }
+            ReplCmd::SpamDrop => {
+                self.send_field_msg(FieldMsg::StartSpamDrop(self.char().pos))
+                    .await?;
+                None
+            }
+            ReplCmd::StopSpamDrop => {
+                self.send_field_msg(FieldMsg::StopSpamDrop).await?;
                 None
             }
         })
     }
 
-    pub async fn handle_repl(ctx: &mut Ctx, s: &str) -> anyhow::Result<Option<String>> {
-        Ok(match ctx.repl.match_cmd(s) {
-            Err(_) => Some(ctx.repl.help()),
-            Ok(cmd) => Self::handle_repl_cmd(ctx, cmd).await?,
+    pub async fn handle_repl(&mut self, ctx: &mut Ctx, s: &str) -> anyhow::Result<Option<String>> {
+        Ok(match self.repl.match_cmd(s) {
+            Err(_) => Some(self.repl.help()),
+            Ok(cmd) => self.handle_repl_cmd(ctx, cmd).await?,
         })
     }
 }

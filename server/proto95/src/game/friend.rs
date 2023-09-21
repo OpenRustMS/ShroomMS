@@ -1,8 +1,6 @@
-use shroom_net::{
-    packet::proto::{option::ShroomOption8, string::FixedPacketString},
-    packet_opcode, shroom_packet_enum,
+use shroom_pkt::{
+    packet_opcode, string::FixedPacketString, ShroomOption8, ShroomPacket, ShroomPacketEnum,
 };
-use shroom_net_derive::ShroomPacket;
 
 use crate::{
     send_opcodes::SendOpcodes,
@@ -68,26 +66,25 @@ pub struct FriendReq {
     pub job_code: u32, //TODO: job id?
 }
 
-shroom_packet_enum!(
-    #[derive(Debug)]
-    pub enum FriendResultResp: u8 {
-        Reset(FriendList) = 0,
-        Update(FriendUpdate) = 1,
-        Req(FriendReq) = 2,
-        Reset3(FriendList) = 3,
-        Unknown4(()) = 4,
-        Unknown5(()) = 5,
-        Unknown6(()) = 6,
-        Unknown7(()) = 7,
-        Unknown8(()) = 8,
-        Unknown9(ShroomOption8<String>) = 9,
-        UnknownA(ShroomOption8<String>) = 0xa,
-        // Blocked is alwayws true fo this
-        ResetB(FriendList) = 0xb,
-        UnknownC(ShroomOption8<String>) = 0xc,
-        ChangeChannel(FriendChangeChannel) = 0xd,
-        MaxFriends(u8) = 0xe,
-        UnknownF(ShroomOption8<String>) = 0xf
-    }
-);
+#[derive(ShroomPacketEnum, Debug)]
+#[repr(u8)]
+pub enum FriendResultResp {
+    Reset(FriendList) = 0,
+    Update(FriendUpdate) = 1,
+    Req(FriendReq) = 2,
+    Reset3(FriendList) = 3,
+    Unknown4(()) = 4,
+    Unknown5(()) = 5,
+    Unknown6(()) = 6,
+    Unknown7(()) = 7,
+    Unknown8(()) = 8,
+    Unknown9(ShroomOption8<String>) = 9,
+    UnknownA(ShroomOption8<String>) = 0xa,
+    // Blocked is alwayws true fo this
+    ResetB(FriendList) = 0xb,
+    UnknownC(ShroomOption8<String>) = 0xc,
+    ChangeChannel(FriendChangeChannel) = 0xd,
+    MaxFriends(u8) = 0xe,
+    UnknownF(ShroomOption8<String>) = 0xf,
+}
 packet_opcode!(FriendResultResp, SendOpcodes::FriendResult);

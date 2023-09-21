@@ -17,5 +17,5 @@ game_data = { version = "0.1", path = "../../data/game_data" }
 log = "0.4"
 proto95 = { version = "0.1", path = "../proto95" }
 tokio = "1"
-shroom_net_derive = "0.2.2"
-shroom_net = "0.3"
+shroom-pkt = "0.1.1"
+shroom-net = "0.4"

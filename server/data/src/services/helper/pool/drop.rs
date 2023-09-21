@@ -12,12 +12,10 @@ use proto95::{
     id::ItemId,
     shared::Vec2,
 };
-use shroom_net::packet::proto::time::ShroomExpirationTime;
 
-use crate::services::{
-    data::character::CharacterID, meta::fh_tree::Foothold,
-    session::shroom_session_manager::ShroomSessionSet,
-};
+use shroom_pkt::ShroomExpirationTime;
+
+use crate::services::{data::character::CharacterID, field::FieldRoomSet, meta::fh_tree::Foothold};
 
 use super::{next_id, Pool, PoolItem};
 
@@ -109,13 +107,8 @@ impl PoolItem for Drop {
 
 impl Pool<Drop> {
     pub fn is_money(&self, item: DropId) -> Option<u32> {
-        let pool = match self.items.read() {
-            Ok(map) => map,
-            Err(_) => return None,
-        };
 
-        
-        match pool.get(&item) {
+        match self.items.get(&item) {
             Some(i) => match i.value {
                 DropTypeValue::Item(_) => None,
                 DropTypeValue::Mesos(m) => Some(m),
@@ -125,15 +118,15 @@ impl Pool<Drop> {
     }
 
     pub fn add_mob_drops(
-        &self,
+        &mut self,
         killed_mob: MobId,
         pos: Vec2,
         fh: Option<&Foothold>,
         killer: CharacterID,
-        sessions: &ShroomSessionSet,
+        sessions: &FieldRoomSet,
     ) -> anyhow::Result<()> {
-        let Some(drops) = self.meta.get_drops_for_mob(killed_mob)  else {
-            return Ok(())
+        let Some(drops) = self.meta.get_drops_for_mob(killed_mob) else {
+            return Ok(());
         };
 
         let money = drops.get_money_drop(&mut rand::thread_rng());

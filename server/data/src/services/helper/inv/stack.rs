@@ -169,7 +169,7 @@ impl<Item: InvStackItem, const CAP: usize> StackInv<Item, CAP> {
             handler.on_remove(&item, slot.to_slot_index());
             item
         } else {
-            handler.on_quantity_change(&item, slot.to_slot_index());
+            handler.on_quantity_change(item, slot.to_slot_index());
             split
         })
     }
@@ -222,7 +222,7 @@ impl<Item: InvStackItem, const CAP: usize> StackInv<Item, CAP> {
             handler.on_remove(&src, stack_src.to_slot_index());
         } else {
             src.sub_quantity(quantity).expect("src quantity");
-            handler.on_quantity_change(&src, stack_src.to_slot_index());
+            handler.on_quantity_change(src, stack_src.to_slot_index());
         }
         Ok(())
     }

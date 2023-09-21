@@ -1,7 +1,7 @@
 pub mod char;
 use chrono::{NaiveDateTime, TimeZone};
-use shroom_net::packet::proto::time::ShroomTime;
 use proto95::{login::account::AccountInfo, shared::Gender};
+use shroom_pkt::ShroomTime;
 
 use crate::entities::{account, sea_orm_active_enums::GenderTy};
 

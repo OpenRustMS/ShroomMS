@@ -1,5 +1,4 @@
-use shroom_net_derive::ShroomPacket;
-use shroom_net::{packet::{proto::option::ShroomOption8}, packet_opcode, shroom_enum_code};
+use shroom_pkt::{packet_opcode, shroom_enum_code, ShroomOption8, ShroomPacket};
 
 use crate::{recv_opcodes::RecvOpcodes, send_opcodes::SendOpcodes};
 

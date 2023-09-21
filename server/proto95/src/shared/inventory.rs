@@ -1,19 +1,17 @@
-use shroom_net::{
-    packet::proto::{
-        list::{ShroomIndexListZ16, ShroomIndexListZ8},
-        time::{ShroomTime, Ticks},
-        ShroomList8,
-    },
-    packet_opcode, shroom_enum_code, shroom_packet_enum,
+use shroom_pkt::{
+    packet_opcode, shroom_enum_code, time::Ticks, ShroomIndexListZ16, ShroomIndexListZ8,
+    ShroomList8, ShroomPacket, ShroomPacketEnum, ShroomTime,
 };
-use shroom_net_derive::ShroomPacket;
 
-use crate::{id::{ItemId, item_id::InventoryType}, recv_opcodes::RecvOpcodes, send_opcodes::SendOpcodes};
+use crate::{
+    id::{item_id::InventoryType, ItemId},
+    recv_opcodes::RecvOpcodes,
+    send_opcodes::SendOpcodes,
+};
 
-use super::item::Item;
+use super::{char::InventorySize, item::Item};
 
 //TODO indexing
-
 
 shroom_enum_code!(
     CharEquipSlot,
@@ -73,7 +71,7 @@ shroom_enum_code!(
     Nothing3 = 0x36,
     Nothing2 = 0x37,
     Nothing1 = 0x38,
-    Nothing0 = 0x39, 
+    Nothing0 = 0x39,
     ExtPendant1 = 0x3B,
     Ext1 = 0x3C,
     Ext2 = 0x3D,
@@ -135,7 +133,7 @@ shroom_enum_code!(
 
 #[derive(Debug, ShroomPacket)]
 pub struct InventoryInfo {
-    slot_limits: [u8; 5],
+    slot_limits: InventorySize,
     timestamp: ShroomTime,
     equipped: ShroomIndexListZ16<Item>,
     equipped_cash: ShroomIndexListZ16<Item>,
@@ -150,13 +148,13 @@ pub struct InventoryInfo {
 #[derive(Debug, ShroomPacket)]
 pub struct SortItemsPacket {
     timestamp: Ticks,
-    inv_ty: u8,
+    inv_ty: InventoryType,
 }
 
 #[derive(Debug, ShroomPacket)]
 pub struct MoveItemsPacket {
     timestamp: Ticks,
-    inv_ty: u8,
+    inv_ty: InventoryType,
     slot: u16,
     action: u16,
     count: u16,
@@ -222,16 +220,15 @@ pub struct InvOpUpdateExp {
     pub pos: u16,
 }
 
-shroom_packet_enum!(
-    #[derive(Debug)]
-    pub enum InventoryOperation: u8 {
-        Add(InvOpAdd) = 0,
-        UpdateQuantity(InvOpUpdateQuantity) = 1,
-        Move(InvOpMove) = 2,
-        Remove(InvOpRemove) = 3,
-        UpdateExp(InvOpUpdateExp) = 4
-    }
-);
+#[derive(Debug, ShroomPacketEnum)]
+#[repr(u8)]
+pub enum InventoryOperation {
+    Add(InvOpAdd) = 0,
+    UpdateQuantity(InvOpUpdateQuantity) = 1,
+    Move(InvOpMove) = 2,
+    Remove(InvOpRemove) = 3,
+    UpdateExp(InvOpUpdateExp) = 4,
+}
 
 impl InventoryOperation {
     pub fn remove(inv: InventoryType, pos: u16) -> Self {
@@ -243,15 +240,27 @@ impl InventoryOperation {
     }
 
     pub fn update_quantity(inv: InventoryType, pos: u16, quantity: u16) -> Self {
-        Self::UpdateQuantity(InvOpUpdateQuantity { inv_type: inv, pos, quantity })
+        Self::UpdateQuantity(InvOpUpdateQuantity {
+            inv_type: inv,
+            pos,
+            quantity,
+        })
     }
 
     pub fn add(inv: InventoryType, pos: u16, item: Item) -> Self {
-        Self::Add(InvOpAdd { inv_type: inv, pos, item })
+        Self::Add(InvOpAdd {
+            inv_type: inv,
+            pos,
+            item,
+        })
     }
 
     pub fn mov(inv: InventoryType, src: u16, dst: u16) -> Self {
-        Self::Move(InvOpMove { inv_type: inv, pos: src, new_pos: dst })
+        Self::Move(InvOpMove {
+            inv_type: inv,
+            pos: src,
+            new_pos: dst,
+        })
     }
 }
 

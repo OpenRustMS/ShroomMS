@@ -7,12 +7,12 @@ use proto95::{
     shared::item::{self as proto_item},
 };
 use rand::{thread_rng, Rng};
-use shroom_net::packet::proto::time::{ShroomExpirationTime, ShroomTime};
+use shroom_pkt::{ShroomExpirationTime, ShroomTime};
 
 use crate::{
     entities::{equip_item, item_stack},
     proto_mapper::db_to_shroom_time,
-    services::{meta::meta_service::ItemMeta, helper::inv},
+    services::{helper::inv, meta::meta_service::ItemMeta},
 };
 
 use super::stats::{EquipStats, StatsExt};
@@ -144,7 +144,6 @@ impl inv::InvItem for StackItem {
     fn id(&self) -> Self::Id {
         self.info.item_id
     }
-
 }
 
 impl inv::stack::InvStackItem for StackItem {

@@ -4,7 +4,7 @@ pub mod item_id;
 pub mod job_id;
 pub mod map_id;
 
-use shroom_net::shroom_enum_code;
+use shroom_pkt::shroom_enum_code;
 
 pub use self::item_id::ItemId;
 pub use self::job_id::JobClass;
@@ -17,7 +17,7 @@ macro_rules! shroom_id {
         #[derive(Default, Debug, PartialEq, Eq, Clone, Copy, Hash, Ord, PartialOrd)]
         pub struct $name(pub $ty);
 
-        impl shroom_net::packet::proto::PacketWrapped for $name {
+        impl shroom_pkt::PacketWrapped for $name {
             type Inner = $ty;
 
             fn packet_into_inner(&self) -> Self::Inner {
@@ -69,171 +69,16 @@ shroom_id!(SkillId, u32);
 
 impl SkillId {
     pub fn is_anti_repeat_buff_skill(&self) -> bool {
-        let mut cond = false;
-        if (self.0 <= 4111001) {
-            if (self.0 == 0x3eba99) {
-                return true;
-            }
-            if (self.0 <= 2121000) {
-                if (self.0 == 0x205d28) {
-                    return true;
-                }
-                if (self.0 <= 0x12a188) {
-                    if (self.0 == 0x12a188) {
-                        return true;
-                    }
-                    if (self.0 > 0x111ae8) {
-                        if (self.0 == 0x12536e) {
-                            return true;
-                        }
-                        if (self.0 <= 0x127a80) {
-                            return false;
-                        }
-                        if (self.0 <= 0x127a82) {
-                            return true;
-                        }
-                        return false;
-                    }
-                    if (self.0 == 0x111ae8) {
-                        return true;
-                    }
-                    if (self.0 == 0xf462b) {
-                        return true;
-                    }
-                    if (self.0 == 0x10ccce) {
-                        return true;
-                    }
-                    cond = self.0 == 0x10f3df;
-                } else if (self.0 > 0x142828) {
-                    if (self.0 == 0x200f09) {
-                        return true;
-                    }
-                    cond = self.0 == 0x200f0b;
-                } else {
-                    if (self.0 == 0x142828) {
-                        return true;
-                    }
-                    if (self.0 < 0x13da0e) {
-                        return false;
-                    }
-                    if (self.0 <= 0x13da0f) {
-                        return true;
-                    }
-                    cond = self.0 == 0x14011f;
-                }
-            } else if (self.0 <= 0x236a68) {
-                if (self.0 == 0x236a68) {
-                    return true;
-                }
-                if (self.0 > 0x231c4c) {
-                    if (self.0 == 0x234359) {
-                        return true;
-                    }
-                    cond = self.0 == 0x23435b;
-                } else {
-                    if (self.0 == 0x231c4c) {
-                        return true;
-                    }
-                    if (self.0 == 0x2195a9) {
-                        return true;
-                    }
-                    if (self.0 == 0x2195ab) {
-                        return true;
-                    }
-                    cond = self.0 == 0x21e3c8;
-                }
-            } else if (self.0 > 0x2f9f6a) {
-                if (self.0 == 0x312608) {
-                    return true;
-                }
-                cond = self.0 == 0x3e938c;
-            } else {
-                if (self.0 == 0x2f9f6a) {
-                    return true;
-                }
-                if (self.0 == 0x236a6d) {
-                    return true;
-                }
-                cond = self.0 == 0x2f9f68;
-            }
-        } else if (self.0 <= 0xa9634b) {
-            if (self.0 == 0xa9634b) {
-                return true;
-            }
-            if (self.0 <= 0x4dfcdf) {
-                if (self.0 == 0x4dfcdf) {
-                    return true;
-                }
-                if (self.0 > 0x41c7d9) {
-                    if (self.0 == 0x423d08) {
-                        return true;
-                    }
-                    cond = self.0 == 0x423d0f;
-                } else {
-                    if (self.0 == 0x41c7d9) {
-                        return true;
-                    }
-                    if (self.0 == 0x3ee1a8) {
-                        return true;
-                    }
-                    if (self.0 == 0x401a2b) {
-                        return true;
-                    }
-                    cond = self.0 == 0x406848;
-                }
-            } else if (self.0 > 0x4f837f) {
-                if self.0 == 0x4faa88 {
-                    return true;
-                }
-                cond = self.0 == 0xa7dca9;
-            } else {
-                if self.0 == 0x4f837f {
-                    return true;
-                }
-                if self.0 == 0x4e23e8 {
-                    return true;
-                }
-                cond = self.0 == 0x4e23f1;
-            }
-        } else if self.0 <= 0x1524d78 {
-            if self.0 == 0x1524d78 {
-                return true;
-            }
-            if self.0 > 0xe6935d {
-                if self.0 == 0x14247e8 {
-                    return true;
-                }
-                cond = self.0 == 0x151d84b;
-            } else {
-                if self.0 == 0xe6935d {
-                    return true;
-                }
-                if self.0 < 0xb8a588 {
-                    return false;
-                }
-                if self.0 <= 0xb8a589 {
-                    return true;
-                }
-                cond = self.0 == 0xd72a0b;
-            }
-        } else if self.0 > 0x1ea20af {
-            if self.0 == 0x1f962ef {
-                return true;
-            }
-            cond = self.0 == 0x217c065;
-        } else {
-            if self.0 == 0x1ea20af {
-                return true;
-            }
-            if self.0 == 0x1527488 {
-                return true;
-            }
-            cond = self.0 == 0x1e9f99c;
+        match self.0 {
+            1001003 | 1101006 | 1111007 | 1121000 | 1201006 | 1211009 | 1211010 | 1221000
+            | 1301006 | 1301007 | 1311007 | 1321000 | 2101001 | 2101003 | 2121000 | 2201001
+            | 2201003 | 2221000 | 2301004 | 2311001 | 2311003 | 2321000 | 2321005 | 3121000
+            | 3121002 | 3221000 | 4101004 | 4111001 | 4121000 | 4201003 | 4221000 | 4311001
+            | 4341000 | 4341007 | 5111007 | 5121000 | 5121009 | 5211007 | 5221000 | 11001001
+            | 11101003 | 12101000 | 12101001 | 14101003 | 15111005 | 21121000 | 22141003
+            | 22171000 | 22181000 | 32111004 | 32121007 | 33121007 | 35111013 => true,
+            _ => false,
         }
-        if (!cond) {
-            return false;
-        }
-        return true;
     }
 
     pub fn is_dispel(&self) -> bool {
@@ -255,6 +100,10 @@ impl SkillId {
             3221001, 5201002, 5221004, 2321001, 3121004, 2121001, 4341003,
         ]
         .contains(&self.0)
+    }
+
+    pub fn has_targets(&self) -> bool {
+        self.0 == 0
     }
 
     pub fn is_grenade_skill(&self) -> bool {

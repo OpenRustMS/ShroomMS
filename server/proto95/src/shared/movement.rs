@@ -1,20 +1,20 @@
-use shroom_net_derive::{ShroomEncodePacket, ShroomPacket};
-use shroom_net::{packet::{
-    proto::{time::ShroomDurationMs16, DecodePacket, ShroomList8}
-}, NetResult, shroom_packet_enum};
+use shroom_pkt::{
+    DecodePacket, PacketResult, ShroomDurationMs16, ShroomEncodePacket, ShroomList8, ShroomPacket,
+    ShroomPacketEnum,
+};
 
-use super::{Rect, Vec2, FootholdId};
+use super::{FootholdId, Rect, Vec2};
 
 #[derive(Debug, ShroomEncodePacket)]
 pub struct KeyPadState(u8, Vec<u8>);
 
 impl<'de> DecodePacket<'de> for KeyPadState {
-    fn decode_packet(pr: &mut shroom_net::packet::PacketReader<'de>) -> NetResult<Self> {
+    fn decode_packet(pr: &mut shroom_pkt::PacketReader<'de>) -> PacketResult<Self> {
         let n = pr.read_u8()? as usize / 2;
 
         let state = (0..n)
             .map(|_| pr.read_u8())
-            .collect::<NetResult<Vec<_>>>()?;
+            .collect::<PacketResult<Vec<_>>>()?;
 
         Ok(Self(n as u8, state))
     }
@@ -52,7 +52,6 @@ pub struct MovementFooter {
     pub action: MovementAction,
     pub dur: ShroomDurationMs16,
 }
-
 
 #[derive(Debug, ShroomPacket)]
 pub struct AbsoluteMovement {
@@ -174,48 +173,47 @@ impl UnknownMovement {
     }
 }
 
-shroom_packet_enum!(
-   #[derive(Debug)]
-   pub enum Movement: u8 {
-        Normal(AbsoluteMovement) = 0,
-        Jump(RelativeMovement) = 1,
-        Impact(RelativeMovement) = 2,
-        Immediate(InstantMovement) = 0x3,
-        Teleport(InstantMovement) = 0x4,
-        HangOnBack(AbsoluteMovement) = 5,
-        Assaulter(InstantMovement) = 0x6,
-        Assassinate(InstantMovement) = 0x7,
-        Rush(InstantMovement) = 0x8,
-        StatChange(u8) = 0x9,
-        SitDown(InstantMovement) = 0xA,
-        StartFallDown(FallDownMovement) = 0xB,
-        FallDown(AbsoluteFallMovement) = 0xC,
-        StartWings(RelativeMovement) = 0xD,
-        Wings(AbsoluteMovement) = 0xE,
-        //0xF ?? -> ara adjust?
-        MobToss(RelativeMovement) = 0x10,
-        FlyingBlock(FlyingMovement) = 0x11,
-        DashSlide(RelativeMovement) = 0x12,
-        // 0x13 -> bmag adjust?
-         FlashJump(UnknownMovement) = 0x14,
-         RocketBooster(UnknownMovement) = 0x15,
-         BackstepShot(UnknownMovement) = 0x16,
-         MobPowerKnockback(UnknownMovement) = 0x17,
-         VerticalJump(UnknownMovement) = 0x18,
-         CustomImpact(UnknownMovement) = 0x19,
-         CombatStep(UnknownMovement) = 0x1A,
-         Hit(UnknownMovement) = 0x1B,
-         TimeBombAttack(UnknownMovement) = 0x1C,
-         SnowballTouch(UnknownMovement) = 0x1D,
-         BuffZoneEffect(UnknownMovement) = 0x1E,
-        MobLadder(RelativeMovement) = 0x1F,
-        MobRightAngle(RelativeMovement) = 0x20,
-        MobStopNodeStart(RelativeMovement) = 0x21,
-        MobBeforeNode(RelativeMovement) = 0x22,
-        MobAttackRush(AbsoluteMovement) = 0x23,
-        MobAttackRushStop(AbsoluteMovement) = 0x24
-   }
-);
+#[derive(Debug, ShroomPacketEnum)]
+#[repr(u8)]
+pub enum Movement {
+    Normal(AbsoluteMovement) = 0,
+    Jump(RelativeMovement) = 1,
+    Impact(RelativeMovement) = 2,
+    Immediate(InstantMovement) = 0x3,
+    Teleport(InstantMovement) = 0x4,
+    HangOnBack(AbsoluteMovement) = 5,
+    Assaulter(InstantMovement) = 0x6,
+    Assassinate(InstantMovement) = 0x7,
+    Rush(InstantMovement) = 0x8,
+    StatChange(u8) = 0x9,
+    SitDown(InstantMovement) = 0xA,
+    StartFallDown(FallDownMovement) = 0xB,
+    FallDown(AbsoluteFallMovement) = 0xC,
+    StartWings(RelativeMovement) = 0xD,
+    Wings(AbsoluteMovement) = 0xE,
+    //0xF ?? -> ara adjust?
+    MobToss(RelativeMovement) = 0x10,
+    FlyingBlock(FlyingMovement) = 0x11,
+    DashSlide(RelativeMovement) = 0x12,
+    // 0x13 -> bmag adjust?
+    FlashJump(UnknownMovement) = 0x14,
+    RocketBooster(UnknownMovement) = 0x15,
+    BackstepShot(UnknownMovement) = 0x16,
+    MobPowerKnockback(UnknownMovement) = 0x17,
+    VerticalJump(UnknownMovement) = 0x18,
+    CustomImpact(UnknownMovement) = 0x19,
+    CombatStep(UnknownMovement) = 0x1A,
+    Hit(UnknownMovement) = 0x1B,
+    TimeBombAttack(UnknownMovement) = 0x1C,
+    SnowballTouch(UnknownMovement) = 0x1D,
+    BuffZoneEffect(UnknownMovement) = 0x1E,
+    MobLadder(RelativeMovement) = 0x1F,
+    MobRightAngle(RelativeMovement) = 0x20,
+    MobStopNodeStart(RelativeMovement) = 0x21,
+    MobBeforeNode(RelativeMovement) = 0x22,
+    MobAttackRush(AbsoluteMovement) = 0x23,
+    MobAttackRushStop(AbsoluteMovement) = 0x24,
+}
 
 impl Movement {
     pub fn get_pos_fh(&self) -> Option<(Vec2, Option<FootholdId>)> {
@@ -283,7 +281,7 @@ impl Movement {
             Movement::FlashJump(mv) => Some(mv.get_footer()),
             Movement::RocketBooster(mv) => Some(mv.get_footer()),
             Movement::BackstepShot(mv) => Some(mv.get_footer()),
-            Movement::MobPowerKnockback(mv) =>  Some(mv.get_footer()),
+            Movement::MobPowerKnockback(mv) => Some(mv.get_footer()),
             Movement::VerticalJump(mv) => Some(mv.get_footer()),
             Movement::CustomImpact(mv) => Some(mv.get_footer()),
             Movement::CombatStep(mv) => Some(mv.get_footer()),
@@ -308,10 +306,7 @@ pub struct MovePath {
 
 impl MovePath {
     pub fn get_last_pos_fh(&self) -> Option<(Vec2, Option<FootholdId>)> {
-        self.moves
-            .iter()
-            .rev()
-            .find_map(|p| p.get_pos_fh())
+        self.moves.iter().rev().find_map(|p| p.get_pos_fh())
     }
 }
 

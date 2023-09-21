@@ -1,3 +1,5 @@
+use std::path::Path;
+
 #[derive(serde::Deserialize)]
 pub struct Config {
     pub version: String,
@@ -5,15 +7,14 @@ pub struct Config {
     pub num_worlds: usize,
     pub num_channels: usize,
     pub base_port: u16,
-    pub external_ip: String,
     pub client_version: usize,
     pub bind_ip: String,
-    pub shrooming_port: u16,
+    pub tuf_repo_port: u16,
+    pub external_ip: Option<String>,
 }
 
-pub fn get_configuration() -> Result<Config, config::ConfigError> {
-    let base_path = std::env::current_dir().expect("Failed to determine the current directory");
-    let configuration_directory = base_path.join("../../configuration");
+pub fn get_configuration(data_dir: impl AsRef<Path>) -> Result<Config, config::ConfigError> {
+    let configuration_directory = data_dir.as_ref().to_path_buf().join("config");
 
     let environment: Environment = get_environment();
     let environment_filename = format!("{}.toml", environment.as_str());
@@ -24,8 +25,6 @@ pub fn get_configuration() -> Result<Config, config::ConfigError> {
         .add_source(config::File::from(
             configuration_directory.join(environment_filename),
         ))
-        // Add in settings from environment variables (with a prefix of APP and '__' as separator)
-        // E.g. `APP_APPLICATION__PORT=5001 would set `Settings.application.port`
         .add_source(
             config::Environment::with_prefix("APP")
                 .prefix_separator("_")
@@ -37,8 +36,6 @@ pub fn get_configuration() -> Result<Config, config::ConfigError> {
 }
 
 pub fn get_environment() -> Environment {
-    // Detect the running environment.
-    // Default to `local` if unspecified.
     std::env::var("APP_ENVIRONMENT")
         .unwrap_or_else(|_| "local".into())
         .try_into()
@@ -63,17 +60,16 @@ impl Environment {
 }
 
 impl TryFrom<String> for Environment {
-    type Error = String;
+    type Error = anyhow::Error;
 
     fn try_from(s: String) -> Result<Self, Self::Error> {
         match s.to_lowercase().as_str() {
             "local" => Ok(Self::Local),
             "staging" => Ok(Self::Staging),
             "production" => Ok(Self::Production),
-            other => Err(format!(
-                "{} is not a supported environment. Use either `local`, `production`, or `staging`.",
-                other
-            )),
+            other => anyhow::bail!(
+                "{other} is not a supported environment. Use either `local`, `production`, or `staging`.",
+            ),
         }
     }
 }

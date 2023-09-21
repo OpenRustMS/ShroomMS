@@ -4,28 +4,15 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use anyhow::Context;
 use game_data::{map, wz2};
 use proto95::{
     game::mob::MobId,
-    id::{ItemId, MapId, SkillId, job_id::JobId},
+    id::{job_id::JobId, ItemId, MapId, SkillId},
 };
 use rand::Rng;
 
-use super::fh_tree::FhTree;
-
-#[derive(Debug)]
-pub struct SkillLevelData {
-    pub cooltime: u32,
-    pub hs: String,
-    pub mp_con: u32,
-    pub val: u32,
-    pub time: u32,
-}
-
-#[derive(Debug)]
-pub struct SkillMeta {
-    pub levels: Vec<SkillLevelData>,
-}
+use super::{fh_tree::FhTree, skill::SkillInfo};
 
 #[derive(Debug)]
 pub struct DropEntry {
@@ -72,12 +59,14 @@ pub struct MetaData {
     pub mobs: BTreeMap<u32, wz2::Mob>,
     pub items: BTreeMap<u32, wz2::Item>,
     pub equips: BTreeMap<u32, wz2::Item>,
+    pub skills: BTreeMap<SkillId, SkillInfo>,
 }
 
 pub type FieldMeta = &'static map::Map;
 pub type MobMeta = &'static wz2::Mob;
 pub type ItemMeta = &'static wz2::Item;
 pub type DropsMeta = &'static DropPool;
+pub type SkillMeta = &'static SkillInfo;
 
 impl MetaData {
     fn load_from_file<T: serde::de::DeserializeOwned>(file: impl AsRef<Path>) -> anyhow::Result<T> {
@@ -85,8 +74,16 @@ impl MetaData {
         Ok(bincode::deserialize_from(file)?)
     }
 
+    fn load_from_json<T: serde::de::DeserializeOwned>(file: impl AsRef<Path>) -> anyhow::Result<T> {
+        let file = File::open(file)?;
+        Ok(serde_json::from_reader(file)?)
+    }
+
     pub fn load_from_dir(dir: PathBuf) -> anyhow::Result<Self> {
-        let maps0: BTreeMap<i64, map::Map> = Self::load_from_file(dir.join("maps0.rbin"))?;
+        let maps0: BTreeMap<i64, map::Map> = Self::load_from_file(dir.join("maps0.rbin")).context("Map")?;
+        let skills: BTreeMap<u32, SkillInfo> =
+            Self::load_from_json(dir.join("warrion_skill_bundle.json")).context("Skill")?;
+
         Ok(Self {
             maps0_fh: maps0
                 .iter()
@@ -96,6 +93,10 @@ impl MetaData {
             mobs: wz2::load_all(dir.join("wz/Mob"))?,
             items: wz2::load_all(dir.join("wz/Item"))?,
             equips: wz2::load_all(dir.join("wz/Equip"))?,
+            skills: skills
+                .into_iter()
+                .map(|(id, skill)| (SkillId(id), skill))
+                .collect(),
         })
     }
 }
@@ -104,7 +105,6 @@ impl MetaData {
 pub struct MetaService {
     meta_data: MetaData,
     hard_coded_drop_pool: DropPool,
-    hard_coded_skills: BTreeMap<SkillId, SkillMeta>,
 }
 
 impl MetaService {
@@ -131,101 +131,9 @@ impl MetaService {
             money_variance: 970,
         };
 
-        let mut hard_coded_skills = BTreeMap::new();
-        // Nimble Feet
-        hard_coded_skills.insert(
-            SkillId(1002),
-            SkillMeta {
-                levels: vec![
-                    SkillLevelData {
-                        cooltime: 60,
-                        hs: "h1".to_string(),
-                        mp_con: 4,
-                        val: 10,
-                        time: 4,
-                    },
-                    SkillLevelData {
-                        cooltime: 60,
-                        hs: "h2".to_string(),
-                        mp_con: 7,
-                        val: 15,
-                        time: 8,
-                    },
-                    SkillLevelData {
-                        cooltime: 60,
-                        hs: "h3".to_string(),
-                        mp_con: 10,
-                        val: 20,
-                        time: 12,
-                    },
-                ],
-            },
-        );
-
-        // Heal
-        hard_coded_skills.insert(
-            SkillId(1001),
-            SkillMeta {
-                levels: vec![
-                    SkillLevelData {
-                        cooltime: 120,
-                        hs: "h1".to_string(),
-                        mp_con: 5,
-                        val: 4,
-                        time: 30,
-                    },
-                    SkillLevelData {
-                        cooltime: 120,
-                        hs: "h2".to_string(),
-                        mp_con: 10,
-                        val: 8,
-                        time: 30,
-                    },
-                    SkillLevelData {
-                        cooltime: 120,
-                        hs: "h3".to_string(),
-                        mp_con: 15,
-                        val: 12,
-                        time: 30,
-                    },
-                ],
-            },
-        );
-
-        // Three snails
-        hard_coded_skills.insert(
-            SkillId(1000),
-            SkillMeta {
-                levels: vec![
-                    SkillLevelData {
-                        cooltime: 0,
-                        hs: "h1".to_string(),
-                        mp_con: 5,
-                        val: 4,
-                        time: 0,
-                    },
-                    SkillLevelData {
-                        cooltime: 0,
-                        hs: "h2".to_string(),
-                        mp_con: 10,
-                        val: 8,
-                        time: 0,
-                    },
-                    SkillLevelData {
-                        cooltime: 0,
-                        hs: "h3".to_string(),
-                        mp_con: 15,
-                        val: 12,
-                        time: 0,
-                    },
-                ],
-            },
-        );
-
         Self {
             meta_data,
             hard_coded_drop_pool,
-            hard_coded_skills,
         }
     }
 
@@ -259,12 +167,14 @@ impl MetaService {
         Some(&self.hard_coded_drop_pool)
     }
 
-    pub fn get_skill(&self, id: SkillId) -> Option<&SkillMeta> {
-        self.hard_coded_skills.get(&id)
+    pub fn get_skill(&self, id: SkillId) -> Option<&SkillInfo> {
+        self.meta_data.skills.get(&id)
     }
 
-    pub fn get_skills_for_job(&self, job: JobId) -> impl Iterator<Item = (&SkillId, &SkillMeta)> {
-        self.hard_coded_skills
+    pub fn get_skills_for_job(&self, job: JobId) -> impl Iterator<Item = (SkillId, &SkillInfo)> {
+        self.meta_data
+            .skills
             .range(job.skill_range())
+            .map(|(id, skill)| (*id, skill))
     }
 }

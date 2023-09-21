@@ -8,17 +8,21 @@ pub use drop::Drop;
 
 pub use mob::Mob;
 pub use npc::Npc;
+use shroom_pkt::{util::packet_buf::PacketBuf, EncodePacket, HasOpcode};
 
 use std::{
     collections::BTreeMap,
-    sync::{atomic::AtomicU32, RwLock},
+    sync::atomic::AtomicU32,
 };
 
 use proto95::game::ObjectId;
-use shroom_net::{packet::EncodePacket, HasOpcode, PacketBuffer};
 use std::fmt::Debug;
 
-use crate::services::{meta::meta_service::MetaService, session::shroom_session_manager::ShroomSessionSet};
+use crate::services::{
+    data::character::CharacterID,
+    field::{FieldRoomSet, SessionMsg},
+    meta::meta_service::MetaService,
+};
 
 pub fn next_id() -> ObjectId {
     static ID: AtomicU32 = AtomicU32::new(0);
@@ -44,7 +48,7 @@ pub struct Pool<T>
 where
     T: PoolItem<Id = ObjectId>,
 {
-    items: RwLock<BTreeMap<T::Id, T>>,
+    items: BTreeMap<T::Id, T>,
     meta: &'static MetaService,
 }
 
@@ -54,53 +58,64 @@ where
 {
     pub fn new(meta: &'static MetaService) -> Self {
         Self {
-            items: RwLock::new(BTreeMap::new()),
+            items: BTreeMap::new(),
             meta,
         }
     }
     pub fn from_elems(meta: &'static MetaService, elems: impl Iterator<Item = T>) -> Self {
-        let pool = Pool::new(meta);
-        {
-            let mut items = pool.items.try_write().unwrap();
-            items.extend(elems.map(|item| (T::get_id(&item), item)));
-        }
+        let mut pool = Pool::new(meta);
+        pool.items
+            .extend(elems.map(|item| (T::get_id(&item), item)));
         pool
     }
 
-    pub fn update(&self, id: ObjectId, update: impl Fn(&mut T)) {
-        let mut items = self.items.write().expect("Pool update");
-        if let Some(item) = items.get_mut(&id) {
+    pub fn update(&mut self, id: ObjectId, update: impl Fn(&mut T)) {
+        if let Some(item) = self.items.get_mut(&id) {
             update(item);
         }
     }
 
-    pub fn add(&self, item: T, sessions: &ShroomSessionSet) -> anyhow::Result<u32> {
+    pub fn add(&mut self, item: T, sessions: &FieldRoomSet) -> anyhow::Result<u32> {
         let id = T::get_id(&item);
         let pkt = item.get_enter_pkt(id);
-        self.items.write().expect("Pool insert").insert(id, item);
+        self.items.insert(id, item);
 
-        sessions.broadcast_pkt(pkt, -1)?;
+        sessions.broadcast(SessionMsg::from_packet(pkt))?;
+        Ok(id)
+    }
+
+    pub fn add_filter(
+        &mut self,
+        item: T,
+        sessions: &FieldRoomSet,
+        src: CharacterID,
+    ) -> anyhow::Result<u32> {
+        let id = T::get_id(&item);
+        let pkt = item.get_enter_pkt(id);
+        self.items.insert(id, item);
+
+        sessions.broadcast_filter(SessionMsg::from_packet(pkt), &src)?;
         Ok(id)
     }
 
     pub fn remove(
-        &self,
+        &mut self,
         id: T::Id,
         param: T::LeaveParam,
-        sessions: &ShroomSessionSet,
+        sessions: &FieldRoomSet,
     ) -> anyhow::Result<T> {
         //TODO migrate to actors
-        let Some(item) = self.items.try_write().unwrap().remove(&id) else {
+        let Some(item) = self.items.remove(&id) else {
             anyhow::bail!("Item does not exist");
         };
 
         let pkt = item.get_leave_pkt(id, param);
-        sessions.broadcast_pkt(pkt, -1)?;
+        sessions.broadcast(SessionMsg::from_packet(pkt))?;
         Ok(item)
     }
 
-    pub fn on_enter(&self, packet_buf: &mut PacketBuffer) -> anyhow::Result<()> {
-        for (id, pkt) in self.items.read().expect("Pool on enter").iter() {
+    pub fn on_enter(&self, packet_buf: &mut PacketBuf) -> anyhow::Result<()> {
+        for (id, pkt) in self.items.iter() {
             packet_buf.encode_packet(pkt.get_enter_pkt(*id))?;
         }
 

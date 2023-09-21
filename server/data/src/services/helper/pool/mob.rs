@@ -1,3 +1,6 @@
+use crate::services::{
+    data::character::CharacterID, field::{FieldRoomSet, SessionMsg}, meta::meta_service::MobMeta,
+};
 use proto95::{
     game::{
         mob::{
@@ -9,15 +12,7 @@ use proto95::{
     },
     shared::{FootholdId, Vec2},
 };
-use shroom_net::{
-    net::service::SharedSessionHandle,
-    packet::{EncodePacket, PacketWriter},
-    HasOpcode, PacketBuffer,
-};
-
-use crate::services::{
-    data::character::CharacterID, meta::meta_service::MobMeta, session::shroom_session_manager::ShroomSessionSet
-};
+use shroom_pkt::util::packet_buf::PacketBuf;
 
 use super::{next_id, Pool, PoolItem};
 
@@ -91,9 +86,13 @@ impl PoolItem for Mob {
 }
 
 impl Pool<Mob> {
-    pub fn assign_controller(&self, session: SharedSessionHandle) -> anyhow::Result<()> {
+    pub fn assign_controller(
+        &self,
+        session_id: CharacterID,
+        sessions: &FieldRoomSet,
+    ) -> anyhow::Result<()> {
         //TODO move out loop
-        for (id, mob) in self.items.read().expect("Mob assign controller").iter() {
+        for (id, mob) in self.items.iter() {
             let empty_stats = PartialMobTemporaryStat {
                 hdr: (),
                 data: MobTemporaryStatPartial {
@@ -101,9 +100,7 @@ impl Pool<Mob> {
                 },
             };
 
-            let mut pw = PacketWriter::default();
-            pw.write_opcode(MobChangeControllerResp::OPCODE)?;
-            MobChangeControllerResp {
+            let pkt = MobChangeControllerResp {
                 level: 1,
                 //seed: CrcSeed::default(),
                 id: *id,
@@ -113,40 +110,35 @@ impl Pool<Mob> {
                     stats: empty_stats,
                 })
                 .into(),
-            }
-            .encode_packet(&mut pw)?;
+            };
 
-            //TODO
-            session.try_send_pkt(pw.into_packet().as_ref()).unwrap();
+            sessions.send_to(&session_id, SessionMsg::from_packet(pkt))?;
         }
         Ok(())
     }
 
     pub fn attack_mob(
-        &self,
+        &mut self,
         attacker: CharacterID,
         id: ObjectId,
         dmg: u32,
-        buf: &mut PacketBuffer,
-        sessions: &ShroomSessionSet,
+        buf: &mut PacketBuf,
+        sessions: &FieldRoomSet,
     ) -> anyhow::Result<bool> {
-        // TODO: Locking the whole pool to update a single mob is not right
-        let mut mobs = self.items.write().expect("Mob attack");
-        let mob = mobs
+        let mob = self.items
             .get_mut(&id)
             .ok_or(anyhow::format_err!("Invalid mob"))?;
         mob.damage(dmg);
 
-        sessions.broadcast_pkt(
-            MobDamagedResp {
-                id,
-                ty: 0,
-                dec_hp: dmg,
-                hp: mob.hp,
-                max_hp: mob.meta.max_hp,
-            },
-            attacker,
-        )?;
+        let pkt = MobDamagedResp {
+            id,
+            ty: 0,
+            dec_hp: dmg,
+            hp: mob.hp,
+            max_hp: mob.meta.max_hp,
+        };
+
+        sessions.broadcast_filter(SessionMsg::from_packet(pkt), &attacker)?;
 
         buf.encode_packet(MobHPIndicatorResp {
             id,
@@ -161,7 +153,7 @@ impl Pool<Mob> {
         id: ObjectId,
         req: MobMoveReq,
         controller: CharacterID,
-        sessions: &ShroomSessionSet,
+        sessions: &FieldRoomSet,
     ) -> anyhow::Result<()> {
         let pkt = MobMoveResp {
             id,
@@ -175,7 +167,7 @@ impl Pool<Mob> {
             move_path: req.move_path.path,
         };
 
-        sessions.broadcast_pkt(pkt, controller)?;
+        sessions.broadcast_filter(SessionMsg::from_packet(pkt), &controller)?;
         Ok(())
     }
 }
