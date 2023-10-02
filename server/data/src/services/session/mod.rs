@@ -1,5 +1,3 @@
-pub mod migration;
-pub mod session_manager;
 pub mod shroom_session_backend;
 pub mod shroom_session_manager;
 

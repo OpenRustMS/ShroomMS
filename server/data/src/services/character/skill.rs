@@ -178,13 +178,13 @@ impl SkillSet {
     pub fn get(&self, skill_id: SkillId) -> anyhow::Result<&SkillData> {
         self.skills
             .get(&skill_id)
-            .ok_or_else(|| anyhow::anyhow!("skill not found: {}", skill_id))
+            .ok_or_else(|| anyhow::anyhow!("skill not found: {:?}", skill_id))
     }
 
     pub fn get_mut(&mut self, skill_id: SkillId) -> anyhow::Result<&mut SkillData> {
         self.skills
             .get_mut(&skill_id)
-            .ok_or_else(|| anyhow::anyhow!("skill not found: {}", skill_id))
+            .ok_or_else(|| anyhow::anyhow!("skill not found: {:?}", skill_id))
     }
 
     pub fn skill_up(&mut self, skill_id: SkillId, d: u16) -> anyhow::Result<()> {

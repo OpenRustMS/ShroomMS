@@ -6,8 +6,10 @@ pub mod keymaps;
 pub mod macros;
 pub mod mob;
 pub mod npc;
+pub mod party;
 pub mod pet;
 pub mod reactor;
+pub mod script;
 pub mod user;
 use shroom_pkt::{packet_opcode, time::Ticks, ShroomPacket, ShroomPacketEnum};
 

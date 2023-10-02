@@ -3,11 +3,11 @@ use std::future::Future;
 use data::{
     entities::{account, character},
     services::{
-        data::character::CharacterID,
+        data::character::{CharacterID, CharWithEquips},
         session::{shroom_session_manager::OwnedShroomLoginSession, ClientKey},
     },
 };
-use proto95::login::world::{ChannelId, WorldId};
+use proto95::login::{world::{ChannelId, WorldId}, account::AccountInfo};
 
 #[derive(Debug, Clone, Default, PartialEq)]
 enum LoginStage {
@@ -20,7 +20,7 @@ enum LoginStage {
     CharSelection {
         world: WorldId,
         channel: ChannelId,
-        chars: Vec<character::Model>,
+        chars: Vec<CharWithEquips>,
     },
 }
 
@@ -93,7 +93,7 @@ impl LoginState {
         };
 
         // Find char_ix
-        let Some(char_ix) = chars.iter().position(|c| c.id == selected_char_id) else {
+        let Some(char_ix) = chars.iter().position(|c| c.char.id == selected_char_id) else {
             anyhow::bail!("Invalid char id: {selected_char_id}");
         };
 
@@ -112,12 +112,12 @@ impl LoginState {
         };
         // We now the char list contains the char at the index
         let char = chars.into_iter().skip(char_ix).next().unwrap();
-        Ok((char, client_key, world, channel))
+        Ok((char.char, client_key, world, channel))
     }
 
     pub fn get_char_select(
         &self,
-    ) -> anyhow::Result<(&account::Model, WorldId, ChannelId, &[character::Model])> {
+    ) -> anyhow::Result<(&account::Model, WorldId, ChannelId, &[CharWithEquips])> {
         if let LoginStage::CharSelection {
             world,
             channel,
@@ -209,7 +209,7 @@ impl LoginState {
         &mut self,
         world: WorldId,
         channel: ChannelId,
-        chars: Vec<character::Model>,
+        chars: Vec<CharWithEquips>,
     ) -> anyhow::Result<()> {
         self.stage = LoginStage::CharSelection {
             world,
@@ -222,5 +222,9 @@ impl LoginState {
     pub fn transition_server_select(&mut self) -> anyhow::Result<()> {
         self.stage = LoginStage::ServerSelection;
         Ok(())
+    }
+
+    pub fn get_account_info(&mut self) -> anyhow::Result<AccountInfo> {
+        Ok(self.get_account()?.into())
     }
 }

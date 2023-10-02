@@ -222,6 +222,19 @@ impl JobId {
     pub fn has_extended_sp(&self) -> bool {
         self.job_group() == JobGroup::Resistance || self.job_class() == JobClass::Evan
     }
+
+    pub fn prev_jobs(&self) -> Vec<JobId> {
+        let mut prev = Vec::new();
+        let mut v = *self as u16;
+
+        while v % 10 != 0 {
+            v -= 1;
+            prev.push(JobId::try_from_primitive(v).unwrap());
+        }
+
+        prev.push(JobId::try_from_primitive((v / 100) * 100).unwrap());
+        prev
+    }
 }
 
 pub type SubJob = u16;

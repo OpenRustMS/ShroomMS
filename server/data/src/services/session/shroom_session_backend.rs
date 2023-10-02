@@ -1,16 +1,33 @@
-use std::sync::Arc;
-
 use dashmap::DashSet;
+use thiserror::Error;
 
 use crate::{
     entities::{self, character},
     services::{
         character::Character,
-        data::{account::AccountId, DataServices},
+        data::account::{AccountId, AccountServiceError},
+        SharedGameServices,
     },
 };
 
-use super::session_manager::SessionBackend;
+use shroom_net::session::SessionBackend;
+
+#[derive(Debug, Error)]
+pub enum ShroomSessionError {
+    #[error("Invalid login session")]
+    InvalidLoginSession,
+    #[error("Char not belonging to account")]
+    CharNotBelongingToAccount,
+    #[error("Other error: {0:?}")]
+    Anyhow(anyhow::Error),
+    #[error("Account error: {0:?}")]
+    Account(#[from] AccountServiceError),
+}
+
+#[derive(Debug)]
+pub enum AccountAuth {
+    UsernamePassword(String, String),
+}
 
 #[derive(Debug)]
 pub struct SessionIngameData {
@@ -33,22 +50,35 @@ impl ShroomSessionData {
     pub async fn transition_ingame(
         &mut self,
         char: character::Model,
-        data: &DataServices,
-    ) -> anyhow::Result<()> {
+        svc: &SharedGameServices,
+    ) -> Result<(), ShroomSessionError> {
         let Self::Login(login) = self else {
-            anyhow::bail!("Session is not in login state")
+            return Err(ShroomSessionError::InvalidLoginSession);
         };
         let acc_id = login.acc.id;
         let char_id = char.id;
         if char.acc_id != acc_id {
-            anyhow::bail!("Chracter with id: {char_id}, does not belong to account: {acc_id}");
+            return Err(ShroomSessionError::CharNotBelongingToAccount);
         }
 
         //TODO: important verify that char belongs to the account
         let char = Character::new(
-            data.char.must_get(login.acc.id).await?,
-            data.item.load_inventory_for_character(char_id).await?,
-            data.char.load_skills(char_id).await?,
+            svc.clone(),
+            svc.data
+                .char
+                .must_get(login.acc.id)
+                .await
+                .map_err(ShroomSessionError::Anyhow)?,
+            svc.data
+                .item
+                .load_inventory_for_character(char_id)
+                .await
+                .map_err(ShroomSessionError::Anyhow)?,
+            svc.data
+                .char
+                .load_skills(char_id)
+                .await
+                .map_err(ShroomSessionError::Anyhow)?,
         );
 
         *self = Self::Ingame(SessionIngameData {
@@ -69,14 +99,14 @@ impl ShroomSessionData {
 
 #[derive(Debug)]
 pub struct ShroomSessionBackend {
-    pub(crate) data: Arc<DataServices>,
+    pub(crate) game: SharedGameServices,
     logged_in: DashSet<AccountId>,
 }
 
 impl ShroomSessionBackend {
-    pub fn new(data: Arc<DataServices>) -> Self {
+    pub fn new(game: SharedGameServices) -> Self {
         Self {
-            data,
+            game,
             logged_in: DashSet::new(),
         }
     }
@@ -85,30 +115,45 @@ impl ShroomSessionBackend {
 #[async_trait::async_trait]
 impl SessionBackend for ShroomSessionBackend {
     type Data = ShroomSessionData;
-    type LoadParam = entities::account::Model;
-    type Error = anyhow::Error;
+    type LoadParam = AccountAuth;
+    type Error = ShroomSessionError;
     type TransitionInput = character::Model;
 
-    async fn load(&self, param: Self::LoadParam) -> anyhow::Result<Self::Data> {
-        if !self.logged_in.insert(param.id) {
-            anyhow::bail!("Account is already logged in");
+    async fn load(&self, param: Self::LoadParam) -> Result<Self::Data, ShroomSessionError> {
+        let acc = match param {
+            AccountAuth::UsernamePassword(username, password) => self
+                .game
+                .data
+                .account
+                .try_login(&username, &password)
+                .await
+                .unwrap(),
+        };
+
+        if !self.logged_in.insert(acc.id) {
+            return Err(AccountServiceError::AccountAlreadyLoggedIn.into());
         }
 
-        Ok(ShroomSessionData::Login(SessionLoginData { acc: param }))
+        Ok(ShroomSessionData::Login(SessionLoginData { acc }))
     }
-    async fn save(&self, session: &mut Self::Data) -> anyhow::Result<()> {
+
+    async fn save(&self, session: &mut Self::Data) -> Result<(), ShroomSessionError> {
         log::info!("Saving session for account {}", session.get_acc().id);
         match session {
             ShroomSessionData::Ingame(ingame) => {
                 let char_id = ingame.char.id;
-                self.data
+                self.game
+                    .data
                     .item
                     .save_inventory(&mut ingame.char.inventory.invs, char_id)
-                    .await?;
-                self.data
+                    .await
+                    .map_err(ShroomSessionError::Anyhow)?;
+                self.game
+                    .data
                     .char
                     .save_skills(char_id, &ingame.char.skills)
-                    .await?;
+                    .await
+                    .map_err(ShroomSessionError::Anyhow)?;
             }
             ShroomSessionData::Login(_login) => {}
         };
@@ -116,7 +161,7 @@ impl SessionBackend for ShroomSessionBackend {
         Ok(())
     }
 
-    async fn close(&self, session: Self::Data) -> anyhow::Result<()> {
+    async fn close(&self, session: &mut Self::Data) -> Result<(), ShroomSessionError> {
         log::info!("Closing session for account {}", session.get_acc().id);
         self.logged_in.remove(&session.get_acc().id);
 
@@ -128,7 +173,7 @@ impl SessionBackend for ShroomSessionBackend {
         session: &mut Self::Data,
         input: Self::TransitionInput,
     ) -> Result<(), Self::Error> {
-        session.transition_ingame(input, &self.data).await?;
+        session.transition_ingame(input, &self.game).await?;
         Ok(())
     }
 }

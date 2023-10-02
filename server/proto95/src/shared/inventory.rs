@@ -284,8 +284,8 @@ packet_opcode!(InvGrowResp, SendOpcodes::InventoryGrow);
 pub struct InvChangeSlotPosReq {
     pub ticks: Ticks,
     pub inv_type: InventoryType,
-    pub from: u16,
-    pub to: u16,
+    pub from: i16,
+    pub to: i16,
     pub count: u16,
 }
 packet_opcode!(

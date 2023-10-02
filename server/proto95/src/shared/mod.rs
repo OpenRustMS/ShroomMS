@@ -9,7 +9,7 @@ use std::net::{Ipv4Addr, SocketAddr};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use shroom_pkt::{
     mark_shroom_enum, packet_opcode, string::FixedPacketString, time::DurationMs, PacketWrapped,
-    ShroomList16, ShroomPacket,
+    ShroomPacket,
 };
 
 use crate::{recv_opcodes::RecvOpcodes, send_opcodes::SendOpcodes};
@@ -24,7 +24,7 @@ pub struct ClientDumpLogReq {
     unknown2: u32,
     clear_stack_log: u32,
     unknown3: u32,
-    data: ShroomList16<u8>,
+    //TODO: data: ShroomList16<u8>,
 }
 packet_opcode!(ClientDumpLogReq, RecvOpcodes::ClientDumpLog);
 
@@ -167,7 +167,7 @@ impl PacketWrapped for ShroomTimeOffset {
 
     fn packet_into_inner(&self) -> Self::Inner {
         let v = self.0 .0;
-        (v >= 0, v.abs() as u32)
+        (v >= 0, v.unsigned_abs())
     }
     fn packet_from(v: Self::Inner) -> Self {
         if v.0 {

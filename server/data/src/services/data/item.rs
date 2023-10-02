@@ -24,7 +24,7 @@ use sea_orm::{
 
 use super::character::{CharacterID, ItemStarterSet};
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct CharacterEquippedItemIds {
     pub equipped: Vec<(CharEquipSlot, ItemId)>,
     pub masked: Vec<(CharEquipSlot, ItemId)>,

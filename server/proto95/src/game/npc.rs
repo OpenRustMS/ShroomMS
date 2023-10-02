@@ -1,6 +1,7 @@
 use shroom_pkt::{packet_opcode, ShroomList8, ShroomPacket};
 
 use crate::{
+    recv_opcodes::RecvOpcodes,
     send_opcodes::SendOpcodes,
     shared::{char::AvatarData, movement::MovePath, FootholdId, Range2, Vec2},
 };
@@ -111,3 +112,10 @@ pub struct NpcSetSpecialAction {
 }
 pub type NpcSetSpecialActionResp = NpcPoolPacket<NpcSetSpecialAction>;
 packet_opcode!(NpcSetSpecialActionResp, SendOpcodes::NpcSpecialAction);
+
+#[derive(ShroomPacket, Debug)]
+pub struct UserSelectNpcReq {
+    pub id: NpcId,
+    pub pos: Vec2,
+}
+packet_opcode!(UserSelectNpcReq, RecvOpcodes::UserSelectNpc);

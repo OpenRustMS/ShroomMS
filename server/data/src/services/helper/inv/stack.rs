@@ -1,4 +1,4 @@
-use super::{Inv, InvError, InvItem, InvResult, InvSlotIndex, InvEventHandler};
+use super::{Inv, InvError, InvEventHandler, InvItem, InvResult, InvSlotIndex};
 
 pub trait StackInvEventHandler: InvEventHandler {
     fn on_quantity_change(&mut self, item: &Self::Item, slot: usize);
@@ -67,6 +67,10 @@ pub struct StackInv<Item: InvStackItem, const CAP: usize>(Inv<Item, CAP>);
 impl<Item: InvStackItem, const CAP: usize> StackInv<Item, CAP> {
     pub fn new(slots: usize) -> Self {
         Self(Inv::new(slots))
+    }
+
+    pub fn contains_id(&self, id: &Item::Id) -> bool {
+        self.0.contains_id(id)
     }
 
     pub fn slots(&self) -> usize {

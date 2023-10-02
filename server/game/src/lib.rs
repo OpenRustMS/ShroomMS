@@ -6,15 +6,20 @@ use std::net::IpAddr;
 
 use async_trait::async_trait;
 
+use data::scripts::{npc_script_1000, NpcAction, ScriptHandle};
 use data::services::character::Character;
 use data::services::field::{FieldJoinHandle, FieldMsg, SessionMsg};
 
 use data::services::helper::pool::drop::{DropLeaveParam, DropTypeValue};
 
+use data::services::session::shroom_session_backend::ShroomSessionData;
 use data::services::session::shroom_session_manager::{ClientKey, OwnedShroomGameSession};
 use data::services::session::ShroomMigrationKey;
 use data::services::SharedServices;
 
+use either::Either;
+use proto95::game::npc::UserSelectNpcReq;
+use proto95::game::script::{ScriptAnswerReq, ScriptMessageResp};
 use proto95::game::user::char::{CharDataAll, CharDataFlags};
 use proto95::game::user::secondary_stats::{
     CharSecondaryStatFlags, CharSecondaryTwoStatesPartial, LocalSecondaryStatResetResp,
@@ -92,14 +97,15 @@ impl MakeGameHandler {
 type Ctx = shroom_net::server::ServerConnCtx<GameHandler>;
 
 pub struct GameHandler {
+    services: SharedServices,
     session: OwnedShroomGameSession,
+    field: FieldJoinHandle,
+    addr: IpAddr,
     channel_id: ChannelId,
     world_id: WorldId,
-    services: SharedServices,
-    addr: IpAddr,
     client_key: ClientKey,
-    field: FieldJoinHandle,
     repl: GameRepl,
+    npc_script_handle: Option<ScriptHandle<Character>>,
 }
 
 impl GameHandler {
@@ -110,6 +116,7 @@ impl GameHandler {
         world_id: WorldId,
         _session_handle: SharedConnHandle<GameMsg>,
     ) -> anyhow::Result<Self> {
+        log::info!("New game session");
         // Read handshake packet
         let pkt = ctx.session_mut().read_packet().await?;
         let mut pr = pkt.into_reader();
@@ -121,12 +128,22 @@ impl GameHandler {
 
         // Look up session in the migration manager
         let peer_addr = ctx.session().peer_addr().ip();
+
+        log::info!("Claiming session for {peer_addr}");
+
         let migrate_key = ShroomMigrationKey::new(req.client_key, peer_addr);
         let session = services
             .session_manager
             .claim_migration_session(migrate_key)
-            .await?
-            .as_ingame();
+            .await?;
+
+        // TODO, add a try_map function to owned session
+        let session = session.map(|sess| match sess {
+            ShroomSessionData::Login(_) => panic!("Session is not a game session"),
+            ShroomSessionData::Ingame(sess) => sess,
+        });
+
+        log::info!("Claimed session");
 
         log::info!(
             "Game session for acc: {} - char: {}",
@@ -136,6 +153,7 @@ impl GameHandler {
 
         // Join field
         let join_field = services
+            .game
             .field
             .join_field(
                 session.char.id,
@@ -153,6 +171,7 @@ impl GameHandler {
             client_key: req.client_key,
             field: join_field,
             repl: GameRepl::new(),
+            npc_script_handle: None,
         })
     }
 
@@ -310,6 +329,7 @@ impl GameHandler {
         // Only get a new handle, when the map is new
         if map != self.field.field_id {
             self.services
+                .game
                 .field
                 .switch_field(self.session.char.get_avatar_data(), map, &mut self.field)
                 .await?;
@@ -368,7 +388,7 @@ impl ShroomConnHandler for GameHandler {
     }
 
     async fn recv_msg(&mut self) -> Option<Self::Msg> {
-        self.field.recv().await
+        self.field.recv().await.ok()
     }
 
     async fn handle_msg(
@@ -379,7 +399,6 @@ impl ShroomConnHandler for GameHandler {
         Ok(match msg {
             ShroomConnEvent::IncomingPacket(pkt) => self.handle_packet(&pkt, ctx).await?,
             ShroomConnEvent::Message(msg) => {
-                log::info!("Sending msg: {msg:?}");
                 match msg {
                     SessionMsg::Pkt(pkt) => ctx.session_mut().send_packet(pkt.as_ref()).await?,
                     SessionMsg::PktBuf(pkt_buf) => {
@@ -389,33 +408,78 @@ impl ShroomConnHandler for GameHandler {
                 ServerHandleResult::Ok
             }
             ShroomConnEvent::Ping => {
-                log::info!("Sending ping...");
                 ctx.send(PingResp).await?;
                 ServerHandleResult::Ok
             }
-            ShroomConnEvent::Tick(_) => ServerHandleResult::Ok,
+            ShroomConnEvent::Tick(_) => {
+                self.tick(ctx).await?;
+                ServerHandleResult::Ok
+            }
         })
     }
 
     async fn finish(self, is_migrating: bool) -> Result<(), Self::Error> {
         log::info!("Finishing game session...");
+        let session = self.session.unmap();
         if is_migrating {
-            self.services.session_manager.migrate_session(
-                ShroomMigrationKey::new(self.client_key, self.addr),
-                self.session.unmap(),
-            )?;
-        } else {
             self.services
                 .session_manager
-                .close_session(self.session.unmap())
-                .await?;
+                .migrate_session(ShroomMigrationKey::new(self.client_key, self.addr), session)?;
+        } else {
+            self.services.session_manager.close_session(session).await?;
         }
+
+        self.field.leave().await?;
 
         Ok(())
     }
 }
 
 impl GameHandler {
+    async fn poll_npc(&mut self, ctx: &mut Ctx) -> anyhow::Result<()> {
+        if let Some(handle) = self.npc_script_handle.as_mut() {
+            match handle.poll_script(&mut self.session.char).await {
+                data::scripts::ScriptPollResult::Done(v) => {
+                    self.char_mut().npc_msg.clear();
+                    self.npc_script_handle.take();
+
+                    if let Err(err) = v {
+                        // TODO filter the end dialog and return other erorrs
+                        log::error!("Script error: {:?}", err);
+                    }
+                }
+                data::scripts::ScriptPollResult::Pending => {}
+            }
+
+            // Send next message
+            if let Some(msg) = self.char_mut().npc_msg.pop_front() {
+                const MAPLE_ADMIN: u32 = 9010000;
+                ctx.send(ScriptMessageResp {
+                    script_flag: 0x4, // Replace ByNpc
+                    speaker_id: MAPLE_ADMIN,
+                    msg,
+                })
+                .await?;
+            }
+        }
+
+        Ok(())
+    }
+    pub async fn tick(&mut self, ctx: &mut Ctx) -> anyhow::Result<()> {
+        self.poll_npc(ctx).await?;
+
+        Ok(())
+    }
+
+    pub async fn handle_npc_action(&mut self, npc_action: NpcAction) -> anyhow::Result<()> {
+        let handle = self
+            .npc_script_handle
+            .as_mut()
+            .ok_or_else(|| anyhow::format_err!("No script handle"))?;
+
+        handle.send_action(npc_action);
+        Ok(())
+    }
     pub async fn send_field_msg(&mut self, msg: FieldMsg) -> anyhow::Result<()> {
         self.field.send(msg).await?;
         Ok(())
@@ -426,6 +490,8 @@ impl GameHandler {
         pkt: &ShroomPacketData,
         ctx: &mut Ctx,
     ) -> anyhow::Result<ServerHandleResult> {
+        dbg!(&pkt.as_ref());
+
         shroom_router_fn!(
             handler,
             GameHandler,
@@ -448,6 +514,8 @@ impl GameHandler {
             InvChangeSlotPosReq => GameHandler::handle_inv_change_slot,
             ClientDumpLogReq => GameHandler::handle_client_dump_log,
             UserSkillUseReq => GameHandler::handle_use_skill,
+            UserSelectNpcReq => GameHandler::handle_select_npc,
+            ScriptAnswerReq => GameHandler::handle_script_action,
         );
 
         let res = handler(self, ctx, pkt.into_reader()).await?;
@@ -460,7 +528,6 @@ impl GameHandler {
         _ctx: &mut Ctx,
         _req: PongReq,
     ) -> anyhow::Result<ServerHandleResult> {
-        log::info!("Got pong");
         Ok(ServerHandleResult::Pong)
     }
 
@@ -472,6 +539,38 @@ impl GameHandler {
     ) -> anyhow::Result<ServerHandleResult> {
         log::info!("Unhandled packet: {:?} {:?}", op, pr.into_inner());
         Ok(ServerHandleResult::Ok)
+    }
+
+    async fn handle_script_action(
+        &mut self,
+        ctx: &mut Ctx,
+        req: ScriptAnswerReq,
+    ) -> anyhow::Result<()> {
+        dbg!(&req);
+        let action = req.into();
+        dbg!(&action);
+        self.handle_npc_action(action).await?;
+        self.poll_npc(ctx).await?;
+        //TODO
+        Ok(())
+    }
+
+    async fn handle_select_npc(
+        &mut self,
+        ctx: &mut Ctx,
+        req: UserSelectNpcReq,
+    ) -> anyhow::Result<()> {
+        dbg!(req);
+        self.enable_char();
+
+        // Get npc
+        self.npc_script_handle = Some(ScriptHandle::from_script_fn(
+            npc_script_1000,
+            self.char_mut(),
+        ));
+
+        self.poll_npc(ctx).await?;
+        Ok(())
     }
 
     async fn handle_use_skill(
@@ -518,23 +617,32 @@ impl GameHandler {
         req: InvChangeSlotPosReq,
     ) -> anyhow::Result<()> {
         let count = (req.count != u16::MAX).then_some(req.count as usize);
+        let drop = req.to == 0;
+        let from = (req.inv_type, req.from).try_into()?;
         // Check for drop
-        if req.to == 0 {
-            let slot = (req.from as i16).try_into()?;
-            if req.inv_type.is_equip() {
-                self.char_mut().inventory.drop_equip_item(slot)?;
-            } else {
-                self.char_mut()
-                    .inventory
-                    .drop_stack_item(req.inv_type, slot, count)?;
-            }
+        if drop {
+            let item = self.session.char.inventory.drop_item(from, count)?;
+            // TODO handle persistent equip items
+            let msg = match item {
+                Either::Left(eq) => FieldMsg::DropAdd(Drop {
+                    owner: proto95::game::drop::DropOwner::User(self.session.char.id as u32),
+                    pos: self.session.char.pos,
+                    start_pos: self.session.char.pos,
+                    value: DropTypeValue::Item(eq.item_id),
+                    quantity: 1,
+                }),
+                Either::Right(stack) => FieldMsg::DropAdd(Drop {
+                    owner: proto95::game::drop::DropOwner::User(self.session.char.id as u32),
+                    pos: self.session.char.pos,
+                    start_pos: self.session.char.pos,
+                    value: DropTypeValue::Item(stack.item_id),
+                    quantity: stack.quantity as usize,
+                }),
+            };
+            self.send_field_msg(msg).await?;
         } else {
-            let src = (req.from as i16).try_into()?;
-            let dst = (req.to as i16).try_into()?;
-            self.session
-                .char
-                .inventory
-                .move_item(req.inv_type, src, dst, count)?;
+            let to = (req.inv_type, req.to).try_into()?;
+            self.session.char.inventory.move_item(from, to, count)?;
         }
 
         self.session.char.unlock_char();
@@ -602,7 +710,9 @@ impl GameHandler {
             self.char_mut().secondary_stats_flags = CharSecondaryStatFlags::empty();
         }
 
-        if let Some(flags) = self.char_mut().get_secondary_stats_timeout() {
+        // Handle timer events
+
+        if let Some(flags) = self.char_mut().handle_timer_events() {
             ctx.send(LocalSecondaryStatResetResp {
                 flags,
                 movement_affecting: true,
@@ -652,27 +762,18 @@ impl GameHandler {
         .await?;
         let drop = rx.await?.unwrap();
 
+        let chr = self.char_mut();
+
         match drop.value {
             DropTypeValue::Mesos(money) => {
-                self.session.char.update_mesos(money as i32);
+                chr.update_mesos(money as i32);
             }
             DropTypeValue::Item(item_id) => {
                 let inv_ty = item_id.get_inv_type()?;
                 if !inv_ty.is_stack() {
-                    let item = self.services.data.item.get_eq_item_from_id(item_id)?;
-
-                    self.session.char.inventory.try_add_equip(item)?;
+                    chr.add_equip_item(item_id)?;
                 } else {
-                    let item = self
-                        .services
-                        .data
-                        .item
-                        .get_stack_item_from_id(item_id, drop.quantity)?;
-
-                    self.session
-                        .char
-                        .inventory
-                        .try_add_stack_item(item, inv_ty)?;
+                    chr.add_stack_item(inv_ty, item_id, drop.quantity)?;
                 };
             }
         }
@@ -682,8 +783,8 @@ impl GameHandler {
 
     async fn handle_drop_money(&mut self, _ctx: &mut Ctx, req: UserDropMoneyReq) -> GameResult<()> {
         let ok = self.session.char.update_mesos((req.money as i32).neg());
-        let char = &self.session.char;
         if ok {
+            let char = &self.session.char;
             self.send_field_msg(FieldMsg::DropAdd(Drop {
                 owner: proto95::game::drop::DropOwner::User(char.id as u32),
                 pos: char.pos,
@@ -755,49 +856,20 @@ impl GameHandler {
         ctx: &mut Ctx,
         req: UserTransferFieldReq,
     ) -> GameResult<()> {
+        let meta = &self.services.game.meta;
+        let field_meta = &self.field.field_meta;
         let (map, spawn) = if self.session.char.is_dead() {
-            let return_map =
-                MapId(self.field.field_meta.info.return_map.unwrap_or_default() as u32);
-
-            let spawn_point = self
-                .services
-                .meta
-                .get_field_data(return_map)
-                .unwrap()
-                .portal
-                .first_key_value()
-                .map(|(k, _)| *k)
-                .unwrap_or_default() as u8;
             self.session.char.respawn();
-
-            (return_map, spawn_point)
+            // TODO the portal is not correct
+            meta.get_return_map_spawn(field_meta).unwrap_or_else(|| {
+                (
+                    self.field.field_id,
+                    field_meta.get_first_portal_id().unwrap(),
+                )
+            })
         } else {
-            let portal = self
-                .field
-                .field_meta
-                .portal
-                .values()
-                .find(|p| p.pn == req.portal)
-                .ok_or_else(|| anyhow::format_err!("Invalid portal"))?;
-
-            // TODO(!) tm should be an option as mapid 999999 is invalid
-            let map_id = if portal.tm == 999999 {
-                self.field.field_id
-            } else {
-                MapId(portal.tm as u32)
-            };
-            let spawn_point = self
-                .services
-                .meta
-                .get_field_data(map_id)
-                .unwrap()
-                .portal
-                .iter()
-                .find(|(_, p)| p.pn == portal.tn)
-                .map(|(id, _)| *id as u8)
-                .unwrap_or(0);
-
-            (map_id, spawn_point)
+            meta.get_portal_map_spawn(self.field.field_id, self.field.field_meta, &req.portal)
+                .ok_or_else(|| anyhow::format_err!("Invalid portal"))?
         };
 
         self.join_field(ctx, map, Some(spawn)).await
@@ -824,6 +896,7 @@ impl GameHandler {
     ) -> GameResult<ServerHandleResult> {
         let addr = self
             .services
+            .game
             .server_info
             .get_channel_addr(self.world_id, req.channel_id as ChannelId)?;
 

@@ -21,7 +21,7 @@ use crate::{
     },
 };
 
-use super::{account::AccountService, item::ItemService};
+use super::{account::{AccountService, AccountId}, item::{ItemService, CharacterEquippedItemIds}};
 
 #[derive(Debug, Clone)]
 pub struct ItemStarterSet {
@@ -111,6 +111,12 @@ pub fn check_contains<T: PartialEq + std::fmt::Debug>(
     Ok(check_id)
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct CharWithEquips {
+    pub char: Model,
+    pub equips: CharacterEquippedItemIds
+}
+
 #[derive(Debug)]
 pub struct CharacterService {
     db: DatabaseConnection,
@@ -147,6 +153,21 @@ impl CharacterService {
             .filter(Column::AccId.eq(acc_id))
             .all(&self.db)
             .await?)
+    }
+
+    pub async fn get_characters_with_equips(&self, acc_id: AccountId) -> anyhow::Result<Vec<CharWithEquips>> {
+        let inv_svc = ItemService::new(self.db.clone(), self.meta);
+        // TODO should be a single query + caching
+        let chars = self.get_characters_for_account(acc_id).await?;
+        let mut res = Vec::with_capacity(chars.len());
+        for char in chars {
+            let equips = inv_svc.load_equipped_items(char.id).await?;
+            res.push(CharWithEquips {
+                char,
+                equips,
+            });
+        }
+        Ok(res)
     }
 
     pub async fn get(&self, char_id: CharacterID) -> anyhow::Result<Option<Model>> {
@@ -187,10 +208,10 @@ impl CharacterService {
             dex: Set(4),
             int: Set(4),
             luk: Set(4),
-            hp: Set(5 * 100),
+            hp: Set(50 * 100),
             max_hp: Set(50 * 100),
-            mp: Set(50),
-            max_mp: Set(50),
+            mp: Set(50 * 100),
+            max_mp: Set(50 * 100),
             equip_slots: Set(24),
             use_slots: Set(24),
             setup_slots: Set(24),

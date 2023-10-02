@@ -1,5 +1,4 @@
-use std::cmp::Ordering;
-
+use either::Either;
 use proto95::{
     id::{item_id::InventoryType, ItemId},
     shared::{
@@ -25,33 +24,45 @@ pub const INV_ITEM_CAP: usize = 180;
 
 #[derive(Debug, Copy, Clone)]
 pub enum InventorySlot {
-    Slot(u16),
+    Slot(InventoryType, u16),
     EquippedSlot(CharEquipSlot),
 }
 
 impl InventorySlot {
     pub fn as_slot_index(&self) -> u16 {
         match self {
-            InventorySlot::Slot(slot) => *slot + 1,
+            InventorySlot::Slot(_, slot) => *slot + 1,
             InventorySlot::EquippedSlot(slot) => (-(*slot as i16)) as u16,
         }
     }
 
     pub fn as_slot(&self) -> usize {
         match self {
-            InventorySlot::Slot(v) => *v as usize,
+            InventorySlot::Slot(_, v) => *v as usize,
             InventorySlot::EquippedSlot(v) => *v as usize,
+        }
+    }
+
+    pub fn inv_type(&self) -> InventoryType {
+        match self {
+            InventorySlot::Slot(ty, _) => *ty,
+            InventorySlot::EquippedSlot(_) => InventoryType::Equip,
         }
     }
 }
 
-impl TryFrom<i16> for InventorySlot {
+impl TryFrom<(InventoryType, i16)> for InventorySlot {
     type Error = anyhow::Error;
 
-    fn try_from(value: i16) -> Result<Self, Self::Error> {
-        Ok(match value.cmp(&0) {
-            Ordering::Greater => Self::Slot((value - 1) as u16),
-            _ => Self::EquippedSlot(CharEquipSlot::try_from((-value) as u8)?),
+    fn try_from((ty, slot): (InventoryType, i16)) -> Result<Self, Self::Error> {
+        // TODO: need to work around the multiple eequipped invs
+        Ok(if ty.is_equip() && slot < 0 {
+            Self::EquippedSlot(CharEquipSlot::try_from(-slot as u8)?)
+        } else {
+            if slot < 1 || slot > INV_ITEM_CAP as i16 {
+                anyhow::bail!("Invalid slot: {slot}");
+            }
+            Self::Slot(ty, slot as u16 - 1)
         })
     }
 }
@@ -211,6 +222,18 @@ impl CharInventory {
         }
     }
 
+    pub fn contains_id(&self, id: &ItemId) -> anyhow::Result<bool> {
+        let ty = id.get_inv_type()?;
+        Ok(if ty.is_stack() {
+            self.invs.get_stack_inventory(ty).unwrap().contains_id(id)
+        } else {
+            self.invs
+                .get_equipped_inventory(ty)
+                .unwrap()
+                .contains_id(id)
+        })
+    }
+
     pub fn add_equip_by_id(&mut self, id: ItemId, data: &ItemService) -> anyhow::Result<usize> {
         let item = data.get_eq_item_from_id(id)?;
         self.try_add_equip(item)
@@ -321,6 +344,19 @@ impl CharInventory {
         Ok(())
     }
 
+    pub fn drop_item(
+        &mut self,
+        slot: InventorySlot,
+        quantity: Option<usize>,
+    ) -> anyhow::Result<Either<EquipItemSlot, StackItem>> {
+        Ok(match slot {
+            InventorySlot::Slot(InventoryType::Equip, _) | InventorySlot::EquippedSlot(_) => {
+                Either::Left(self.drop_equip_item(slot)?)
+            }
+            InventorySlot::Slot(ty, _) => Either::Right(self.drop_stack_item(ty, slot, quantity)?),
+        })
+    }
+
     pub fn drop_stack_item(
         &mut self,
         inv_type: InventoryType,
@@ -335,7 +371,7 @@ impl CharInventory {
 
     pub fn drop_equip_item(&mut self, slot: InventorySlot) -> anyhow::Result<EquipItemSlot> {
         Ok(match slot {
-            InventorySlot::Slot(_) => {
+            InventorySlot::Slot(_, _) => {
                 let item = self.invs.equip.take(slot.as_slot())?;
                 self.pending_operations.ops.push(InventoryOperation::remove(
                     InventoryType::Equip,
@@ -362,11 +398,16 @@ impl CharInventory {
 
     pub fn move_item(
         &mut self,
-        inv_type: InventoryType,
         src: InventorySlot,
         dst: InventorySlot,
         count: Option<usize>,
     ) -> anyhow::Result<()> {
+        if src.inv_type() != dst.inv_type() {
+            anyhow::bail!("Inventory type mismatch");
+        }
+
+        let inv_type = src.inv_type();
+
         if inv_type.is_stack() {
             self.pending_operations.inv_type = inv_type;
             let inv = self.invs.get_stack_inventory_mut(inv_type)?;
@@ -382,7 +423,7 @@ impl CharInventory {
             }
             match (src, dst) {
                 // Unequip
-                (InventorySlot::EquippedSlot(equip), InventorySlot::Slot(slot)) => {
+                (InventorySlot::EquippedSlot(equip), InventorySlot::Slot(_, slot)) => {
                     self.unequip_item(equip, Some(slot as usize))?;
                 }
                 // Special case without pre-selected equip slot
@@ -392,7 +433,7 @@ impl CharInventory {
                 ) => {
                     self.unequip_item(equip, None)?;
                 }
-                (InventorySlot::Slot(slot), InventorySlot::EquippedSlot(equip)) => {
+                (InventorySlot::Slot(_, slot), InventorySlot::EquippedSlot(equip)) => {
                     self.equip_item(slot as usize, equip)?;
                 }
                 (InventorySlot::EquippedSlot(src_), InventorySlot::EquippedSlot(dst_)) => {
@@ -407,7 +448,7 @@ impl CharInventory {
                         dst.as_slot_index(),
                     ));
                 }
-                (InventorySlot::Slot(_), InventorySlot::Slot(_)) => {
+                (InventorySlot::Slot(_, _), InventorySlot::Slot(_, _)) => {
                     self.invs.equip.swap(src.as_slot(), dst.as_slot())?;
                     self.pending_operations.ops.push(InventoryOperation::mov(
                         inv_type,

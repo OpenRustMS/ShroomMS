@@ -17,7 +17,7 @@ use shroom_pkt::ShroomExpirationTime;
 
 use crate::services::{data::character::CharacterID, field::FieldRoomSet, meta::fh_tree::Foothold};
 
-use super::{next_id, Pool, PoolItem};
+use super::{next_id, Pool, PoolItem, SimplePool};
 
 #[derive(Debug)]
 pub struct Drop {
@@ -105,7 +105,7 @@ impl PoolItem for Drop {
     }
 }
 
-impl Pool<Drop> {
+impl SimplePool<Drop> {
     pub fn is_money(&self, item: DropId) -> Option<u32> {
 
         match self.items.get(&item) {

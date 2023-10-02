@@ -28,12 +28,12 @@ macro_rules! shroom_id {
                 Self(v)
             }
         }
-
+        /*
         impl std::fmt::Display for $name {
             fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
                 write!(f, "{}", self.0)
             }
-        }
+        }*/
     };
 }
 

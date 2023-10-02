@@ -131,7 +131,7 @@ async fn main() -> anyhow::Result<()> {
     dotenv().ok();
 
     let data_dir: PathBuf = std::env::var("DATA_DIR")
-        .unwrap_or("../..".to_string())
+        .unwrap_or("/home/jonas/Dokumente/projects/open-rust-ms/ShroomMS".to_string())
         .into();
 
     // Load configuration
@@ -188,7 +188,8 @@ async fn main() -> anyhow::Result<()> {
             game_ports: (settings.base_port + 1
                 ..=settings.base_port + 1 + (settings.num_channels as u16)),
             tick_duration: Duration::from_millis(50),
-            ping_dur: Duration::from_secs(30),
+            ping_dur: Duration::from_secs(15),
+            migration_delay: Duration::from_secs(10),
             msg_cap: 32,
         },
         mono,

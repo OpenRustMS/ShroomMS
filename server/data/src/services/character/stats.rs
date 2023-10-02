@@ -41,23 +41,23 @@ impl<T: ClampedStatNum> ClampedStat<T> {
     }
 
     pub fn add(&mut self, delta: T::Signed) {
-        self.value.clamp_add(self.max.clone(), delta);
+        self.value.clamp_add(self.max, delta);
     }
 
     pub fn try_add(&self, delta: T::Signed) -> Option<Self> {
-        let max = self.max.clone();
+        let max = self.max;
         self.value
             .try_clamp_add(max, delta)
             .map(|value| Self { value, max })
     }
 
     pub fn set_stat(&mut self, val: T) {
-        self.value = self.max.clone().min(val);
+        self.value = self.max.min(val);
     }
 
     pub fn update_max(&mut self, max: T) {
         self.max = max;
-        self.value = self.max.clone().min(self.value.clone());
+        self.value = self.max.min(self.value);
     }
 }
 

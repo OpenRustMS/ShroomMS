@@ -16,7 +16,7 @@ use shroom_pkt::ShroomIndexListZ;
 
 use crate::services::{data::character::CharacterID, field::{FieldRoomSet, SessionMsg}};
 
-use super::{Pool, PoolItem};
+use super::{PoolItem, SimplePool};
 
 #[derive(Debug)]
 pub struct User {
@@ -92,13 +92,25 @@ impl PoolItem for User {
     }
 }
 
-impl Pool<User> {
+impl SimplePool<User> {
     pub fn user_move(
-        &self,
+        &mut self,
         id: CharacterID,
         move_path: MovePath,
         sessions: &FieldRoomSet,
     ) -> anyhow::Result<()> {
+        // Non-existing users are silent errors
+        let Some(usr) = self.items.get_mut(&(id as u32)) else {
+            return Ok(())
+        };
+        
+
+        let last_pos_fh = move_path.get_last_pos_fh();
+        if let Some((pos, fh)) = last_pos_fh {
+            usr.fh = fh.unwrap_or(usr.fh);
+            usr.pos = pos;
+        }
+
         let pkt = UserMoveResp {
             char_id: id as u32,
             move_path,

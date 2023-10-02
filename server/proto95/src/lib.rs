@@ -2,9 +2,10 @@
 #![allow(clippy::redundant_field_names)]
 #![allow(non_upper_case_globals)]
 
-pub mod send_opcodes;
-pub mod recv_opcodes;
-pub mod login;
-pub mod id;
-pub mod shared;
+pub mod fmt;
 pub mod game;
+pub mod id;
+pub mod login;
+pub mod recv_opcodes;
+pub mod send_opcodes;
+pub mod shared;

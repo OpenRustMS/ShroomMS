@@ -1,6 +1,12 @@
+use std::collections::VecDeque;
+
 use crate::services::{
-    data::character::CharacterID, field::{FieldRoomSet, SessionMsg}, meta::meta_service::MobMeta,
+    data::character::CharacterID,
+    field::{FieldRoomSet, SessionMsg},
+    meta::meta_service::{MetaService, MobMeta},
 };
+
+use game_data::map::Life;
 use proto95::{
     game::{
         mob::{
@@ -14,7 +20,7 @@ use proto95::{
 };
 use shroom_pkt::util::packet_buf::PacketBuf;
 
-use super::{next_id, Pool, PoolItem};
+use super::{next_id, Pool, PoolItem, SimplePool};
 
 #[derive(Debug)]
 pub struct Mob {
@@ -25,6 +31,7 @@ pub struct Mob {
     pub origin_fh: Option<FootholdId>,
     pub hp: u32,
     pub perc: u8,
+    pub spawn_ix: Option<usize>,
 }
 
 impl Mob {
@@ -36,6 +43,15 @@ impl Mob {
     pub fn is_dead(&self) -> bool {
         self.hp == 0
     }
+}
+
+#[derive(Debug)]
+pub struct SpawnPoint {
+    pub meta: MobMeta,
+    pub tmpl_id: MobId,
+    pub pos: Vec2,
+    pub fh: FootholdId,
+    pub origin_fh: Option<FootholdId>,
 }
 
 impl PoolItem for Mob {
@@ -85,14 +101,88 @@ impl PoolItem for Mob {
     }
 }
 
-impl Pool<Mob> {
+#[derive(Debug)]
+pub struct MobPool {
+    pub mobs: SimplePool<Mob>,
+    pub spawn_points: Vec<SpawnPoint>,
+    pub respawn_queue: VecDeque<usize>,
+}
+
+impl Pool for MobPool {
+    type Id = ObjectId;
+
+    type Item = Mob;
+
+    fn add_item(&mut self, id: Self::Id, item: Self::Item) -> anyhow::Result<()> {
+        self.mobs.add_item(id, item)
+    }
+
+    fn remove_item(&mut self, id: &Self::Id) -> anyhow::Result<Option<Self::Item>> {
+        self.mobs.remove_item(id)
+    }
+
+    fn on_enter(&self, packet_buf: &mut PacketBuf) -> anyhow::Result<()> {
+        self.mobs.on_enter(packet_buf)
+    }
+}
+
+impl MobPool {
+    pub fn from_spawns(
+        meta: &'static MetaService,
+        spawns: impl Iterator<Item = (MobId, MobMeta, &'static Life)>,
+    ) -> Self {
+        let mobs = SimplePool::new(meta);
+        let mut spawn_points = Vec::new();
+        for (id, meta, mob) in spawns {
+            spawn_points.push(SpawnPoint {
+                meta,
+                tmpl_id: id,
+                pos: (mob.x as i16, mob.y as i16).into(),
+                fh: mob.fh as FootholdId,
+                origin_fh: Some(mob.fh as FootholdId),
+            });
+        }
+        let n = spawn_points.len();
+
+        Self {
+            mobs,
+            spawn_points,
+            respawn_queue: VecDeque::from_iter(0..n),
+        }
+    }
+
+    pub fn respawn(&mut self, sessions: &FieldRoomSet) -> anyhow::Result<()> {
+        if self.respawn_queue.is_empty() {
+            return Ok(());
+        }
+        // TODO use a buffer
+        while let Some(ix) = self.respawn_queue.pop_front() {
+            let spawn = &self.spawn_points[ix];
+            let mob = Mob {
+                meta: spawn.meta,
+                tmpl_id: spawn.tmpl_id,
+                pos: spawn.pos,
+                fh: spawn.fh,
+                origin_fh: spawn.origin_fh,
+                hp: spawn.meta.max_hp,
+                perc: 100,
+                spawn_ix: Some(ix),
+            };
+
+            self.mobs.add(mob, sessions)?;
+            log::info!("Respawned mob {}", spawn.tmpl_id);
+        }
+
+        Ok(())
+    }
+
     pub fn assign_controller(
         &self,
         session_id: CharacterID,
         sessions: &FieldRoomSet,
     ) -> anyhow::Result<()> {
         //TODO move out loop
-        for (id, mob) in self.items.iter() {
+        for (id, mob) in self.mobs.items.iter() {
             let empty_stats = PartialMobTemporaryStat {
                 hdr: (),
                 data: MobTemporaryStatPartial {
@@ -125,7 +215,9 @@ impl Pool<Mob> {
         buf: &mut PacketBuf,
         sessions: &FieldRoomSet,
     ) -> anyhow::Result<bool> {
-        let mob = self.items
+        let mob = self
+            .mobs
+            .items
             .get_mut(&id)
             .ok_or(anyhow::format_err!("Invalid mob"))?;
         mob.damage(dmg);
@@ -149,12 +241,24 @@ impl Pool<Mob> {
     }
 
     pub fn mob_move(
-        &self,
+        &mut self,
         id: ObjectId,
         req: MobMoveReq,
         controller: CharacterID,
         sessions: &FieldRoomSet,
     ) -> anyhow::Result<()> {
+        let Some(mob) = self.mobs.items.get_mut(&id) else {
+            return Ok(());
+        };
+
+        let last_pos_fh = req.move_path.path.get_last_pos_fh();
+
+        if let Some((pos, fh)) = last_pos_fh {
+            //TODO post mob state to msg state here
+            mob.pos = pos;
+            mob.fh = fh.unwrap_or(mob.fh);
+        }
+
         let pkt = MobMoveResp {
             id,
             not_force_landing: false,
@@ -169,5 +273,14 @@ impl Pool<Mob> {
 
         sessions.broadcast_filter(SessionMsg::from_packet(pkt), &controller)?;
         Ok(())
+    }
+
+    pub fn kill_mob(&mut self, id: ObjectId, sessions: &FieldRoomSet) -> anyhow::Result<Mob> {
+        let mob = self.remove(id, MobLeaveType::Etc(()), sessions)?;
+        if let Some(ix) = mob.spawn_ix {
+            self.respawn_queue.push_back(ix);
+        }
+
+        Ok(mob)
     }
 }

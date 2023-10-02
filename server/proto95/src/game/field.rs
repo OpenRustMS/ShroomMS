@@ -66,6 +66,7 @@ pub struct SetFieldCharData {
 #[derive(ShroomPacket, Debug)]
 pub struct SetFieldOtherData {
     pub notifications: NotificationList,
+    pub revive: bool,
     pub map: MapId,
     pub portal: u8,
     pub hp: u32,

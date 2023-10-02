@@ -1,6 +1,7 @@
 pub mod entities;
 pub mod entity_ext;
 pub mod proto_mapper;
+pub mod scripts;
 pub mod services;
 pub mod util;
 

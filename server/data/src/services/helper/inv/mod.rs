@@ -102,6 +102,10 @@ impl<Item: InvItem, const CAP: usize> Inv<Item, CAP> {
         }
     }
 
+    pub fn contains_id(&self, id: &Item::Id) -> bool {
+        self.ids.contains_id(id)
+    }
+
     pub fn new(_slots: usize) -> Self {
         //TODO
         Self::empty()
@@ -256,7 +260,8 @@ impl<Item: InvItem, const CAP: usize> Inv<Item, CAP> {
         Ok(if b > a {
             let (x, y) = self.slots.split_at_mut(b);
             (x[a].as_mut(), y[0].as_mut())
-        } else { // a > b
+        } else {
+            // a > b
             let (x, y) = self.slots.split_at_mut(a);
             (y[0].as_mut(), x[b].as_mut())
         })

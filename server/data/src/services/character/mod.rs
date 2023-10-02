@@ -4,20 +4,22 @@ pub mod stats;
 pub mod util;
 
 use std::{
-    cmp::Reverse,
-    collections::BinaryHeap,
+    collections::VecDeque,
     ops::{Add, Div},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use either::Either;
 use itertools::Itertools;
 use proto95::{
-    game::user::secondary_stats::{
-        CharSecondaryStatFlags, CharSecondaryStatPartial, CharSecondaryTwoStatesPartial,
-        LocalSecondaryStatSetResp, TempStatValue,
+    game::{
+        script::ScriptMessage,
+        user::secondary_stats::{
+            CharSecondaryStatFlags, CharSecondaryStatPartial, CharSecondaryTwoStatesPartial,
+            LocalSecondaryStatSetResp, TempStatValue,
+        },
     },
-    id::{job_id::JobId, FaceId, HairId, ItemId, MapId, SkillId, Skin},
+    id::{item_id::InventoryType, job_id::JobId, FaceId, HairId, ItemId, MapId, SkillId, Skin},
     shared::{
         char::{AvatarData, AvatarEquips, CharStat, CharStatPartial, InventorySize, PetIds},
         inventory::InventoryOperation,
@@ -36,47 +38,19 @@ use self::{
 
 use super::{
     data::{character::CharacterID, ItemService},
+    helper::delay_queue::DelayQueue,
     meta::skill::CharBuffStat,
-    Services,
+    SharedGameServices,
 };
 
-#[derive(Debug, Clone)]
-pub struct BuffTimeout {
-    pub buff_flag: CharSecondaryStatFlags,
-    pub timeout: Instant,
-}
-
-impl BuffTimeout {
-    pub fn new(buff_flag: CharSecondaryStatFlags, dur: Duration) -> Self {
-        Self {
-            buff_flag,
-            timeout: Instant::now() + dur,
-        }
-    }
-}
-
-impl PartialEq for BuffTimeout {
-    fn eq(&self, other: &Self) -> bool {
-        self.timeout == other.timeout
-    }
-}
-
-impl Eq for BuffTimeout {}
-
-impl PartialOrd for BuffTimeout {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.timeout.partial_cmp(&other.timeout)
-    }
-}
-
-impl Ord for BuffTimeout {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.timeout.cmp(&other.timeout)
-    }
+#[derive(Debug)]
+pub enum TimerEvents {
+    BuffTimeout(CharSecondaryStatFlags),
 }
 
 #[derive(Debug)]
 pub struct Character {
+    pub game: SharedGameServices,
     pub id: CharacterID,
     pub name: String,
     pub gender: Gender,
@@ -93,12 +67,19 @@ pub struct Character {
     pub fh: FootholdId,
     pub secondary_stats: CharSecondaryStatPartial,
     pub secondary_stats_flags: CharSecondaryStatFlags,
-    pub buff_timeouts: BinaryHeap<Reverse<BuffTimeout>>,
+    pub timer_events: DelayQueue<TimerEvents>,
+    pub npc_msg: VecDeque<ScriptMessage>,
 }
 
 impl Character {
-    pub fn new(model: Model, inventory: InventorySet, skills: SkillSet) -> Self {
+    pub fn new(
+        game: SharedGameServices,
+        model: Model,
+        inventory: InventorySet,
+        skills: SkillSet,
+    ) -> Self {
         Self {
+            game,
             id: model.id,
             stats: (&model).into(),
             inventory: CharInventory::from_inv_set(inventory),
@@ -115,25 +96,40 @@ impl Character {
             fh: 0,
             secondary_stats: CharSecondaryStatPartial::default(),
             secondary_stats_flags: CharSecondaryStatFlags::empty(),
-            buff_timeouts: BinaryHeap::new(),
+            timer_events: DelayQueue::new(),
+            npc_msg: VecDeque::default(),
         }
+    }
+
+    pub fn add_stack_item(
+        &mut self,
+        inv_ty: InventoryType,
+        id: ItemId,
+        quantity: usize,
+    ) -> anyhow::Result<()> {
+        let item = self.game.data.item.get_stack_item_from_id(id, quantity)?;
+        self.inventory.try_add_stack_item(item, inv_ty)?;
+        Ok(())
+    }
+
+    pub fn add_equip_item(&mut self, id: ItemId) -> anyhow::Result<()> {
+        let item = self.game.data.item.get_eq_item_from_id(id)?;
+        self.inventory.try_add_equip(item)?;
+        Ok(())
     }
 
     pub fn get_stats_update(&mut self) -> Option<CharStatPartial> {
         self.stats.get_stats_partial()
     }
 
-    pub fn get_secondary_stats_timeout(&mut self) -> Option<CharSecondaryStatFlags> {
+    pub fn handle_timer_events(&mut self) -> Option<CharSecondaryStatFlags> {
         let mut reset_flags = CharSecondaryStatFlags::empty();
-        let now = Instant::now();
-
-        while let Some(Reverse(BuffTimeout { buff_flag, timeout })) = self.buff_timeouts.peek() {
-            if *timeout > now {
-                break;
+        for event in self.timer_events.drain_expired() {
+            match event {
+                TimerEvents::BuffTimeout(flag) => {
+                    reset_flags.insert(flag);
+                }
             }
-
-            reset_flags.insert(buff_flag.clone());
-            self.buff_timeouts.pop();
         }
 
         (!reset_flags.is_empty()).then_some(reset_flags)
@@ -141,7 +137,7 @@ impl Character {
 
     pub fn get_secondary_stats_update(&mut self) -> Option<LocalSecondaryStatSetResp> {
         if !self.secondary_stats_flags.is_empty() {
-            let stats = std::mem::replace(&mut self.secondary_stats, Default::default());
+            let stats = self.secondary_stats.clone();
 
             self.secondary_stats_flags = CharSecondaryStatFlags::empty();
             Some(LocalSecondaryStatSetResp {
@@ -219,17 +215,29 @@ impl Character {
     }
 
     pub fn add_sp(&mut self, add: u32) {
-        self.stats
-            .sp_mut()
-            .force_update(|sp| *sp = *sp + add as u16);
+        self.stats.sp_mut().force_update(|sp| *sp += add as u16);
     }
 
-    pub fn change_job(&mut self, job: JobId, svc: &Services) -> anyhow::Result<()> {
+    pub fn change_job(&mut self, job: JobId, prev_skills: bool) -> anyhow::Result<()> {
         *self.stats.job_mut() = job;
 
         // Give new skills
-        self.skills
-            .add_skills(svc.meta.get_skills_for_job(job).map(SkillData::from), false);
+        self.skills.add_skills(
+            self.game.meta.get_skills_for_job(job).map(SkillData::from),
+            false,
+        );
+
+        if prev_skills {
+            for prev_job in job.prev_jobs() {
+                self.skills.add_skills(
+                    self.game
+                        .meta
+                        .get_skills_for_job(prev_job)
+                        .map(SkillData::from),
+                    false,
+                );
+            }
+        }
         Ok(())
     }
 
@@ -383,10 +391,10 @@ impl Character {
                 }
                 CharBuffStat::Speed(b) => {
                     let b = map_tmp(b);
-                    self.buff_timeouts.push(Reverse(BuffTimeout::new(
-                        CharSecondaryStatFlags::Speed,
-                        dbg!(Duration::from_secs(b.duration.0 as u64 / 1000)),
-                    )));
+                    self.timer_events.push_after(
+                        TimerEvents::BuffTimeout(CharSecondaryStatFlags::Speed),
+                        Duration::from_secs(b.duration.0 as u64 / 1000),
+                    );
                     self.secondary_stats.speed = Some(b).into();
                     self.secondary_stats_flags
                         .insert(CharSecondaryStatFlags::Speed);
@@ -498,10 +506,11 @@ impl Character {
                 }
                 CharBuffStat::Regen(b) => {
                     let b = map_tmp(b);
-                    self.buff_timeouts.push(Reverse(BuffTimeout::new(
-                        CharSecondaryStatFlags::Regen,
-                        dbg!(Duration::from_secs(b.duration.0 as u64 / 1000)),
-                    )));
+
+                    self.timer_events.push_after(
+                        TimerEvents::BuffTimeout(CharSecondaryStatFlags::Regen),
+                        Duration::from_secs(b.duration.0 as u64 / 1000),
+                    );
                     self.secondary_stats.regen = Some(b).into();
                     self.secondary_stats_flags
                         .insert(CharSecondaryStatFlags::Regen);

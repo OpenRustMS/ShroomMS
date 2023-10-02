@@ -1,9 +1,12 @@
 use clap::{Command, FromArgMatches, Parser, Subcommand};
-use data::services::{
-    field::FieldMsg,
-    helper::pool::{
-        drop::{Drop, DropTypeValue},
-        Mob,
+use data::{
+    scripts::{npc_script_1000, ScriptHandle},
+    services::{
+        field::FieldMsg,
+        helper::pool::{
+            drop::{Drop, DropTypeValue},
+            Mob,
+        },
     },
 };
 use proto95::id::{job_id::JobId, ItemId, MapId};
@@ -27,6 +30,7 @@ pub enum ReplCmd {
     MaxSkills,
     SpamDrop,
     StopSpamDrop,
+    Dialog,
 }
 
 pub struct GameRepl {
@@ -76,7 +80,7 @@ impl GameHandler {
         Ok(match cmd {
             ReplCmd::Mob { id } => {
                 let mob = id.unwrap_or(1110100);
-                let meta = self.services.meta.get_mob_data(mob).unwrap();
+                let meta = self.services.game.meta.get_mob_data(mob).unwrap();
                 self.send_field_msg(FieldMsg::MobAdd(Mob {
                     meta,
                     tmpl_id: mob,
@@ -85,6 +89,7 @@ impl GameHandler {
                     origin_fh: None,
                     hp: meta.max_hp,
                     perc: 100,
+                    spawn_ix: None,
                 }))
                 .await?;
                 None
@@ -142,18 +147,17 @@ impl GameHandler {
                 None
             }
             ReplCmd::Job { id } => {
-                let svc = self.services.clone();
-                self.char_mut()
-                    .change_job(JobId::try_from(id as u16).unwrap(), &svc)?;
+                let job = JobId::try_from(id as u16)?;
+                self.char_mut().change_job(job, true)?;
                 None
             }
             ReplCmd::Level { level } => {
-                *self.char_mut().stats.level_mut() = level;
+                *self.session.char.stats.level_mut() = level;
                 None
             }
             ReplCmd::TestSet => {
-                let item = self.services.data.item.clone();
-                self.char_mut().give_test_set(&item)?;
+                let item = &self.services.game.data.item;
+                self.session.char.give_test_set(&item)?;
                 None
             }
             ReplCmd::MaxSkills => {
@@ -167,6 +171,16 @@ impl GameHandler {
             }
             ReplCmd::StopSpamDrop => {
                 self.send_field_msg(FieldMsg::StopSpamDrop).await?;
+                None
+            }
+            ReplCmd::Dialog => {
+                // Get npc
+                self.npc_script_handle = Some(ScriptHandle::from_script_fn(
+                    npc_script_1000,
+                    self.char_mut(),
+                ));
+
+                self.poll_npc(ctx).await?;
                 None
             }
         })

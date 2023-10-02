@@ -22,11 +22,22 @@ shroom_enum_code!(
 
 impl InventoryType {
     pub fn is_equip(&self) -> bool {
+        // TODO make this correct
         matches!(self, InventoryType::Equipped | InventoryType::Equip)
     }
 
     pub fn is_stack(&self) -> bool {
         !self.is_equip()
+    }
+
+    pub fn is_equipped(&self) -> bool {
+        matches!(
+            self,
+            InventoryType::Equipped
+                | InventoryType::Special
+                | InventoryType::DragonEquipped
+                | InventoryType::MechanicEquipped
+        )
     }
 }
 
@@ -39,7 +50,7 @@ impl ItemId {
             3 => InventoryType::Install,
             4 => InventoryType::Etc,
             5 => InventoryType::Cash,
-            _ => anyhow::bail!("Unknown inv type for item: {self}"),
+            _ => anyhow::bail!("Unknown inv type for item: {self:?}"),
         })
     }
 

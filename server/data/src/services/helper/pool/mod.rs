@@ -10,10 +10,7 @@ pub use mob::Mob;
 pub use npc::Npc;
 use shroom_pkt::{util::packet_buf::PacketBuf, EncodePacket, HasOpcode};
 
-use std::{
-    collections::BTreeMap,
-    sync::atomic::AtomicU32,
-};
+use std::{collections::BTreeMap, sync::atomic::AtomicU32};
 
 use proto95::game::ObjectId;
 use std::fmt::Debug;
@@ -32,7 +29,7 @@ pub fn next_id() -> ObjectId {
 pub trait PoolId {}
 
 pub trait PoolItem {
-    type Id: Clone + Eq;
+    type Id: Clone + Eq + std::fmt::Debug;
     type EnterPacket: EncodePacket + HasOpcode;
     type LeavePacket: EncodePacket + HasOpcode;
     type LeaveParam;
@@ -43,16 +40,86 @@ pub trait PoolItem {
     fn get_leave_pkt(&self, id: Self::Id, param: Self::LeaveParam) -> Self::LeavePacket;
 }
 
+pub trait Pool {
+    type Id: Clone + Eq + std::fmt::Debug;
+    type Item: PoolItem<Id = Self::Id>;
+
+    fn add_item(&mut self, id: Self::Id, item: Self::Item) -> anyhow::Result<()>;
+    fn remove_item(&mut self, id: &Self::Id) -> anyhow::Result<Option<Self::Item>>;
+
+    fn add_filter(
+        &mut self,
+        item: Self::Item,
+        sessions: &FieldRoomSet,
+        src: CharacterID,
+    ) -> anyhow::Result<Self::Id> {
+        let id = Self::Item::get_id(&item);
+        let pkt = item.get_enter_pkt(id.clone());
+        self.add_item(id.clone(), item)?;
+
+        sessions.broadcast_filter(SessionMsg::from_packet(pkt), &src)?;
+        Ok(id)
+    }
+
+    fn add(&mut self, item: Self::Item, sessions: &FieldRoomSet) -> anyhow::Result<Self::Id> {
+        let id = Self::Item::get_id(&item);
+        let pkt = item.get_enter_pkt(id.clone());
+        self.add_item(id.clone(), item)?;
+
+        sessions.broadcast(SessionMsg::from_packet(pkt))?;
+        Ok(id)
+    }
+
+    fn remove(
+        &mut self,
+        id: Self::Id,
+        param: <Self::Item as PoolItem>::LeaveParam,
+        sessions: &FieldRoomSet,
+    ) -> anyhow::Result<Self::Item> {
+        let Some(item) = self.remove_item(&id)? else {
+            anyhow::bail!("Item does not exist");
+        };
+
+        let pkt = item.get_leave_pkt(id, param);
+        sessions.broadcast(SessionMsg::from_packet(pkt))?;
+        Ok(item)
+    }
+
+    fn on_enter(&self, packet_buf: &mut PacketBuf) -> anyhow::Result<()>;
+}
+
 #[derive(Debug)]
-pub struct Pool<T>
-where
-    T: PoolItem<Id = ObjectId>,
-{
+pub struct SimplePool<T: PoolItem> {
     items: BTreeMap<T::Id, T>,
     meta: &'static MetaService,
 }
 
-impl<T> Pool<T>
+impl<T: PoolItem> Pool for SimplePool<T>
+where
+    T::Id: Ord,
+{
+    type Item = T;
+    type Id = T::Id;
+
+    fn add_item(&mut self, id: T::Id, item: Self::Item) -> anyhow::Result<()> {
+        self.items.insert(id, item);
+        Ok(())
+    }
+
+    fn remove_item(&mut self, id: &T::Id) -> anyhow::Result<Option<Self::Item>> {
+        Ok(self.items.remove(id))
+    }
+
+    fn on_enter(&self, packet_buf: &mut PacketBuf) -> anyhow::Result<()> {
+        for (id, pkt) in self.items.iter() {
+            packet_buf.encode_packet(pkt.get_enter_pkt(id.clone()))?;
+        }
+
+        Ok(())
+    }
+}
+
+impl<T> SimplePool<T>
 where
     T: PoolItem<Id = ObjectId>,
 {
@@ -63,62 +130,9 @@ where
         }
     }
     pub fn from_elems(meta: &'static MetaService, elems: impl Iterator<Item = T>) -> Self {
-        let mut pool = Pool::new(meta);
+        let mut pool = SimplePool::new(meta);
         pool.items
             .extend(elems.map(|item| (T::get_id(&item), item)));
         pool
-    }
-
-    pub fn update(&mut self, id: ObjectId, update: impl Fn(&mut T)) {
-        if let Some(item) = self.items.get_mut(&id) {
-            update(item);
-        }
-    }
-
-    pub fn add(&mut self, item: T, sessions: &FieldRoomSet) -> anyhow::Result<u32> {
-        let id = T::get_id(&item);
-        let pkt = item.get_enter_pkt(id);
-        self.items.insert(id, item);
-
-        sessions.broadcast(SessionMsg::from_packet(pkt))?;
-        Ok(id)
-    }
-
-    pub fn add_filter(
-        &mut self,
-        item: T,
-        sessions: &FieldRoomSet,
-        src: CharacterID,
-    ) -> anyhow::Result<u32> {
-        let id = T::get_id(&item);
-        let pkt = item.get_enter_pkt(id);
-        self.items.insert(id, item);
-
-        sessions.broadcast_filter(SessionMsg::from_packet(pkt), &src)?;
-        Ok(id)
-    }
-
-    pub fn remove(
-        &mut self,
-        id: T::Id,
-        param: T::LeaveParam,
-        sessions: &FieldRoomSet,
-    ) -> anyhow::Result<T> {
-        //TODO migrate to actors
-        let Some(item) = self.items.remove(&id) else {
-            anyhow::bail!("Item does not exist");
-        };
-
-        let pkt = item.get_leave_pkt(id, param);
-        sessions.broadcast(SessionMsg::from_packet(pkt))?;
-        Ok(item)
-    }
-
-    pub fn on_enter(&self, packet_buf: &mut PacketBuf) -> anyhow::Result<()> {
-        for (id, pkt) in self.items.iter() {
-            packet_buf.encode_packet(pkt.get_enter_pkt(*id))?;
-        }
-
-        Ok(())
     }
 }

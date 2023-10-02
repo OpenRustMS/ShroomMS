@@ -80,7 +80,8 @@ impl MetaData {
     }
 
     pub fn load_from_dir(dir: PathBuf) -> anyhow::Result<Self> {
-        let maps0: BTreeMap<i64, map::Map> = Self::load_from_file(dir.join("maps0.rbin")).context("Map")?;
+        let maps0: BTreeMap<i64, map::Map> =
+            Self::load_from_file(dir.join("maps0.rbin")).context("Map")?;
         let skills: BTreeMap<u32, SkillInfo> =
             Self::load_from_json(dir.join("warrion_skill_bundle.json")).context("Skill")?;
 
@@ -149,6 +150,30 @@ impl MetaService {
 
     pub fn get_field_fh_data(&self, field_id: MapId) -> Option<&FhTree> {
         self.meta_data.maps0_fh.get(&(field_id.0 as i64))
+    }
+
+    pub fn get_portal_map_spawn(
+        &self,
+        field_id: MapId,
+        field: &map::Map,
+        portal_name: &str,
+    ) -> Option<(MapId, u8)> {
+        let (_, portal) = field.get_portal_by_name(portal_name)?;
+        let map_id = if portal.tm == 999999 {
+            field_id
+        } else {
+            MapId(portal.tm as u32)
+        };
+        let next_map = self.get_field_data(map_id)?;
+        let (portal, _) = next_map.get_portal_by_name(&portal.tn)?;
+        Some((map_id, portal))
+    }
+
+    pub fn get_return_map_spawn(&self, field: &map::Map) -> Option<(MapId, u8)> {
+        let map_id = MapId(field.get_return_map()?);
+        let next_map = self.get_field_data(map_id)?;
+        let target_sp = next_map.get_first_portal_id()?;
+        Some((map_id, target_sp))
     }
 
     pub fn get_mob_data(&self, mob_id: MobId) -> Option<&wz2::Mob> {

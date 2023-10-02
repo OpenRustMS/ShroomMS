@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use dashmap::{mapref::entry::Entry, DashMap};
 use proto95::{
@@ -22,17 +22,43 @@ use tokio::sync::{mpsc, oneshot};
 
 use super::{
     data::character::CharacterID,
-    helper::pool::{
-        drop::{DropLeaveParam, DropTypeValue},
-        reactor::Reactor,
-        user::User,
-        Drop, Mob, Npc, Pool,
+    helper::{
+        delay_queue::DelayQueue,
+        pool::{
+            drop::{DropLeaveParam, DropTypeValue},
+            mob::MobPool,
+            reactor::Reactor,
+            user::User,
+            Drop, Mob, Npc, Pool, SimplePool,
+        },
     },
     meta::{
         fh_tree::FhTree,
         meta_service::{FieldMeta, MetaService},
     },
 };
+
+#[derive(Clone, Debug)]
+pub enum SessionMsg {
+    Pkt(ShroomPacketData),
+    PktBuf(Arc<PacketBuf>),
+}
+
+impl SessionMsg {
+    pub fn from_packet<T: EncodePacket + HasOpcode>(pkt: T) -> Self {
+        let mut pw = PacketWriter::default();
+        pw.write_opcode(T::OPCODE).expect("op");
+        pkt.encode_packet(&mut pw).expect("pw");
+
+        Self::Pkt(ShroomPacketData::from_writer(pw))
+    }
+}
+
+impl From<PacketBuf> for SessionMsg {
+    fn from(pkt: PacketBuf) -> Self {
+        Self::PktBuf(Arc::new(pkt))
+    }
+}
 
 #[derive(Debug)]
 pub struct SharedFieldState {
@@ -62,37 +88,21 @@ impl SharedFieldState {
 }
 
 #[derive(Debug)]
+pub enum FieldEvent {
+    DropTimeout(DropId),
+}
+
+#[derive(Debug)]
 pub struct FieldData {
     shared: Arc<SharedFieldState>,
-    drop_pool: Pool<Drop>,
-    mob_pool: Pool<Mob>,
-    npc_pool: Pool<Npc>,
-    reactor_pool: Pool<Reactor>,
-    user_pool: Pool<User>,
+    drop_pool: SimplePool<Drop>,
+    mob_pool: MobPool,
+    npc_pool: SimplePool<Npc>,
+    reactor_pool: SimplePool<Reactor>,
+    user_pool: SimplePool<User>,
     sessions: FieldRoomSet,
     drop_spam: Option<Vec2>,
-}
-
-#[derive(Clone, Debug)]
-pub enum SessionMsg {
-    Pkt(ShroomPacketData),
-    PktBuf(Arc<PacketBuf>),
-}
-
-impl SessionMsg {
-    pub fn from_packet<T: EncodePacket + HasOpcode>(pkt: T) -> Self {
-        let mut pw = PacketWriter::default();
-        pw.write_opcode(T::OPCODE).expect("op");
-        pkt.encode_packet(&mut pw).expect("pw");
-
-        Self::Pkt(ShroomPacketData::from_writer(pw))
-    }
-}
-
-impl From<PacketBuf> for SessionMsg {
-    fn from(pkt: PacketBuf) -> Self {
-        Self::PktBuf(Arc::new(pkt))
-    }
+    field_events: DelayQueue<FieldEvent>,
 }
 
 pub type FieldRoomSet = RoomSet<CharacterID, SessionMsg>;
@@ -130,6 +140,14 @@ impl RoomState for FieldData {
     type Key = CharacterID;
     type Msg = FieldMsg;
     type JoinData = AvatarData;
+    type CreateData = (&'static MetaService, Arc<SharedFieldState>);
+
+    fn create(
+        create_data: Self::CreateData,
+        conns: RoomSet<Self::Key, Self::ConnMsg>,
+    ) -> anyhow::Result<Self> {
+        Ok(FieldData::new(create_data.0, create_data.1, conns))
+    }
 
     fn session_mut(&mut self) -> &mut RoomSet<Self::Key, Self::ConnMsg> {
         &mut self.sessions
@@ -197,13 +215,26 @@ impl RoomState for FieldData {
     }
 
     fn handle_tick(&mut self) -> anyhow::Result<()> {
-        if let Some(pos) = self.drop_spam.clone() {
+        self.mob_pool.respawn(&self.sessions)?;
+
+        for event in self.field_events.drain_expired() {
+            match event {
+                FieldEvent::DropTimeout(id) => {
+                    // Remove fail is not a problem
+                    let _ = self
+                        .drop_pool
+                        .remove(id, DropLeaveParam::TimeOut, &self.sessions);
+                }
+            }
+        }
+
+        if let Some(pos) = self.drop_spam {
             for _ in 0..10 {
                 self.drop_pool.add(
                     Drop {
                         owner: proto95::game::drop::DropOwner::None,
-                        pos: pos.into(),
-                        start_pos: pos.into(),
+                        pos,
+                        start_pos: pos,
                         value: DropTypeValue::Mesos(100),
                         quantity: 1,
                     },
@@ -217,7 +248,11 @@ impl RoomState for FieldData {
 }
 
 impl FieldData {
-    pub fn new(meta_svc: &'static MetaService, shared: Arc<SharedFieldState>) -> Self {
+    pub fn new(
+        meta_svc: &'static MetaService,
+        shared: Arc<SharedFieldState>,
+        sessions: FieldRoomSet,
+    ) -> Self {
         let meta = shared.field_meta;
         let npcs = meta
             .life
@@ -242,15 +277,7 @@ impl FieldData {
             .map(|mob| {
                 let tmpl_id = mob.id.parse().unwrap();
                 let meta = meta_svc.get_mob_data(tmpl_id).unwrap();
-                Mob {
-                    meta,
-                    tmpl_id,
-                    pos: Vec2::from((mob.x as i16, mob.y as i16)),
-                    fh: mob.fh as FootholdId,
-                    origin_fh: Some(mob.fh as FootholdId),
-                    hp: meta.max_hp,
-                    perc: 100,
-                }
+                (tmpl_id, meta, mob)
             });
 
         let reactors = meta.reactor.values().map(|r| Reactor {
@@ -261,13 +288,14 @@ impl FieldData {
 
         Self {
             shared,
-            drop_pool: Pool::new(meta_svc),
-            mob_pool: Pool::from_elems(meta_svc, mobs),
-            npc_pool: Pool::from_elems(meta_svc, npcs),
-            reactor_pool: Pool::from_elems(meta_svc, reactors),
-            user_pool: Pool::new(meta_svc),
-            sessions: FieldRoomSet::default(),
+            drop_pool: SimplePool::new(meta_svc),
+            mob_pool: MobPool::from_spawns(meta_svc, mobs),
+            npc_pool: SimplePool::from_elems(meta_svc, npcs),
+            reactor_pool: SimplePool::from_elems(meta_svc, reactors),
+            user_pool: SimplePool::new(meta_svc),
+            sessions,
             drop_spam: None,
+            field_events: DelayQueue::new(),
         }
     }
 
@@ -335,18 +363,7 @@ impl FieldData {
     }
 
     pub fn update_user_pos(&mut self, move_path: MovePath, id: CharacterID) -> anyhow::Result<()> {
-        let last_pos_fh = move_path.get_last_pos_fh();
-
-        if let Some((pos, fh)) = last_pos_fh {
-            //TODO post mob state to msg state here
-            self.user_pool.update(id as u32, |usr| {
-                usr.pos = pos;
-                usr.fh = fh.unwrap_or(usr.fh);
-            });
-        }
-
         self.user_pool.user_move(id, move_path, &self.sessions)?;
-
         Ok(())
     }
 
@@ -355,17 +372,6 @@ impl FieldData {
         movement: MobMoveReq,
         controller: CharacterID,
     ) -> anyhow::Result<()> {
-        let id = movement.id;
-        let last_pos_fh = movement.move_path.path.get_last_pos_fh();
-
-        if let Some((pos, fh)) = last_pos_fh {
-            //TODO post mob state to msg state here
-            self.mob_pool.update(id, |mob| {
-                mob.pos = pos;
-                mob.fh = fh.unwrap_or(mob.fh);
-            });
-        }
-
         self.mob_pool
             .mob_move(movement.id, movement, controller, &self.sessions)?;
 
@@ -373,7 +379,9 @@ impl FieldData {
     }
 
     pub fn add_drop(&mut self, drop: Drop) -> anyhow::Result<()> {
-        self.drop_pool.add(drop, &self.sessions)?;
+        let drop_id = self.drop_pool.add(drop, &self.sessions)?;
+        self.field_events
+            .push_after(FieldEvent::DropTimeout(drop_id), Duration::from_secs(60));
         Ok(())
     }
 
@@ -406,9 +414,7 @@ impl FieldData {
             .send_to(&attacker, SessionMsg::PktBuf(Arc::new(buf)))?;
 
         if killed {
-            let mob = self
-                .mob_pool
-                .remove(id, MobLeaveType::Etc(()), &self.sessions)?;
+            let mob = self.mob_pool.kill_mob(id, &self.sessions)?;
 
             let fh = self
                 .shared
@@ -442,7 +448,7 @@ impl FieldJoinHandle {
         Ok(())
     }
 
-    pub async fn recv(&mut self) -> Option<SessionMsg> {
+    pub async fn recv(&mut self) -> anyhow::Result<SessionMsg> {
         self.room_handle.recv().await
     }
 }
@@ -475,10 +481,12 @@ impl FieldService {
             field_fh: self.meta.get_field_fh_data(field_id).expect("Field fh"),
             drops: DashMap::new(),
         });
-
-        let state = FieldData::new(self.meta, shared);
-
-        Ok(Arc::new(FieldRoom::spawn(state, self.tick.clone())))
+        Ok(Arc::new(FieldRoom::spawn(
+            (self.meta, shared),
+            self.tick.clone(),
+            32,
+            128,
+        )?))
     }
 
     pub fn get_field(&self, field_id: MapId) -> anyhow::Result<Arc<FieldRoom>> {

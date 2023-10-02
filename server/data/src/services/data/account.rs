@@ -40,6 +40,8 @@ pub enum AccountServiceError {
     UsernameWrongChar,
     #[error("Account is banned")]
     AccountIsBanned,
+    #[error("Account already logged in")]
+    AccountAlreadyLoggedIn,
     #[error("database")]
     Disconnect(#[from] DbErr),
 }
@@ -118,8 +120,6 @@ impl AccountService {
         if !verfiy_password {
             return Err(AccountServiceError::PasswordMismatch);
         }
-
-        //TODO add some locking logic
 
         Ok(acc)
     }

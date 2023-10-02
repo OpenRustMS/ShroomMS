@@ -39,14 +39,20 @@ pub enum SessionMsg {
 }
 
 pub type SharedServices = Arc<Services>;
+pub type SharedGameServices = Arc<GameServices>;
+
+#[derive(Debug)]
+pub struct GameServices {
+    pub data: DataServices,
+    pub server_info: ServerService,
+    pub field: FieldService,
+    pub meta: &'static MetaService,
+}
 
 #[derive(Debug)]
 pub struct Services {
-    pub data: Arc<DataServices>,
-    pub server_info: ServerService,
+    pub game: Arc<GameServices>,
     pub session_manager: ShroomSessionManager<ShroomSessionBackend>,
-    pub field: FieldService,
-    pub meta: &'static MetaService,
 }
 
 impl Services {
@@ -56,16 +62,18 @@ impl Services {
         tick: Tick,
         meta: &'static MetaService,
     ) -> Self {
-        let data = Arc::new(DataServices::new(db, meta));
-
-        let session_backend = ShroomSessionBackend::new(data.clone());
-
-        Self {
-            data: data.clone(),
-            session_manager: ShroomSessionManager::new(session_backend, Duration::from_secs(30)),
+        let game = Arc::new(GameServices {
+            data: DataServices::new(db, meta),
             server_info: ServerService::new(servers),
             field: FieldService::new(tick, meta),
             meta,
+        });
+
+        let session_backend = ShroomSessionBackend::new(game.clone());
+
+        Self {
+            game,
+            session_manager: ShroomSessionManager::new(session_backend, Duration::from_secs(30)),
         }
     }
 
@@ -84,7 +92,7 @@ impl Services {
         meta: &'static MetaService,
         db_url: &str,
     ) -> Result<Self, DbErr> {
-        let db = crate::gen_psql(&db_url).await?;
+        let db = crate::gen_psql(db_url).await?;
         Ok(Self::new(db, servers, tick, meta))
     }
 
@@ -94,6 +102,7 @@ impl Services {
 
     pub async fn seed_acc_char(&self) -> anyhow::Result<(AccountId, CharacterID)> {
         let acc_id = self
+            .game
             .data
             .account
             .create(
@@ -107,6 +116,7 @@ impl Services {
 
         let job = JobGroup::Legend;
         let _char_id = self
+            .game
             .data
             .char
             .create_character(
@@ -126,12 +136,13 @@ impl Services {
                     },
                     gender: Gender::Male,
                 },
-                &self.data.item,
+                &self.game.data.item,
             )
             .await?;
 
         let job = JobGroup::Legend;
         let char_id = self
+            .game
             .data
             .char
             .create_character(
@@ -151,7 +162,7 @@ impl Services {
                     },
                     gender: Gender::Male,
                 },
-                &self.data.item,
+                &self.game.data.item,
             )
             .await?;
 
