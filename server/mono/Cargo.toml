@@ -11,7 +11,7 @@ array-init = "2"
 async-trait = "0.1"
 clap = { version = "4", features = ["derive"] }
 config = { version = "0.13", features = ["toml"] }
-data = { version = "0.1", path = "../data" }
+data = { version = "0.1.0", path = "../../crates/data" }
 game = { version = "0.1", path = "../game" }
 log = "0.4"
 login = { version = "0.1", path = "../login" }
@@ -23,8 +23,9 @@ uuid = "1"
 shroom-pkt = "0.1"
 shroom-net = "0.4"
 dotenv = "0.15"
-proto95 = { version = "0.1.0", path = "../proto95" }
 warp = "0.3"
+proto95 = { version = "0.1.0", path = "../../crates/proto95" }
+meta = { version = "0.1", path = "../../crates/meta" }
 
 
 [dependencies.openssl]

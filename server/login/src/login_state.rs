@@ -3,11 +3,14 @@ use std::future::Future;
 use data::{
     entities::{account, character},
     services::{
-        data::character::{CharacterID, CharWithEquips},
+        data::character::{CharWithEquips, CharacterID},
         session::{shroom_session_manager::OwnedShroomLoginSession, ClientKey},
     },
 };
-use proto95::login::{world::{ChannelId, WorldId}, account::AccountInfo};
+use proto95::login::{
+    account::AccountInfo,
+    world::{ChannelId, WorldId},
+};
 
 #[derive(Debug, Clone, Default, PartialEq)]
 enum LoginStage {
@@ -77,7 +80,7 @@ impl LoginState {
 
     fn reset_replace(&mut self) -> LoginStage {
         self.client_key = None;
-        std::mem::replace(&mut self.stage, LoginStage::default())
+        std::mem::take(&mut self.stage)
     }
 
     pub fn transition_game(
@@ -111,7 +114,7 @@ impl LoginState {
             );
         };
         // We now the char list contains the char at the index
-        let char = chars.into_iter().skip(char_ix).next().unwrap();
+        let char = chars.into_iter().nth(char_ix).unwrap();
         Ok((char.char, client_key, world, channel))
     }
 

@@ -8,15 +8,14 @@ edition = "2021"
 [dependencies]
 anyhow = "1"
 async-trait = "0.1"
-bytes = "1.4"
+bytes = "1"
 chrono = "0.4"
-clap = { version = "4.3", features = ["derive"] }
+clap = { version = "4", features = ["derive"] }
 dashmap = "5"
-data = { version = "0.1", path = "../data" }
-game_data = { version = "0.1", path = "../../data/game_data" }
+data = { version = "0.1.0", path = "../../crates/data" }
 log = "0.4"
-proto95 = { version = "0.1", path = "../proto95" }
+proto95 = { version = "0.1.0", path = "../../crates/proto95" }
 tokio = "1"
 shroom-pkt = "0.1.1"
 shroom-net = "0.4"
-either = "1.9.0"
+either = "1"

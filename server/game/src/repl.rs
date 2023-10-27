@@ -22,7 +22,7 @@ pub enum ReplCmd {
     FakeUser { id: u32 },
     Aggro,
     Dispose,
-    Teleport,
+    Teleport { id: Option<u32> },
     Sp { add: u32 },
     Job { id: u32 },
     TestSet,
@@ -138,8 +138,9 @@ impl GameHandler {
                 None
             }
             ReplCmd::Chat { msg } => Some(msg),
-            ReplCmd::Teleport => {
-                self.join_field(ctx, MapId(1010000), None).await?;
+            ReplCmd::Teleport { id } => {
+                let map = id.unwrap_or(1010000);
+                self.join_field(ctx, MapId(map), None).await?;
                 None
             }
             ReplCmd::Sp { add } => {
@@ -157,7 +158,7 @@ impl GameHandler {
             }
             ReplCmd::TestSet => {
                 let item = &self.services.game.data.item;
-                self.session.char.give_test_set(&item)?;
+                self.session.char.give_test_set(item)?;
                 None
             }
             ReplCmd::MaxSkills => {

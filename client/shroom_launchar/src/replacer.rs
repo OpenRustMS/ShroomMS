@@ -28,7 +28,7 @@ pub enum Patch {
 }
 
 impl Patch {
-    pub fn replace(needle: &'static [u8], replace: &'static  [u8]) -> Self {
+    pub fn replace(needle: &'static [u8], replace: &'static [u8]) -> Self {
         assert_eq!(needle.len(), replace.len());
         Self::Replace { needle, replace }
     }

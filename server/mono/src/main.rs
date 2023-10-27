@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use data::services::{meta::meta_service::MetaService, server_info::ServerInfo, Services};
+use data::services::{server_info::ServerInfo, Services};
 use dotenv::dotenv;
 use game::{GameHandler, MakeGameHandler};
 use login::{config::LoginConfig, LoginHandler, LoginMakeState};
@@ -50,7 +50,7 @@ impl ShroomServerHandler for Mono {
         ticker: &shroom_net::server::tick::Ticker,
         cfg: Arc<ShroomRuntimeConfig>,
     ) -> anyhow::Result<Self::Services> {
-        let meta = Box::new(MetaService::load_from_dir(
+        let meta = Box::new(meta::MetaService::load_from_dir(
             self.data_dir.join("game_data/rbin"),
         )?);
         log::info!("Loaded meta data");
@@ -140,7 +140,7 @@ async fn main() -> anyhow::Result<()> {
 
     let ext_ip = std::env::var("EXTERNAL_IP")
         .ok()
-        .or_else(|| settings.external_ip)
+        .or(settings.external_ip)
         .ok_or_else(|| anyhow::format_err!("No external IP set"))?;
 
     log::info!("External IP: {0}", ext_ip);
@@ -196,7 +196,7 @@ async fn main() -> anyhow::Result<()> {
     )
     .await?;
 
-    let _ = runtime.spawn_task("Session Lifecycle", |svc| async move {
+    let _session_task = runtime.spawn_task("Session Lifecycle", |svc| async move {
         loop {
             svc.session_manager.clean().await.expect("Clean");
             tokio::time::sleep(Duration::from_secs(15)).await;

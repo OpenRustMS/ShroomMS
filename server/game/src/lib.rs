@@ -18,13 +18,11 @@ use data::services::session::ShroomMigrationKey;
 use data::services::SharedServices;
 
 use either::Either;
+use proto95::game::field::SetFieldOtherData;
 use proto95::game::npc::UserSelectNpcReq;
 use proto95::game::script::{ScriptAnswerReq, ScriptMessageResp};
 use proto95::game::user::char::{CharDataAll, CharDataFlags};
-use proto95::game::user::secondary_stats::{
-    CharSecondaryStatFlags, CharSecondaryTwoStatesPartial, LocalSecondaryStatResetResp,
-    LocalSecondaryStatSetResp,
-};
+use proto95::game::user::secondary_stats::LocalSecondaryStatResetResp;
 use shroom_net::codec::legacy::LegacyCodec;
 
 use shroom_net::server::server_conn::{ShroomConnEvent, ShroomConnHandler};
@@ -39,16 +37,13 @@ use proto95::game::user::{
     UserSkillUpReq, UserSkillUseReq, UserStatChangeReq,
 };
 
-use proto95::shared::char::{SkillInfo, TeleportRockInfo};
+use proto95::shared::char::{SkillInfo, SocialRecords, TeleportRockInfo};
 use proto95::shared::inventory::{InvChangeSlotPosReq, InventoryOperationsResp};
 use proto95::shared::{ClientDumpLogReq, PingResp, PongReq};
 use proto95::{
     game::{
         chat::{ChatMsgReq, UserChatMsgResp},
-        field::{
-            CrcSeed, LogoutGiftConfig, NotificationList, SetFieldCharData, SetFieldResp,
-            SetFieldResult,
-        },
+        field::{CrcSeed, LogoutGiftConfig, NotificationList, SetFieldCharData, SetFieldResp},
         friend::{FriendList, FriendResultResp},
         keymaps::FuncKeyMapInitResp,
         user::{UserMoveReq, UserPortalScriptReq, UserTransferFieldReq},
@@ -65,8 +60,8 @@ use proto95::{
     },
 };
 use repl::GameRepl;
-use shroom_pkt::partial::PartialFlag;
-use shroom_pkt::time::DurationMs;
+use shroom_pkt::partial::{PartialData, PartialFlag};
+
 use shroom_pkt::{
     DecodePacket, HasOpcode, PacketReader, ShroomExpirationTime, ShroomIndexListZ16,
     ShroomIndexListZ8, ShroomList16, ShroomPacketData, ShroomTime,
@@ -187,132 +182,142 @@ impl GameHandler {
         self.session.char.unlock_char()
     }
 
-    fn set_field(&self) -> SetFieldResp {
-        let char = &self.session.char;
+    fn set_field(&self, char_data: bool, sp: u8) -> SetFieldResp {
+        let field_data = if char_data {
+            let char = &self.session.char;
 
-        let equipped: ShroomIndexListZ16<Item> = self
-            .session
-            .char
-            .inventory
-            .invs
-            .equipped
-            .item_with_slots()
-            .map(|(slot, item)| (slot as u16, Item::Equip(item.0.item.as_ref().into())))
-            .collect();
+            let equipped: ShroomIndexListZ16<Item> = self
+                .session
+                .char
+                .inventory
+                .invs
+                .equipped
+                .item_with_slots()
+                .map(|(slot, item)| (slot as u16, Item::Equip(item.0.item.as_ref().into())))
+                .collect();
 
-        let equip: ShroomIndexListZ16<Item> = self
-            .session
-            .char
-            .inventory
-            .invs
-            .equip
-            .item_with_slots()
-            .map(|(slot, item)| (slot as u16 + 1, Item::Equip(item.item.as_ref().into())))
-            .collect();
+            let equip: ShroomIndexListZ16<Item> = self
+                .session
+                .char
+                .inventory
+                .invs
+                .equip
+                .item_with_slots()
+                .map(|(slot, item)| (slot as u16 + 1, Item::Equip(item.item.as_ref().into())))
+                .collect();
 
-        let etc: ShroomIndexListZ8<Item> = self
-            .session
-            .char
-            .inventory
-            .invs
-            .etc
-            .item_with_slots()
-            .map(|(slot, item)| (slot as u8 + 1, Item::Stack(item.into())))
-            .collect();
+            let etc: ShroomIndexListZ8<Item> = self
+                .session
+                .char
+                .inventory
+                .invs
+                .etc
+                .item_with_slots()
+                .map(|(slot, item)| (slot as u8 + 1, Item::Stack(item.into())))
+                .collect();
 
-        let setup: ShroomIndexListZ8<Item> = self
-            .session
-            .char
-            .inventory
-            .invs
-            .misc
-            .item_with_slots()
-            .map(|(slot, item)| (slot as u8 + 1, Item::Stack(item.into())))
-            .collect();
+            let setup: ShroomIndexListZ8<Item> = self
+                .session
+                .char
+                .inventory
+                .invs
+                .misc
+                .item_with_slots()
+                .map(|(slot, item)| (slot as u8 + 1, Item::Stack(item.into())))
+                .collect();
 
-        let cash: ShroomIndexListZ8<Item> = self
-            .session
-            .char
-            .inventory
-            .invs
-            .cash
-            .item_with_slots()
-            .map(|(slot, item)| (slot as u8 + 1, Item::Stack(item.into())))
-            .collect();
+            let cash: ShroomIndexListZ8<Item> = self
+                .session
+                .char
+                .inventory
+                .invs
+                .cash
+                .item_with_slots()
+                .map(|(slot, item)| (slot as u8 + 1, Item::Stack(item.into())))
+                .collect();
 
-        let use_: ShroomIndexListZ8<Item> = self
-            .session
-            .char
-            .inventory
-            .invs
-            .use_
-            .item_with_slots()
-            .map(|(slot, item)| (slot as u8 + 1, Item::Stack(item.into())))
-            .collect();
+            let use_: ShroomIndexListZ8<Item> = self
+                .session
+                .char
+                .inventory
+                .invs
+                .use_
+                .item_with_slots()
+                .map(|(slot, item)| (slot as u8 + 1, Item::Stack(item.into())))
+                .collect();
 
-        let char_equipped = CharDataEquipped {
-            equipped,
-            equip,
-            ..Default::default()
-        };
+            let char_equipped = CharDataEquipped {
+                equipped,
+                equip,
+                ..Default::default()
+            };
 
-        let skill_records: ShroomList16<SkillInfo> =
-            self.session.char.skills.get_skill_info().into();
+            let skill_records: ShroomList16<SkillInfo> =
+                self.session.char.skills.get_skill_info().into();
 
-        let char_data = CharDataAll {
-            stat: CharDataStat {
-                stat: char.get_all_stats(),
-                friend_max: 30,
-                linked_character: None.into(),
-            },
-            money: char.money(),
-            invsize: char.get_inv_slots(),
-            equipextslotexpiration: ShroomExpirationTime::never(),
-            equipped: char_equipped,
-            useinv: use_,
-            setupinv: setup,
-            etcinv: etc,
-            cashinv: cash,
-            skillrecords: skill_records,
-            skllcooltime: ShroomList16::default(),
-            quests: ShroomList16::default(),
-            questscompleted: ShroomList16::default(),
-            minigamerecords: ShroomList16::default(),
-            socialrecords: ShroomList16::default(),
-            teleportrockinfo: TeleportRockInfo::default(),
-            newyearcards: ShroomList16::default(),
-            questrecordsexpired: ShroomList16::default(),
-            questcompleteold: ShroomList16::default(),
-            visitorquestloginfo: ShroomList16::default(),
-        };
+            let char_data = CharDataAll {
+                stat: CharDataStat {
+                    stat: char.get_all_stats(),
+                    friend_max: 30,
+                    linked_character: None.into(),
+                },
+                money: char.money(),
+                invsize: char.get_inv_slots(),
+                equipextslotexpiration: ShroomExpirationTime::never(),
+                equipped: char_equipped,
+                useinv: use_,
+                setupinv: setup,
+                etcinv: etc,
+                cashinv: cash,
+                skillrecords: skill_records,
+                skllcooltime: ShroomList16::default(),
+                quests: ShroomList16::default(),
+                questscompleted: ShroomList16::default(),
+                minigamerecords: ShroomList16::default(),
+                socialrecords: SocialRecords::default(),
+                teleportrockinfo: TeleportRockInfo::default(),
+                newyearcards: ShroomList16::default(),
+                questrecordsexpired: ShroomList16::default(),
+                questcompleteold: ShroomList16::default(),
+                visitorquestloginfo: ShroomList16::default(),
+            };
 
-        let char_data = SetFieldCharData {
-            notifications: NotificationList::default(),
-            seed: CrcSeed {
-                s1: 1,
-                s2: 2,
-                s3: 3,
-            },
-            logout_gift_config: LogoutGiftConfig {
-                predict_quit: 0,
-                gift_commodity_id: [0; 3],
-            },
-            char_data_hdr: CharDataHeader {
-                combat_orders: 0,
-                extra_data: None.into(),
-            },
-            char_data,
-            char_data_flags: CharDataFlags::all(),
+            Either::Left(SetFieldCharData {
+                seed: CrcSeed {
+                    s1: 1,
+                    s2: 2,
+                    s3: 3,
+                },
+                logout_gift_config: LogoutGiftConfig {
+                    predict_quit: 0,
+                    gift_commodity_id: [0; 3],
+                },
+                char_data_hdr: CharDataHeader {
+                    combat_orders: 0,
+                    extra_data: None.into(),
+                },
+                char_data,
+                char_data_flags: CharDataFlags::all(),
+            })
+        } else {
+            Either::Right(SetFieldOtherData {
+                revive: false,
+                map: self.field.field_id,
+                portal: sp,
+                hp: self.char().stats.hp.value as u32,
+                chase_target_pos: None.into(),
+            })
         };
 
         SetFieldResp {
             client_option: ShroomList16::default(),
             channel_id: self.channel_id as u32,
+            has_char_data: field_data.is_left(),
+            char_data: field_data.into(),
+            notifications: NotificationList::default(),
             old_driver_id: 0,
             unknown_flag_1: 0,
-            set_field_result: SetFieldResult::CharData(char_data),
-            timestamp: ShroomTime::now(),
-            extra: 0,
+            server_time: ShroomTime::now(),
         }
     }
 
@@ -322,9 +327,8 @@ impl GameHandler {
         map: MapId,
         spawn_point: Option<u8>,
     ) -> GameResult<()> {
-        self.session
-            .char
-            .transfer_map(map, spawn_point.unwrap_or(0));
+        let sp = spawn_point.unwrap_or(0);
+        self.session.char.transfer_map(map, sp);
 
         // Only get a new handle, when the map is new
         if map != self.field.field_id {
@@ -335,11 +339,11 @@ impl GameHandler {
                 .await?;
         }
 
-        ctx.send(self.set_field()).await
+        ctx.send(self.set_field(false, sp)).await
     }
 
     async fn init_char(&mut self, ctx: &mut Ctx) -> anyhow::Result<()> {
-        ctx.send(self.set_field()).await?;
+        ctx.send(self.set_field(true, 0)).await?;
 
         ctx.send(FriendResultResp::Reset3(FriendList::empty()))
             .await?;
@@ -490,7 +494,7 @@ impl GameHandler {
         pkt: &ShroomPacketData,
         ctx: &mut Ctx,
     ) -> anyhow::Result<ServerHandleResult> {
-        dbg!(&pkt.as_ref());
+        //dbg!(&pkt.as_ref());
 
         shroom_router_fn!(
             handler,
@@ -692,22 +696,9 @@ impl GameHandler {
             }
         }
 
-        if !self.char_mut().secondary_stats_flags.is_empty() {
-            let stats = std::mem::replace(&mut self.char_mut().secondary_stats, Default::default());
-            ctx.send(LocalSecondaryStatSetResp {
-                stats: stats.into(),
-                defense_atk: 0,
-                defense_state: 0,
-                swallow_buff_time: None.into(),
-                dice_info: Default::default(),
-                blessing_armor_inc_pad: None.into(),
-                two_states: CharSecondaryTwoStatesPartial::default(),
-                delay: DurationMs(0),
-                movement_affecting: Some(true).into(),
-            })
-            .await?;
-
-            self.char_mut().secondary_stats_flags = CharSecondaryStatFlags::empty();
+        if let Some(secondary_stat) = self.char_mut().get_secondary_stats_update() {
+            dbg!(secondary_stat.stats.data.get_flags());
+            ctx.send(secondary_stat).await?;
         }
 
         // Handle timer events
@@ -740,10 +731,11 @@ impl GameHandler {
             let dmg = target.hits.iter().sum::<u32>();
             self.send_field_msg(FieldMsg::MobAttack {
                 id: target.mob_id,
-                dmg: dmg,
+                dmg,
             })
             .await?;
         }
+        self.char_mut().handle_attack()?;
 
         Ok(())
     }
@@ -861,7 +853,7 @@ impl GameHandler {
         let (map, spawn) = if self.session.char.is_dead() {
             self.session.char.respawn();
             // TODO the portal is not correct
-            meta.get_return_map_spawn(field_meta).unwrap_or_else(|| {
+            meta.get_return_field_spawn(field_meta).unwrap_or_else(|| {
                 (
                     self.field.field_id,
                     field_meta.get_first_portal_id().unwrap(),

@@ -2,20 +2,22 @@
 resolver = "2"
 members = [
     # Data
-    # "data/re-wz",
-    "data/game_data",
+    # "data/re-wz"
 
     # client
     "client/shroom_launchar",
 
     # server
-    "server/shrooming",
-    "server/proto95",
+    #"server/shrooming",
     "server/login",
     "server/game",
     "server/mono",
-    "server/data",
-    "server/data/migration",
+
+
+    "crates/proto95",
+    "crates/meta",
+    "crates/data",
+    "crates/data/migration",
 ]
 exclude = ["client/shroom_hook","client/shroom_ffi"]
 
