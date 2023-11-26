@@ -1,6 +1,6 @@
 use crate::{
-    game::{mob::MobId, npc::NpcId},
-    id::{ItemId, MapId, SkillId},
+    game::{life::mob::MobId, life::npc::NpcId},
+    id::{ItemId, FieldId, SkillId},
 };
 
 // TODO a special shroom_fmt! proc macro would be really helpful
@@ -217,10 +217,10 @@ impl std::fmt::Display for ItemId {
 
 // TODO item v
 
-pub struct MapName(pub MapId);
+pub struct MapName(pub FieldId);
 impl_shroom_fmt!(MapName, "#m{}#", id);
 
-impl std::fmt::Display for MapId {
+impl std::fmt::Display for FieldId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         MapName(*self).fmt(f)
     }

@@ -1,11 +1,13 @@
-use std::ops::RangeInclusive;
+use std::{ops::RangeInclusive, collections::BTreeMap};
 
-use geo::{coord, Contains, Coord, Rect};
+use euclid::default::Box2D;
+use geo::CoordNum;
 use geo_svg::ToSvg;
 use itertools::Itertools;
 use rstar::{RTree, RTreeNode, RTreeObject, SelectionFunction, AABB};
+use serde::{Serialize, Deserialize};
 
-use crate::schemas::field_mapper::Field;
+use crate::schemas::field_mapper;
 
 type FhScalar = f32;
 
@@ -13,17 +15,52 @@ fn clamp_range(r: RangeInclusive<FhScalar>, v: FhScalar) -> f32 {
     v.clamp(*r.start(), *r.end())
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Line<T> {
+    pub start: euclid::default::Point2D<T>,
+    pub end: euclid::default::Point2D<T>,
+}
+
+impl<T: CoordNum> Line<T> {
+    pub fn from_points(
+        start: euclid::default::Point2D<T>,
+        end: euclid::default::Point2D<T>,
+    ) -> Self {
+        Self { start, end }
+    }
+
+    pub fn slope(&self) -> T {
+        let delta_y = self.end.y - self.start.y;
+        let delta_x = self.end.x - self.start.x;
+        delta_y / delta_x
+    }
+
+    fn to_geo_line(&self) -> geo::Line<T> {
+        geo::Line::new(self.start.to_tuple(), self.end.to_tuple())
+    }
+}
+
+impl<T: CoordNum> geo_svg::ToSvgStr for Line<T> {
+    fn to_svg_str(&self, style: &geo_svg::Style) -> String {
+        self.to_geo_line().to_svg_str(style)
+    }
+
+    fn viewbox(&self, style: &geo_svg::Style) -> geo_svg::ViewBox {
+        self.to_geo_line().viewbox(style)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FhSlope {
-    line: geo::Line<FhScalar>,
+    line: Line<FhScalar>,
     slope: FhScalar,
 }
 
 impl FhSlope {
-    pub fn new(line: geo::Line<FhScalar>) -> Self {
+    pub fn new(line: Line<FhScalar>) -> Self {
         Self {
-            line,
             slope: line.slope(),
+            line,
         }
     }
 
@@ -33,17 +70,19 @@ impl FhSlope {
         x * self.slope + self.line.start.y
     }
 }
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Foothold {
-    Wall(geo::Line<FhScalar>),
-    Platform(geo::Line<FhScalar>),
+    Wall(Line<FhScalar>),
+    Platform(Line<FhScalar>),
     Slope(FhSlope),
 }
 
 impl Foothold {
-    pub fn from_coords(low: Coord<FhScalar>, high: Coord<FhScalar>) -> Self {
-        let line = geo::Line::new(low, high);
+    pub fn from_points(
+        low: euclid::default::Point2D<FhScalar>,
+        high: euclid::default::Point2D<FhScalar>,
+    ) -> Self {
+        let line = Line::from_points(low, high);
         if high.x == low.x {
             return Foothold::Wall(line);
         }
@@ -53,7 +92,7 @@ impl Foothold {
         Foothold::Slope(FhSlope::new(line))
     }
 
-    pub fn get_line(&self) -> &geo::Line<FhScalar> {
+    pub fn get_line(&self) -> &Line<FhScalar> {
         match self {
             Foothold::Wall(l) => l,
             Foothold::Platform(l) => l,
@@ -74,7 +113,10 @@ impl Foothold {
         }
     }
 
-    pub fn get_coord_below(&self, c: geo::Coord<FhScalar>) -> Option<geo::Coord<FhScalar>> {
+    pub fn get_coord_below(
+        &self,
+        c: euclid::default::Point2D<FhScalar>,
+    ) -> Option<euclid::default::Point2D<FhScalar>> {
         let x_range = self.get_x_range();
         if !x_range.contains(&c.x) {
             return None;
@@ -90,7 +132,7 @@ impl Foothold {
             return None;
         }
 
-        Some(coord! {x: c.x, y: y})
+        Some((c.x, y).into())
     }
 
     pub fn clamp_x(&self, x: f32) -> f32 {
@@ -118,22 +160,22 @@ impl Foothold {
 }
 
 impl RTreeObject for Foothold {
-    type Envelope = AABB<geo::Coord<FhScalar>>;
+    type Envelope = AABB<(FhScalar, FhScalar)>;
 
     fn envelope(&self) -> Self::Envelope {
         let line = self.get_line();
-        AABB::from_corners(line.start, line.end)
+        AABB::from_corners(line.start.to_tuple(), line.end.to_tuple())
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct FhTree {
     tree: RTree<Foothold, rstar::DefaultParams>,
-    bounds: geo::Rect<FhScalar>,
+    bounds: euclid::default::Box2D<FhScalar>,
 }
 
 pub struct BelowPointSelector {
-    coord: geo::Coord<FhScalar>,
+    p: euclid::default::Point2D<FhScalar>,
 }
 
 impl SelectionFunction<Foothold> for BelowPointSelector {
@@ -142,17 +184,17 @@ impl SelectionFunction<Foothold> for BelowPointSelector {
         let l = envelope.lower();
 
         // Check that x is in range
-        if !(l.x..=u.x).contains(&self.coord.x) {
+        if !(l.0..=u.0).contains(&self.p.x) {
             return false;
         }
 
-        let min_y = u.y.max(l.y);
+        let min_y = u.1.max(l.1);
         // Check that y is below
-        min_y > self.coord.y
+        min_y > self.p.y
     }
 
     fn should_unpack_leaf(&self, leaf: &Foothold) -> bool {
-        leaf.get_coord_below(self.coord).is_some()
+        leaf.get_coord_below(self.p).is_some()
     }
 }
 
@@ -224,51 +266,43 @@ impl FhTree {
         rect_svg.and(svg).to_string()
     }
 
-    pub fn from_meta(meta: &Field) -> Self {
-        let fhs = meta
-            .footholds
+    pub fn from_meta(footholds: &BTreeMap<u16, BTreeMap<u16, BTreeMap<u16, field_mapper::Foothold>>>, rect: Box2D<i16>) -> Self {
+        let fhs = footholds
             .values()
             .flat_map(|v| v.values())
             .flat_map(|v| v.iter())
             .map(|(_id, fh)| {
-                Foothold::from_coords(
-                    coord! { x: fh.pt1.x as f32, y: fh.pt1.y as f32 },
-                    coord! { x: fh.pt2.x as f32, y: fh.pt2.y as f32 },
-                )
+                Foothold::from_points(fh.pt1.to_f32().to_point(), fh.pt2.to_f32().to_point())
             })
             .collect_vec();
 
-        let rect = &meta.rect;
-
-        let bounds = Rect::new(
-            coord! { x: rect.min.x  as f32, y: rect.min.y as f32 },
-            coord! { x: rect.max.x as f32 , y: rect.max.y as f32 },
-        );
-
         Self {
             tree: rstar::RTree::bulk_load(fhs),
-            bounds,
+            bounds: rect.to_f32(),
         }
     }
 
-    pub fn get_foothold_below(&self, coord: geo::Coord<FhScalar>) -> Option<&Foothold> {
-        let (_x, y) = coord.x_y();
+    pub fn get_foothold_below(&self, p: euclid::default::Point2D<FhScalar>) -> Option<&Foothold> {
+        let (_x, y) = p.to_tuple();
         let fh_below = self
             .tree
-            .locate_with_selection_function(BelowPointSelector { coord });
+            .locate_with_selection_function(BelowPointSelector { p });
 
-        fh_below.min_by_key(|fh| (y - fh.get_coord_below(coord).unwrap().y).abs() as i32)
+        fh_below.min_by_key(|fh| (y - fh.get_coord_below(p).unwrap().y).abs() as i32)
     }
 
     pub fn x_range(&self) -> RangeInclusive<FhScalar> {
-        self.bounds.min().x..=self.bounds.max().x
+        self.bounds.min.x..=self.bounds.max.x
     }
 
     pub fn y_range(&self) -> RangeInclusive<FhScalar> {
-        self.bounds.min().y..=self.bounds.max().y
+        self.bounds.min.y..=self.bounds.max.y
     }
 
-    pub fn clamp(&self, coord: geo::Coord<FhScalar>) -> geo::Coord<FhScalar> {
+    pub fn clamp(
+        &self,
+        coord: euclid::default::Point2D<FhScalar>,
+    ) -> euclid::default::Point2D<FhScalar> {
         (
             clamp_range(self.x_range(), coord.x),
             clamp_range(self.y_range(), coord.y),
@@ -276,8 +310,8 @@ impl FhTree {
             .into()
     }
 
-    pub fn contains(&self, coord: geo::Coord<FhScalar>) -> bool {
-        self.bounds.contains(&coord)
+    pub fn contains(&self, p: euclid::default::Point2D<FhScalar>) -> bool {
+        self.bounds.contains(p)
     }
 }
 
@@ -287,7 +321,7 @@ mod tests {
     use std::io::Write;
 
     use geo_svg::ToSvg;
-    use proto95::id::MapId;
+    use proto95::id::FieldId;
 
     use crate::MetaService;
 
@@ -295,10 +329,10 @@ mod tests {
 
     #[test]
     fn map_fh() -> anyhow::Result<()> {
-        let meta = MetaService::load_from_dir("../../game_data/rbin")?;
-        let field_1 = meta.get_field_data(MapId::SOUTHPERRY).unwrap();
+        let meta = MetaService::load_from_dir("../../game_data/rbin", crate::MetaOption::Testing)?;
+        let field_1 = meta.get_field_data(FieldId::SOUTHPERRY).unwrap();
 
-        let fh_tree = FhTree::from_meta(field_1);
+        let fh_tree = FhTree::from_meta(&field_1.footholds, field_1.rect.clone());
         dbg!(&fh_tree.bounds);
         let line0 = geo::Point::new(0, 0);
         let mut svg = line0.to_svg();
@@ -328,13 +362,13 @@ mod tests {
         let mut lines = Vec::new();
 
         let bounds = &fh_tree.bounds;
-        for test_pt_x in (bounds.min().x as i32..bounds.max().x as i32).step_by(50) {
+        for test_pt_x in (bounds.min.x as i32..bounds.max.x as i32).step_by(50) {
             let test_pt_x = test_pt_x as f32;
             let pt = (test_pt_x, 0.).into();
 
             if let Some(fh) = fh_tree.get_foothold_below(pt) {
                 let intersec = fh.get_coord_below(pt).unwrap();
-                let line = geo::Line::new(pt, intersec);
+                let line = Line::from_points(pt, intersec);
                 lines.push(line);
             } else {
                 dbg!(pt);

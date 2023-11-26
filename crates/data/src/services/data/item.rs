@@ -482,7 +482,7 @@ mod tests {
 
     fn get_mock_meta() -> &'static MetaService {
         Box::leak(Box::new(
-            MetaService::load_from_dir("../../game_data/rbin").expect("Meta"),
+            MetaService::load_from_dir("../../game_data/rbin", meta::MetaOption::Testing).expect("Meta"),
         ))
     }
 

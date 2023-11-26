@@ -1,6 +1,6 @@
 use either::Either;
 use proto95::{
-    id::{job_id::JobId, FaceId, HairId, MapId, Skin},
+    id::{job_id::JobId, FaceId, HairId, FieldId, Skin},
     shared::char::{CharStat, Pets, SkillPointPage},
 };
 
@@ -45,7 +45,7 @@ impl From<&character::Model> for CharStat {
             exp: char.exp,
             fame: char.fame as u16,
             tmp_exp: char.gacha_exp as u32,
-            map_id: MapId(char.map_id as u32),
+            map_id: FieldId(char.map_id as u32),
             portal: char.spawn_point as u8,
             playtime: 0,
             sub_job: 0,

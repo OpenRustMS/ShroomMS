@@ -1,8 +1,7 @@
 use std::{collections::BTreeMap, ops::RangeInclusive};
 
 use proto95::{
-    game::{mob::MobId, reactor::ReactorId},
-    id::ItemId,
+    id::ItemId, game::life::{mob::MobId, reactor::ReactorId},
 };
 use rand::Rng;
 use serde::Deserialize;

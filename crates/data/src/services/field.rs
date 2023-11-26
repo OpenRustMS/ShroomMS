@@ -1,16 +1,19 @@
 use std::{sync::Arc, time::Duration};
 
 use dashmap::{mapref::entry::Entry, DashMap};
-use meta::{field::FhTree, FieldMeta, MetaService, FieldLife};
+use meta::{field::FhTree, FieldLife, FieldMeta, MetaService};
 use proto95::{
     game::{
         chat::UserChatMsgResp,
-        drop::DropId,
-        mob::{MobLeaveType, MobMoveReq},
-        ObjectId,
+        drop::{DropId, DropOwner},
+        ObjectId, life::mob::{MobLeaveType, MobMoveReq},
     },
-    id::MapId,
-    shared::{char::AvatarData, movement::MovePath, Range2, Vec2},
+    id::{FieldId, ItemId, SkillId},
+    shared::{
+        char::{AvatarData, Money},
+        movement::MovePath,
+        FootholdId, Range2, Vec2,
+    },
 };
 use shroom_net::server::{
     room::{Room, RoomJoinHandle, RoomSet, RoomState},
@@ -29,6 +32,7 @@ use super::{
             drop::{DropLeaveParam, DropTypeValue},
             mob::MobPool,
             reactor::Reactor,
+            summoned::Summon,
             user::User,
             Drop, Mob, Npc, Pool, SimplePool,
         },
@@ -96,9 +100,11 @@ pub struct FieldData {
     npc_pool: SimplePool<Npc>,
     reactor_pool: SimplePool<Reactor>,
     user_pool: SimplePool<User>,
+    summon_pool: SimplePool<Summon>,
     sessions: FieldRoomSet,
     drop_spam: Option<Vec2>,
     field_events: DelayQueue<FieldEvent>,
+    meta: &'static MetaService,
 }
 
 pub type FieldRoomSet = RoomSet<CharacterID, SessionMsg>;
@@ -112,13 +118,28 @@ pub enum FieldMsg {
     MobRemove(ObjectId, MobLeaveType),
     MobUpdatePos(MobMoveReq, CharacterID),
     MobAssignController(CharacterID),
-    MobAttack { id: ObjectId, dmg: u32 },
+    MobAttack {
+        id: ObjectId,
+        dmg: u32,
+    },
     DropAdd(Drop),
     DropRemove(DropId, DropLeaveParam),
     Chat(UserChatMsgResp),
     SlowLoot(DropId, DropLeaveParam, oneshot::Sender<Option<Drop>>),
     StartSpamDrop(Vec2),
     StopSpamDrop,
+    ReactorAttack {
+        id: ObjectId,
+        attacker: CharacterID,
+    },
+    SummonSpawn {
+        char_id: CharacterID,
+        char_level: u8,
+        skill_id: SkillId,
+        skill_level: u8,
+        pos: Vec2,
+        fh: FootholdId,
+    },
 }
 
 impl RoomState for FieldData {
@@ -195,6 +216,36 @@ impl RoomState for FieldData {
             FieldMsg::StopSpamDrop => {
                 self.drop_spam = None;
             }
+            FieldMsg::ReactorAttack { id, attacker } => {
+                let reactor = self.reactor_pool.must_get_mut(&id)?;
+                reactor.state = reactor.state.saturating_sub(1);
+                if reactor.state == 0 {
+                    let drops = self.meta.get_reactor_drops(reactor.tmpl_id);
+                    let pos = reactor.pos.clone();
+                    self.reactor_pool.remove(id, (), &self.sessions)?;
+                    self.spread_drops(pos, DropOwner::User(attacker as u32), &drops, 10)?;
+                }
+            }
+            FieldMsg::SummonSpawn {
+                char_id,
+                char_level,
+                skill_id,
+                skill_level,
+                pos,
+                fh
+            } => {
+                self.summon_pool.add(
+                    Summon {
+                        pos,
+                        fh,
+                        skill_id,
+                        skill_level,
+                        char_level,
+                        char_id: char_id as u32,
+                    },
+                    &self.sessions,
+                )?;
+            }
         }
 
         Ok(())
@@ -245,7 +296,7 @@ impl FieldData {
             .values()
             .filter_map(|life| match &life {
                 FieldLife::Npc(n) => Some(n),
-                _ => None
+                _ => None,
             })
             .map(|npc| Npc {
                 tmpl_id: npc.id,
@@ -264,7 +315,7 @@ impl FieldData {
             .values()
             .filter_map(|life| match life {
                 FieldLife::Mob(m) if !m.hide => Some(m),
-                _ => None
+                _ => None,
             })
             .map(|m| {
                 let meta = meta_svc.get_mob_data(m.id).unwrap();
@@ -272,6 +323,7 @@ impl FieldData {
             });
 
         let reactors = meta.reactors.values().map(|r| Reactor {
+            name: r.name.clone(),
             pos: r.pos,
             tmpl_id: r.id,
             state: 0,
@@ -284,9 +336,11 @@ impl FieldData {
             npc_pool: SimplePool::from_elems(meta_svc, npcs),
             reactor_pool: SimplePool::from_elems(meta_svc, reactors),
             user_pool: SimplePool::new(meta_svc),
+            summon_pool: SimplePool::new(meta_svc),
             sessions,
             drop_spam: None,
             field_events: DelayQueue::new(),
+            meta: meta_svc,
         }
     }
 
@@ -391,6 +445,24 @@ impl FieldData {
         Ok(())
     }
 
+    fn spread_drops(
+        &mut self,
+        pos: Vec2,
+        owner: DropOwner,
+        drops: &[(ItemId, usize)],
+        money: Money,
+    ) -> anyhow::Result<()> {
+        let fh = self
+            .shared
+            .field_fh
+            .get_foothold_below((pos.x as f32, pos.y as f32 - 20.).into());
+
+        self.drop_pool
+            .add_drops(drops, money, pos, fh, owner, &self.sessions)?;
+
+        Ok(())
+    }
+
     pub fn attack_mob(
         &mut self,
         id: ObjectId,
@@ -406,14 +478,22 @@ impl FieldData {
 
         if killed {
             let mob = self.mob_pool.kill_mob(id, &self.sessions)?;
+            let drops = self.reactor_pool.meta.get_drops_for_mob(mob.tmpl_id);
+            let money = self.reactor_pool.meta.get_money_drops_for_mob(mob.tmpl_id);
 
             let fh = self
                 .shared
                 .field_fh
                 .get_foothold_below((mob.pos.x as f32, mob.pos.y as f32 - 20.).into());
 
-            self.drop_pool
-                .add_mob_drops(mob.tmpl_id, mob.pos, fh, attacker, &self.sessions)?;
+            self.drop_pool.add_drops(
+                &drops,
+                money,
+                mob.pos,
+                fh,
+                DropOwner::User(attacker as u32),
+                &self.sessions,
+            )?;
         }
 
         Ok(())
@@ -424,7 +504,7 @@ pub type FieldRoom = Room<FieldData>;
 
 pub struct FieldJoinHandle {
     room_handle: RoomJoinHandle<FieldData>,
-    pub field_id: MapId,
+    pub field_id: FieldId,
     pub field_meta: FieldMeta,
 }
 
@@ -446,7 +526,7 @@ impl FieldJoinHandle {
 
 #[derive(Debug)]
 pub struct FieldService {
-    fields: DashMap<MapId, Arc<FieldRoom>>,
+    fields: DashMap<FieldId, Arc<FieldRoom>>,
     meta: &'static MetaService,
     tick: Tick,
 }
@@ -460,7 +540,7 @@ impl FieldService {
         }
     }
 
-    fn create_field(&self, field_id: MapId) -> anyhow::Result<Arc<FieldRoom>> {
+    fn create_field(&self, field_id: FieldId) -> anyhow::Result<Arc<FieldRoom>> {
         let field_meta = self
             .meta
             .get_field_data(field_id)
@@ -479,7 +559,7 @@ impl FieldService {
         )?))
     }
 
-    pub fn get_field(&self, field_id: MapId) -> anyhow::Result<Arc<FieldRoom>> {
+    pub fn get_field(&self, field_id: FieldId) -> anyhow::Result<Arc<FieldRoom>> {
         Ok(self
             .fields
             .entry(field_id)
@@ -491,7 +571,7 @@ impl FieldService {
         &self,
         char_id: CharacterID,
         avatar_data: AvatarData,
-        field_id: MapId,
+        field_id: FieldId,
     ) -> anyhow::Result<FieldJoinHandle> {
         let field = self.get_field(field_id)?;
         let field_meta = self.meta.get_field_data(field_id).unwrap();
@@ -507,7 +587,7 @@ impl FieldService {
     pub async fn switch_field(
         &self,
         avatar_data: AvatarData,
-        field_id: MapId,
+        field_id: FieldId,
         handle: &mut FieldJoinHandle,
     ) -> anyhow::Result<()> {
         let field = self.get_field(field_id)?;

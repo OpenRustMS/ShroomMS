@@ -185,7 +185,7 @@ pub enum Movement {
     Assaulter(InstantMovement) = 0x6,
     Assassinate(InstantMovement) = 0x7,
     Rush(InstantMovement) = 0x8,
-    StatChange(u8) = 0x9,
+    StatChange(bool) = 0x9, // bool is if stat changed
     SitDown(InstantMovement) = 0xA,
     StartFallDown(FallDownMovement) = 0xB,
     FallDown(AbsoluteFallMovement) = 0xC,

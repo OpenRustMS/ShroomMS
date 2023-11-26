@@ -1,11 +1,12 @@
 use std::{collections::BTreeMap, ops::RangeInclusive};
 
 use proto95::{
-    game::{mob::MobId, npc::NpcId, reactor::ReactorId},
-    id::MapId,
-    shared::{FootholdId, Rect2D, Vec2},
+    id::FieldId,
+    shared::{FootholdId, Rect2D, Vec2}, game::life::{npc::NpcId, mob::MobId, reactor::ReactorId},
 };
 use serde::{Deserialize, Serialize};
+
+use crate::field::FhTree;
 
 use super::shroom_schemas as sch;
 
@@ -93,10 +94,10 @@ pub struct FieldPortal {
     pub script: Option<String>,
     pub session_value: Option<String>,
     pub session_value_key: Option<String>,
-    pub tm: Option<MapId>,
+    pub tm: Option<FieldId>,
     pub tn: Option<String>,
     pub pn: Option<String>,
-    pub pt: Option<MapId>,
+    pub pt: Option<FieldId>,
 }
 
 impl TryFrom<&sch::FieldPortalValue> for FieldPortal {
@@ -115,8 +116,8 @@ impl TryFrom<&sch::FieldPortalValue> for FieldPortal {
             session_value_key: value.session_value_key.clone(),
             pn: value.pn.clone(),
             tn: value.tn.clone(),
-            tm: value.tm.map(|v| MapId(v as u32)),
-            pt: value.pt.map(|v| MapId(v as u32)),
+            tm: value.tm.map(|v| FieldId(v as u32)),
+            pt: value.pt.map(|v| FieldId(v as u32)),
         })
     }
 }
@@ -150,23 +151,24 @@ impl From<&sch::Fh> for Foothold {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Field {
-    pub id: MapId,
+    pub id: FieldId,
     pub cloud: bool,
     pub scroll_disable: bool,
     pub no_regen: bool,
     pub fly: bool,
     pub zakum_hack: bool,
     pub rect: Rect2D,
-    pub return_field: Option<MapId>,
-    pub forced_return_field: Option<MapId>,
+    pub return_field: Option<FieldId>,
+    pub forced_return_field: Option<FieldId>,
     pub portals: BTreeMap<u8, FieldPortal>,
     pub life: BTreeMap<u32, FieldLife>,
     pub reactors: BTreeMap<u32, FieldReactor>,
     pub footholds: BTreeMap<FootholdId, BTreeMap<FootholdId, BTreeMap<FootholdId, Foothold>>>,
+    pub fh_tree: FhTree
 }
 
 impl Field {
-    pub fn get_return_field(&self) -> MapId {
+    pub fn get_return_field(&self) -> FieldId {
         self.return_field
             .or(self.forced_return_field)
             .unwrap_or(self.id)
@@ -212,27 +214,31 @@ impl TryFrom<&sch::Field> for Field {
             }
         ).collect::<anyhow::Result<BTreeMap<FootholdId, BTreeMap<FootholdId, BTreeMap<FootholdId, Foothold>>>>>()?;
 
+        let rect = Rect2D::new(
+            Vec2::new(
+                info.vr_left.unwrap_or(0) as i16,
+                info.vr_bottom.unwrap_or(0) as i16,
+            )
+            .to_point(),
+            Vec2::new(
+                info.vr_right.unwrap_or(0) as i16,
+                info.vr_top.unwrap_or(0) as i16,
+            )
+            .to_point(),
+        );
+
+        let fh_tree = FhTree::from_meta(&footholds, rect.clone());
+
         Ok(Self {
-            id: MapId::NONE,
+            id: FieldId::NONE,
             cloud: map_bool(&info.cloud),
             scroll_disable: map_bool(&info.scroll_disable),
             no_regen: map_bool(&info.no_regen_map),
             fly: map_bool(&info.fly),
             zakum_hack: map_bool(&info.zakum2_hack),
-            return_field: info.return_map.map(|v| MapId(v as u32)),
-            forced_return_field: info.forced_return.map(|v| MapId(v as u32)),
-            rect: Rect2D::new(
-                Vec2::new(
-                    info.vr_left.unwrap_or(0) as i16,
-                    info.vr_bottom.unwrap_or(0) as i16,
-                )
-                .to_point(),
-                Vec2::new(
-                    info.vr_right.unwrap_or(0) as i16,
-                    info.vr_top.unwrap_or(0) as i16,
-                )
-                .to_point(),
-            ),
+            return_field: info.return_map.map(|v| FieldId(v as u32)),
+            forced_return_field: info.forced_return.map(|v| FieldId(v as u32)),
+            rect: rect,
             portals: value
                 .portal
                 .iter()
@@ -261,6 +267,7 @@ impl TryFrom<&sch::Field> for Field {
                     Ok((id, reactor))
                 })
                 .collect::<anyhow::Result<BTreeMap<u32, FieldReactor>>>()?,
+            fh_tree
         })
     }
 }

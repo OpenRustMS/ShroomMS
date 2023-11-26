@@ -6,9 +6,10 @@ use std::{
 
 use anyhow::Context;
 use proto95::{
-    game::{mob::MobId, npc::NpcId},
-    id::{job_id::JobId, ItemId, MapId, SkillId},
+    game::life::{mob::MobId, npc::NpcId, reactor::ReactorId},
+    id::{job_id::JobId, FieldId, ItemId, SkillId},
 };
+use rayon::prelude::{ParallelBridge, ParallelExtend, ParallelIterator};
 
 use crate::{
     drops::{DropPool, NpcShop, NpcShops},
@@ -17,14 +18,8 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct FieldMetaData {
-    pub field: Field,
-    pub fh_tree: FhTree,
-}
-
-#[derive(Debug)]
 pub struct MetaData {
-    pub fields: BTreeMap<MapId, FieldMetaData>,
+    pub fields: BTreeMap<FieldId, Field>,
     pub mobs: BTreeMap<u32, wz2::Mob>,
     pub items: BTreeMap<u32, wz2::Item>,
     pub equips: BTreeMap<u32, wz2::Item>,
@@ -39,6 +34,21 @@ pub type ItemMeta = &'static wz2::Item;
 pub type DropsMeta = &'static DropPool;
 pub type SkillMeta = &'static skill::Skill;
 
+#[derive(Debug, Clone, Copy)]
+pub enum MetaOption {
+    Testing,
+    Full,
+}
+
+impl MetaOption {
+    pub fn get_regions(&self) -> impl Iterator<Item = u8> {
+        match self {
+            Self::Testing => FIELD_REGIONS.iter().take(1).copied(),
+            Self::Full => FIELD_REGIONS.iter().take(FIELD_REGIONS.len()).copied(),
+        }
+    }
+}
+
 impl MetaData {
     fn load_from_file<T: serde::de::DeserializeOwned>(file: impl AsRef<Path>) -> anyhow::Result<T> {
         let file = File::open(file)?;
@@ -50,20 +60,20 @@ impl MetaData {
         Ok(serde_json::from_reader(file)?)
     }
 
-    pub fn load_from_dir(dir: PathBuf) -> anyhow::Result<Self> {
+    pub fn load_from_dir(dir: PathBuf, opt: MetaOption) -> anyhow::Result<Self> {
         let mut fields = BTreeMap::new();
-        for region in FIELD_REGIONS.iter() {
-            let f: BTreeMap<u32, Field> =
-                Self::load_from_file(dir.join(format!("fields/fields{region}.bincode")))
-                    .context("Map")?;
+        fields.par_extend(opt.get_regions().par_bridge().flat_map(|region| {
+            Self::load_from_file::<BTreeMap<u32, Field>>(
+                dir.join(format!("fields/fields{region}.bincode")),
+            )
+            .unwrap()
+            .into_iter()
+            .map(|(id, field)| (FieldId(id), field))
+            .par_bridge()
+        }));
 
-            fields.extend(f.into_iter().map(|(id, field)| {
-                let fh_tree = FhTree::from_meta(&field);
-                (MapId(id), FieldMetaData { field, fh_tree })
-            }))
-        }
         let skills: BTreeMap<u32, skill::Skill> =
-            Self::load_from_json(dir.join("skill.json")).context("Skill")?;
+            Self::load_from_json(dir.join("skills.json")).context("Skill")?;
 
         let drop_pool = DropPool::from_drop_lists(
             Self::load_from_json(dir.join("ext/mob_drops.json")).context("Mob Drops")?,
@@ -95,28 +105,29 @@ impl MetaService {
         Self { meta_data }
     }
 
-    pub fn load_from_dir(dir: impl AsRef<Path>) -> anyhow::Result<Self> {
+    pub fn load_from_dir(dir: impl AsRef<Path>, opt: MetaOption) -> anyhow::Result<Self> {
         Ok(Self::new(MetaData::load_from_dir(
             dir.as_ref().to_path_buf(),
+            opt,
         )?))
     }
 
-    pub fn get_field_data(&self, field_id: MapId) -> Option<&Field> {
-        self.meta_data.fields.get(&field_id).map(|v| &v.field)
+    pub fn get_field_data(&self, field_id: FieldId) -> Option<&Field> {
+        self.meta_data.fields.get(&field_id)
     }
 
-    pub fn get_field_fh_data(&self, field_id: MapId) -> Option<&FhTree> {
+    pub fn get_field_fh_data(&self, field_id: FieldId) -> Option<&FhTree> {
         self.meta_data.fields.get(&field_id).map(|v| &v.fh_tree)
     }
 
     pub fn get_portal_map_spawn(
         &self,
-        field_id: MapId,
+        field_id: FieldId,
         field: &Field,
         portal_name: &str,
-    ) -> Option<(MapId, u8)> {
+    ) -> Option<(FieldId, u8)> {
         let (_, portal) = field.get_portal_by_name(portal_name)?;
-        let map_id = if portal.tm == Some(MapId(999999)) {
+        let map_id = if portal.tm == Some(FieldId(999999)) {
             field_id
         } else {
             portal.tm.unwrap()
@@ -126,7 +137,7 @@ impl MetaService {
         Some((map_id, portal))
     }
 
-    pub fn get_return_field_spawn(&self, field: &Field) -> Option<(MapId, u8)> {
+    pub fn get_return_field_spawn(&self, field: &Field) -> Option<(FieldId, u8)> {
         let map_id = field.get_return_field();
         let next_map = self.get_field_data(map_id)?;
         let target_sp = next_map.get_first_portal_id()?;
@@ -143,6 +154,12 @@ impl MetaService {
 
     pub fn get_eq_data(&self, id: ItemId) -> Option<&wz2::Item> {
         self.meta_data.equips.get(&id.0)
+    }
+
+    pub fn get_reactor_drops(&self, id: ReactorId) -> Vec<(ItemId, usize)> {
+        self.meta_data
+            .drop_pool
+            .get_reactor_drops(id, &mut rand::thread_rng())
     }
 
     pub fn get_drops_for_mob(&self, id: MobId) -> Vec<(ItemId, usize)> {

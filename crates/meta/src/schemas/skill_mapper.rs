@@ -1,5 +1,7 @@
 use std::{collections::BTreeMap, str::FromStr};
 
+use proto95::id::SkillId;
+
 use crate::{
     shared::{opt_map1, opt_map2, EvalExpr},
     skill::*,
@@ -137,10 +139,24 @@ impl TryFrom<&skill_schema::SkillCommonInfo> for SkillStats {
     }
 }
 
-impl TryFrom<&skill_schema::SkillSkillValue> for Skill {
+impl TryFrom<(SkillId, &skill_schema::SkillSkillValue)> for Skill {
     type Error = anyhow::Error;
-    fn try_from(value: &skill_schema::SkillSkillValue) -> Result<Self, Self::Error> {
+    fn try_from(
+        (id, value): (SkillId, &skill_schema::SkillSkillValue),
+    ) -> Result<Self, Self::Error> {
         let cmn = value.common.as_ref().unwrap();
+
+        let max_level = cmn
+            .max_level
+            .as_ref()
+            .map(|v| v.into())
+            .unwrap_or(value.level.len() as u32);
+
+        let mut master_level = value.master_level.as_ref().map(|v| v.into());
+        if id.has_master_level() && master_level.is_none() {
+            master_level = Some(max_level);
+        }
+
         let mut req_skills = BTreeMap::new();
         for (id, level) in value.req.iter() {
             req_skills.insert(id.parse()?, level.into());
@@ -155,7 +171,7 @@ impl TryFrom<&skill_schema::SkillSkillValue> for Skill {
         });
 
         Ok(Self {
-            id: 0,
+            id: id,
             element_attr: opt_map2(&value.elem_attr)?,
             skill_type: value.skill_type.unwrap_or(0).try_into()?,
             dot: cmn.try_into()?,
@@ -165,11 +181,7 @@ impl TryFrom<&skill_schema::SkillSkillValue> for Skill {
             sub_weapon: value.weapon.as_ref().map(|v| v.into()),
             req_skills,
             master_level: value.master_level.as_ref().map(|v| v.into()),
-            max_level: cmn
-                .max_level
-                .as_ref()
-                .map(|v| v.into())
-                .unwrap_or(value.level.len() as u32),
+            max_level,
             invisible: value.invisible.as_ref().map(|v| v.into()).unwrap_or(false),
             disable: value.disable.as_ref().map(|v| v.into()).unwrap_or(false),
             stats: cmn.try_into()?,

@@ -3,15 +3,14 @@ pub mod drop;
 pub mod field;
 pub mod friend;
 pub mod keymaps;
+pub mod life;
 pub mod macros;
-pub mod mob;
-pub mod npc;
 pub mod party;
-pub mod pet;
-pub mod reactor;
 pub mod script;
+pub mod shop;
 pub mod user;
-use shroom_pkt::{packet_opcode, time::Ticks, ShroomPacket, ShroomPacketEnum};
+
+use shroom_pkt::{packet_opcode, time::Ticks, ShroomList32, ShroomPacket, ShroomPacketEnum};
 
 use crate::{
     id::job_id::JobId,
@@ -21,11 +20,20 @@ use crate::{
     shared::{char::CharacterId, Gender, ServerSocketAddr, Vec2},
 };
 
-use self::npc::NpcId;
+use self::life::npc::NpcId;
 
 use super::login::ClientKey;
 
 pub type ObjectId = u32;
+
+#[derive(ShroomPacket, Debug)]
+pub struct AntiMacroResultResp {
+    pub u1: u8, //6
+    pub u2: u8, // 2,
+    pub u3: u8, // 1
+    pub data: ShroomList32<u8>,
+}
+packet_opcode!(AntiMacroResultResp, SendOpcodes::AntiMacroResult);
 
 #[derive(ShroomPacket, Debug)]
 pub struct CharacterInfoReq {

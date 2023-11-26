@@ -1,6 +1,7 @@
 use meta::schemas::field_mapper::Field;
+
 use meta::{schemas, skill, FIELD_REGIONS};
-use proto95::id::MapId;
+use proto95::id::{FieldId, SkillId};
 use rayon::prelude::*;
 use serde::de::DeserializeOwned;
 use std::collections::BTreeMap;
@@ -39,11 +40,11 @@ fn write_json<T: serde::Serialize>(
     Ok(())
 }
 
-fn parse_skill(p: impl AsRef<Path>) -> impl Iterator<Item = anyhow::Result<(u32, skill::Skill)>> {
+fn parse_skill(p: impl AsRef<Path>) -> impl Iterator<Item = anyhow::Result<(SkillId, skill::Skill)>> {
     let skill_img: schemas::shroom_schemas::Skill = load_json(p).unwrap();
 
     skill_img.skill.into_iter().map(|(id, mut skill)| {
-        let id = id.parse::<u32>()?;
+        let id = SkillId(id.parse::<u32>()?);
         if skill.common.is_none() {
             let levels = skill.level.len();
             let last_level = &skill.level[&levels.to_string()];
@@ -51,8 +52,7 @@ fn parse_skill(p: impl AsRef<Path>) -> impl Iterator<Item = anyhow::Result<(u32,
             skill.common = Some(last_level.try_into()?);
         }
 
-        let mut skill = skill::Skill::try_from(&skill)?;
-        skill.id = id;
+        let skill = skill::Skill::try_from((id, &skill))?;
         Ok((id, skill))
     })
 }
@@ -60,7 +60,7 @@ fn parse_skill(p: impl AsRef<Path>) -> impl Iterator<Item = anyhow::Result<(u32,
 fn parse_field(p: impl AsRef<Path>, id: u32) -> anyhow::Result<(u32, Field)> {
     let img: schemas::shroom_schemas::Field = load_json(p).unwrap();
     let mut field = Field::try_from(&img)?;
-    field.id = MapId(id);
+    field.id = FieldId(id);
     Ok((id, field))
 }
 
@@ -79,7 +79,7 @@ fn gen_skills(skill_dir: impl AsRef<Path>, out_dir: impl AsRef<Path>) -> anyhow:
             let img_file = dir.path().join("img.json");
             parse_skill(img_file).par_bridge()
         })
-        .collect::<anyhow::Result<BTreeMap<u32, skill::Skill>>>()?;
+        .collect::<anyhow::Result<BTreeMap<SkillId, skill::Skill>>>()?;
 
     write_json("skills", &skills, out_dir)?;
     Ok(())

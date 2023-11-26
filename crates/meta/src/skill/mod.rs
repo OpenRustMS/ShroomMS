@@ -1,5 +1,6 @@
 pub mod eval;
 
+use proto95::id::SkillId;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -202,7 +203,7 @@ pub struct SkillSummonData {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Skill {
-    pub id: u32,
+    pub id: SkillId,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub element_attr: Option<ElementAttribute>,
     pub invisible: bool,

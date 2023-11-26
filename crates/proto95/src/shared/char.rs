@@ -6,12 +6,11 @@ use shroom_pkt::{
 
 use crate::{
     game::{
-        mob::MobId,
-        user::secondary_stats::{CharSecondaryStatFlags, CharSecondaryStatPartial},
+        life::mob::MobId, user::secondary_stats::{CharSecondaryStatPartial, CharSecondaryStatFlags},
     },
     id::{
         job_id::{JobId, SubJob},
-        FaceId, HairId, ItemId, MapId, SkillId, Skin,
+        FaceId, HairId, ItemId, FieldId, SkillId, Skin,
     },
     send_opcodes::SendOpcodes,
 };
@@ -60,7 +59,7 @@ pub struct CharStat {
     pub exp: i32,
     pub fame: u16,
     pub tmp_exp: u32,
-    pub map_id: MapId,
+    pub map_id: FieldId,
     pub portal: u8,
     // TODO: Is this playtime in seconds
     pub playtime: u32,
@@ -101,7 +100,8 @@ pub struct AvatarData {
 
 #[derive(Debug, ShroomPacket)]
 pub struct CharExpirationData {
-    u1: u8, /// Ignored
+    u1: u8,
+    /// Ignored
     remove_sn: ShroomList32<u64>,
     remove_sn_time: ShroomList32<ShroomTime>,
 }
@@ -136,89 +136,89 @@ pub type QuestId = u16;
 
 #[derive(Debug, ShroomPacket)]
 pub struct QuestInfo {
-    id: QuestId,
-    value: String,
+    pub id: QuestId,
+    pub value: String,
 }
 
 #[derive(Debug, ShroomPacket)]
 pub struct QuestCompleteInfo {
-    id: QuestId,
-    time: ShroomTime,
+    pub id: QuestId,
+    pub time: ShroomTime,
 }
 
 #[derive(Debug, ShroomPacket)]
 pub struct MiniGameInfo {
-    game_id: u32,
-    win: u32,
-    draw: u32,
-    score: u32,
-    u1: u32,
+    pub game_id: u32,
+    pub win: u32,
+    pub draw: u32,
+    pub score: u32,
+    pub u1: u32,
 }
 
 pub type CharId = u32;
 
 #[derive(Debug, ShroomPacket)]
 pub struct CoupleRecord {
-    pair_char_id: CharId,
-    pair_char_name: NameStr,
-    sn: CashID,
-    pair_sn: CashID,
+    pub pair_char_id: CharId,
+    pub pair_char_name: NameStr,
+    pub sn: CashID,
+    pub pair_sn: CashID,
 }
 
 #[derive(Debug, ShroomPacket)]
 pub struct FriendRecord {
-    pair_char_id: CharId,
-    pair_char_name: NameStr,
-    sn: CashID,
-    pair_sn: CashID,
-    friend_item_id: ItemId,
+    pub pair_char_id: CharId,
+    pub pair_char_name: NameStr,
+    pub sn: CashID,
+    pub pair_sn: CashID,
+    pub friend_item_id: ItemId,
 }
 
 #[derive(Debug, ShroomPacket)]
 pub struct MarriageRecord {
-    marriage_no: u32,
-    groom_id: CharId,
-    bride_id: CharId,
-    status: u16, // 3 == married?
-    groom_item_id: ItemId,
-    bride_item_id: ItemId,
-    groom_name: NameStr,
-    bride_name: NameStr,
+    pub marriage_no: u32,
+    pub groom_id: CharId,
+    pub bride_id: CharId,
+    pub status: u16, // 3 == married?
+    pub groom_item_id: ItemId,
+    pub bride_item_id: ItemId,
+    pub groom_name: NameStr,
+    pub bride_name: NameStr,
 }
 
 #[derive(Debug, ShroomPacket, Default)]
 pub struct SocialRecords {
-    couple_records: ShroomList16<CoupleRecord>,
-    friend_records: ShroomList16<FriendRecord>,
-    marriage_records: ShroomList16<MarriageRecord>,
+    pub couple_records: ShroomList16<CoupleRecord>,
+    pub friend_records: ShroomList16<FriendRecord>,
+    pub marriage_records: ShroomList16<MarriageRecord>,
 }
 
 #[derive(Debug, ShroomPacket, Default)]
 pub struct TeleportRockInfo {
     //TODO allow MapID
-    pub maps: [MapId; 5],
-    pub vip_maps: [MapId; 10],
+    pub maps: [FieldId; 5],
+    pub vip_maps: [FieldId; 10],
 }
 
 #[derive(Debug, ShroomPacket)]
 pub struct NewYearCardInfo {
-    id: u32, //sn
-    sender_id: CharId,
-    sender_name: String,
-    is_sender_discarded: bool,
-    data_sent: ShroomTime,
-    receiver_id: CharId,
-    receiver_name: String,
-    is_receiver_discarded: bool,
-    is_receiver_received: bool,
-    date_deceived: ShroomTime,
-    content: String,
+    pub id: u32, //sn
+    pub sender_id: CharId,
+    pub sender_name: String,
+    pub is_sender_discarded: bool,
+    pub data_sent: ShroomTime,
+    pub receiver_id: CharId,
+    pub receiver_name: String,
+    pub is_receiver_discarded: bool,
+    pub is_receiver_received: bool,
+    pub date_deceived: ShroomTime,
+    pub content: String,
 }
 
 #[derive(Debug, ShroomPacket)]
 pub struct QuestRecordExpired {
-    id: QuestId,
-    value: String,
+    pub id: QuestId,
+    pub value: String,
 }
 
 #[derive(Debug, ShroomPacket, Default)]
@@ -230,14 +230,14 @@ pub struct WildHunterInfo {
 
 #[derive(Debug, ShroomPacket)]
 pub struct QuestCompleteOldInfo {
-    id: QuestId,
-    time: ShroomTime,
+    pub id: QuestId,
+    pub time: ShroomTime,
 }
 
 #[derive(Debug, ShroomPacket)]
 pub struct VisitorQuestLogInfo {
-    id: QuestId,
-    unknown: u16,
+    pub id: QuestId,
+    pub unknown: u16,
 }
 
 #[derive(ShroomPacket, Debug)]

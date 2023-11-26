@@ -20,7 +20,7 @@ use proto95::{
             CharSecondaryStatFlags, CharSecondaryStatPartial, CharSecondaryTwoStatesPartial,
         },
     },
-    id::{item_id::InventoryType, job_id::JobId, FaceId, HairId, ItemId, MapId, SkillId, Skin},
+    id::{item_id::InventoryType, job_id::JobId, FaceId, HairId, ItemId, FieldId, SkillId, Skin},
     shared::{
         char::{AvatarData, AvatarEquips, CharStat, CharStatPartial, InventorySize, PetIds},
         inventory::InventoryOperation,
@@ -40,7 +40,7 @@ use self::{
 
 use super::{
     data::{character::CharacterID, ItemService},
-    SharedGameServices,
+    SharedGameServices, helper::pool::summoned::Summon,
 };
 
 #[derive(Debug)]
@@ -56,7 +56,7 @@ pub struct Character {
     pub gender: Gender,
     pub stats: CharStats,
     pub inventory: CharInventory,
-    pub map_id: MapId,
+    pub map_id: FieldId,
     pub spawn_point: u8,
     pub skin: Skin,
     pub hair: HairId,
@@ -70,6 +70,7 @@ pub struct Character {
     //pub timer_events: DelayQueue<TimerEvents>,
     pub npc_msg: VecDeque<ScriptMessage>,
     pub buff_manager: BuffManager<CharBuffStorage>,
+    pub do_summon: Option<Summon>
 }
 
 impl Character {
@@ -86,7 +87,7 @@ impl Character {
             inventory: CharInventory::from_inv_set(inventory),
             gender: (&model.gender).into(),
             name: model.name.clone(),
-            map_id: MapId(model.map_id as u32),
+            map_id: FieldId(model.map_id as u32),
             skin: Skin::try_from(model.skin as u8).expect("skin"),
             hair: HairId(model.hair as u32),
             face: FaceId(model.face as u32),
@@ -100,6 +101,7 @@ impl Character {
             buff_manager: BuffManager::new(CharBuffStorage::default()),
             // timer_events: DelayQueue::new(),
             npc_msg: VecDeque::default(),
+            do_summon: None
         }
     }
 
@@ -296,7 +298,7 @@ impl Character {
         }
     }
 
-    pub fn transfer_map(&mut self, map: MapId, sp: u8) {
+    pub fn transfer_map(&mut self, map: FieldId, sp: u8) {
         self.map_id = map;
         self.spawn_point = sp;
         // Reset the updates, since we use set field anyway
@@ -338,7 +340,7 @@ impl Character {
         true
     }
 
-    pub fn get_map_id(&self) -> MapId {
+    pub fn get_map_id(&self) -> FieldId {
         self.map_id
     }
 
@@ -446,7 +448,7 @@ impl Character {
                 masked_equips: ShroomIndexList8::from(vec![]),
                 weapon_sticker_id: ItemId(0),
             },
-            pets: PetIds::default(),
+            pets: [ItemId(5000008); 3],
         }
     }
 
@@ -503,6 +505,19 @@ impl Character {
         let buff_id = skill.id.0;
 
         let stats = &skill.meta.stats;
+
+        if let Some(_) = skill.meta.summon  {
+            self.do_summon = Some(Summon {
+                pos: self.pos,
+                fh: self.fh,
+                skill_id: id,
+                skill_level: skill.level as u8,
+                char_level: self.stats.level,
+                char_id: self.id as u32,
+            });
+
+            return;
+        }
 
         macro_rules! cond_buff {
             ($val:ident, $flag:path) => {
@@ -567,6 +582,9 @@ impl Character {
         cond_buff!(critical_ratio, CharSecondaryStatFlags::CriticalRate);
         // TODO: damr is conditional
 
+
+
+
         if let Some(ref v) = stats.x {
             dbg!(skill.meta.id);
             if skill.meta.skill_type.is_booster() {
@@ -576,7 +594,7 @@ impl Character {
                     CharSecondaryStatFlags::Booster,
                     CharBuff::new(buff_id, v, dur),
                 );
-            } else if skill.meta.id == 1111002 || buff_id == 1120003 {
+            } else if skill.meta.id == SkillId(1111002) || skill.meta.id == SkillId(1120003) {
                 let mut buff = CharBuff::new(buff_id, 1, dur);
 
                 if let Ok(adv) = self.skills.get(SkillId(1120003)) {
@@ -588,7 +606,7 @@ impl Character {
 
                 self.buff_manager
                     .set_buff(CharSecondaryStatFlags::ComboCounter, buff);
-            } else if skill.meta.id == 1201007 {
+            } else if skill.meta.id == SkillId(1201007) {
                 cond_buff!(v, CharSecondaryStatFlags::PowerGuard);
             } else {
                 let v = v.eval(level) as i16;

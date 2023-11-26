@@ -6,7 +6,7 @@ use shroom_pkt::mark_shroom_enum;
 //TODO model sub job for dual blade
 // Which is actually a beginner but sub job is set to 1
 
-use super::{FaceId, HairId, ItemId, MapId, SkillId};
+use super::{FaceId, HairId, ItemId, FieldId, SkillId};
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone, TryFromPrimitive, IntoPrimitive)]
 #[repr(u16)]
@@ -350,13 +350,13 @@ impl JobGroup {
         }
     }
 
-    pub fn get_start_map(&self) -> MapId {
+    pub fn get_start_map(&self) -> FieldId {
         match *self {
-            Self::Adventurer => MapId::MUSHROOM_TOWN,
-            Self::Legend => MapId::ARAN_TUTORIAL_START,
-            Self::Evan => MapId::STARTING_MAP_EVAN,
-            Self::KnightsOfCygnus => MapId::STARTING_MAP_NOBLESSE,
-            Self::Resistance => MapId::STARTING_MAP_RESISTANCE,
+            Self::Adventurer => FieldId::MUSHROOM_TOWN,
+            Self::Legend => FieldId::ARAN_TUTORIAL_START,
+            Self::Evan => FieldId::STARTING_MAP_EVAN,
+            Self::KnightsOfCygnus => FieldId::STARTING_MAP_NOBLESSE,
+            Self::Resistance => FieldId::STARTING_MAP_RESISTANCE,
         }
     }
 }

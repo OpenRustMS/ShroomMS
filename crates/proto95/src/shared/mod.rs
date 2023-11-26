@@ -121,6 +121,15 @@ pub struct Rect {
     pub bottom: i16,
 }
 
+#[derive(Debug, ShroomPacket)]
+pub struct Rect32 {
+    pub left: i32,
+    pub top: i32,
+    pub right: i32,
+    pub bottom: i32,
+}
+
+
 #[derive(Debug, Clone)]
 pub struct ServerAddr(pub Ipv4Addr);
 

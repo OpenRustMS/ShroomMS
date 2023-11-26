@@ -1,4 +1,4 @@
-use crate::{game::mob::MobId, send_opcodes::SendOpcodes, shared::ShroomTimeOffset};
+use crate::{game::life::mob::MobId, send_opcodes::SendOpcodes, shared::ShroomTimeOffset};
 use shroom_pkt::{
     packet_opcode,
     partial::{PartialData, PartialFlag},

@@ -93,11 +93,17 @@ impl SkillData {
 
 impl From<&SkillData> for SkillInfo {
     fn from(value: &SkillData) -> Self {
+        let master_level = if value.id.has_master_level() {
+            dbg!((value.mastery_level, value.id));
+            Some(value.mastery_level.map(|n| n as u32).unwrap_or(10))
+        } else {
+            None
+        };
         Self {
             id: value.id,
             level: value.level as u32,
             expiration: ShroomExpirationTime::never(),
-            master_level: value.mastery_level.map(|n| n as u32).into(),
+            master_level: master_level.into()
         }
     }
 }

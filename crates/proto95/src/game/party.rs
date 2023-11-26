@@ -1,12 +1,12 @@
 use shroom_pkt::{PacketTryWrapped, ShroomOption8, ShroomPacket, ShroomPacketEnum};
 
 use crate::{
-    id::{MapId, SkillId},
+    id::{FieldId, SkillId},
     login::world::ChannelId,
     shared::{char::CharacterId, NameStr},
 };
 
-use super::mob::MobId;
+use super::life::mob::MobId;
 
 pub type PartyID = u32;
 const MAX_PARTY_MEMBERS: usize = 6;
@@ -46,7 +46,7 @@ pub enum PartyMemberFieldId {
     #[default]
     Offline,
     CashShop,
-    Online(MapId),
+    Online(FieldId),
 }
 
 impl PacketTryWrapped for PartyMemberFieldId {
@@ -55,7 +55,7 @@ impl PacketTryWrapped for PartyMemberFieldId {
     fn packet_into_inner(&self) -> Self::Inner {
         match self {
             Self::Offline => -2,
-            Self::CashShop => MapId::NONE.0 as i32,
+            Self::CashShop => FieldId::NONE.0 as i32,
             Self::Online(field_id) => field_id.0 as i32,
         }
     }
@@ -66,8 +66,8 @@ impl PacketTryWrapped for PartyMemberFieldId {
             // TODO use Mapid None
             999999999 => Self::Offline,
             0.. => {
-                let map = MapId(v as u32);
-                if map == MapId::NONE {
+                let map = FieldId(v as u32);
+                if map == FieldId::NONE {
                     Self::Offline
                 } else {
                     Self::Online(map)
@@ -81,7 +81,7 @@ impl PacketTryWrapped for PartyMemberFieldId {
 #[derive(ShroomPacket, Debug, Default, Copy, Clone)]
 pub struct PartyMemberTownPortal {
     pub town_id: u32,
-    pub field_id: MapId,
+    pub field_id: FieldId,
     pub skill_id: SkillId,
     pub pos: euclid::default::Vector2D<i32>,
 }
@@ -148,7 +148,7 @@ impl PartyData {
 pub struct NewParty {
     pub party_id: PartyID,
     pub town_id: i32,
-    pub field_id: MapId,
+    pub field_id: FieldId,
     pub skill_id: SkillId,
     pub u1: u16,
     pub u2: u16,

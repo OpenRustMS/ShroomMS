@@ -45,13 +45,13 @@ pub struct TamingMobData {
 
 #[derive(ShroomPacket, Debug)]
 pub struct MiniRoomData {
-    sn: u32,
-    title: String,
-    private: bool,
-    game_kind: bool,
-    cur_users: u8,
-    max_users: u8,
-    game_on: bool,
+    pub sn: u32,
+    pub title: String,
+    pub private: bool,
+    pub game_kind: bool,
+    pub cur_users: u8,
+    pub max_users: u8,
+    pub game_on: bool,
 }
 
 #[derive(ShroomPacket, Debug)]

@@ -1,18 +1,19 @@
 use proto95::{
     game::{
-        reactor::{ReactorEnterFieldResp, ReactorId, ReactorLeaveFieldResp},
+        life::reactor::{ReactorEnterFieldResp, ReactorId, ReactorLeaveFieldResp},
         ObjectId,
     },
     shared::Vec2,
 };
 
-use super::{PoolItem, next_id};
+use super::{next_id, PoolItem};
 
 #[derive(Debug)]
 pub struct Reactor {
     pub pos: Vec2,
     pub tmpl_id: ReactorId,
     pub state: u8,
+    pub name: Option<String>,
 }
 
 impl PoolItem for Reactor {

@@ -9,14 +9,15 @@ members = [
 
     # server
     #"server/shrooming",
-    "server/login",
-    "server/game",
-    "server/mono",
 
 
     "crates/proto95",
     "crates/meta",
+    "crates/login",
+    "crates/game",
+    "crates/mono",
     "crates/data",
+    "crates/plugins",
     "crates/data/migration",
 ]
 exclude = ["client/shroom_hook","client/shroom_ffi"]

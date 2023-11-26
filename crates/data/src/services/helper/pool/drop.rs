@@ -1,4 +1,3 @@
-use std::{ops::Add, time::Duration};
 use meta::field::fh_tree::Foothold;
 use proto95::{
     game::{
@@ -6,16 +5,16 @@ use proto95::{
             DropEnterFieldResp, DropEnterType, DropId, DropLeaveFieldResp, DropLeaveType,
             DropOwner, DropType,
         },
-        mob::MobId,
         ObjectId,
     },
     id::ItemId,
     shared::Vec2,
 };
+use std::{ops::Add, time::Duration};
 
 use shroom_pkt::ShroomExpirationTime;
 
-use crate::services::{data::character::CharacterID, field::FieldRoomSet};
+use crate::services::field::FieldRoomSet;
 
 use super::{next_id, Pool, PoolItem, SimplePool};
 
@@ -116,18 +115,16 @@ impl SimplePool<Drop> {
         }
     }
 
-    pub fn add_mob_drops(
+    pub fn add_drops(
         &mut self,
-        killed_mob: MobId,
+        drops: &[(ItemId, usize)],
+        money: u32,
         pos: Vec2,
         fh: Option<&Foothold>,
-        killer: CharacterID,
+        owner: DropOwner,
         sessions: &FieldRoomSet,
     ) -> anyhow::Result<()> {
-        let items = self.meta.get_drops_for_mob(killed_mob);
-        let money = self.meta.get_money_drops_for_mob(killed_mob);
-
-        let n = items.len() + usize::from(money > 0);
+        let n = drops.len() + usize::from(money > 0);
         if n == 0 {
             return Ok(());
         }
@@ -141,7 +138,7 @@ impl SimplePool<Drop> {
         if money > 0 {
             self.add(
                 Drop {
-                    owner: DropOwner::User(killer as u32),
+                    owner,
                     pos: Vec2::from(
                         spread
                             .as_mut()
@@ -156,10 +153,10 @@ impl SimplePool<Drop> {
             )?;
         }
 
-        for (item, quantity) in items {
+        for (item, quantity) in drops.iter().copied() {
             self.add(
                 Drop {
-                    owner: DropOwner::User(killer as u32),
+                    owner,
                     pos: spread
                         .as_mut()
                         .and_then(|fh| fh.next().map(map_coord))

@@ -1,6 +1,6 @@
 use proto95::{
     game::{
-        npc::{NpcEnterFieldResp, NpcId, NpcInitData, NpcLeaveFieldResp},
+        life::npc::{NpcEnterFieldResp, NpcId, NpcInitData, NpcLeaveFieldResp},
         ObjectId,
     },
     shared::{FootholdId, Range2, Vec2},
@@ -22,7 +22,6 @@ impl PoolItem for Npc {
     type Id = ObjectId;
 
     type EnterPacket = NpcEnterFieldResp;
-
     type LeavePacket = NpcLeaveFieldResp;
 
     type LeaveParam = ();

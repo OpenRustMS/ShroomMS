@@ -8,10 +8,11 @@ use crate::services::{
 use meta::{FieldMob, MetaService, MobMeta};
 use proto95::{
     game::{
-        mob::{
-            CarnivalTeam, LocalMobData, MobChangeControllerResp, MobDamagedResp, MobEnterFieldResp,
-            MobHPIndicatorResp, MobId, MobInitData, MobLeaveFieldResp, MobLeaveType, MobMoveReq,
-            MobMoveResp, MobSummonType, MobTemporaryStatPartial, PartialMobTemporaryStat,
+        life::mob::{
+            CarnivalTeam, LocalMobData, MobChangeControllerResp, MobControlLevel, MobDamagedResp,
+            MobEnterFieldResp, MobHPIndicatorResp, MobId, MobInitData, MobLeaveFieldResp,
+            MobLeaveType, MobMoveReq, MobMoveResp, MobSummonType, MobTemporaryStatPartial,
+            PartialMobTemporaryStat,
         },
         ObjectId,
     },
@@ -190,8 +191,8 @@ impl MobPool {
             };
 
             let pkt = MobChangeControllerResp {
-                level: 1,
-                //seed: CrcSeed::default(),
+                level: MobControlLevel::Control,
+                crc_seed: None.into(),
                 id: *id,
                 local_mob_data: Some(LocalMobData {
                     calc_damage_index: 5,

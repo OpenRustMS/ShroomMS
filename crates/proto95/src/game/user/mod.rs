@@ -1,6 +1,7 @@
 pub mod char;
 pub mod remote;
 pub mod secondary_stats;
+pub mod pet;
 
 use bitflags::bitflags;
 use bytes::BufMut;
@@ -12,7 +13,7 @@ use shroom_pkt::{
 };
 
 use crate::{
-    id::{ItemId, MapId, SkillId},
+    id::{ItemId, FieldId, SkillId},
     recv_opcodes::RecvOpcodes,
     send_opcodes::SendOpcodes,
     shared::{
@@ -22,7 +23,7 @@ use crate::{
     },
 };
 
-use super::{mob::MobId, ObjectId};
+use super::{life::mob::MobId, ObjectId};
 
 #[derive(ShroomPacket, Debug)]
 pub struct UserDropMoneyReq {
@@ -56,7 +57,7 @@ fn is_not_empty(s: &str) -> bool {
 #[derive(ShroomPacket, Debug)]
 pub struct UserTransferFieldReq {
     pub field_key: u8,
-    pub target_field: MapId,
+    pub target_field: FieldId,
     pub portal: String,
     #[pkt(check(field = "portal", cond = "is_not_empty"))]
     pub target_pos: CondOption<Vec2>,

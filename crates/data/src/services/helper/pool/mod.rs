@@ -3,7 +3,7 @@ pub mod mob;
 pub mod npc;
 pub mod reactor;
 pub mod user;
-
+pub mod summoned;
 pub use drop::Drop;
 
 use meta::MetaService;
@@ -91,7 +91,7 @@ pub trait Pool {
 #[derive(Debug)]
 pub struct SimplePool<T: PoolItem> {
     items: BTreeMap<T::Id, T>,
-    meta: &'static MetaService,
+    pub meta: &'static MetaService,
 }
 
 impl<T: PoolItem> Pool for SimplePool<T>
@@ -129,6 +129,19 @@ where
             meta,
         }
     }
+
+    pub fn must_get_mut(&mut self, id: &ObjectId) -> anyhow::Result<&mut T> {
+        self.items
+            .get_mut(id)
+            .ok_or_else(|| anyhow::anyhow!("Item does not exist"))
+    }
+
+    pub fn must_get(&self, id: &ObjectId) -> anyhow::Result<&T> {
+        self.items
+            .get(id)
+            .ok_or_else(|| anyhow::anyhow!("Item does not exist"))
+    }
+
     pub fn from_elems(meta: &'static MetaService, elems: impl Iterator<Item = T>) -> Self {
         let mut pool = SimplePool::new(meta);
         pool.items
