@@ -1,4 +1,4 @@
-use shroom_pkt::{packet_opcode, ShroomList8, ShroomPacket};
+use shroom_pkt::{packet_with_opcode, ShroomList8, ShroomPacket};
 
 use crate::{
     recv_opcodes::RecvOpcodes,
@@ -30,13 +30,13 @@ pub struct NpcEnterFieldResp {
     pub template_id: NpcId,
     pub init: NpcInitData,
 }
-packet_opcode!(NpcEnterFieldResp, SendOpcodes::NpcEnterField);
+packet_with_opcode!(NpcEnterFieldResp, SendOpcodes::NpcEnterField);
 
 #[derive(ShroomPacket, Debug)]
 pub struct NpcLeaveFieldResp {
     pub id: ObjectId,
 }
-packet_opcode!(NpcLeaveFieldResp, SendOpcodes::NpcLeaveField);
+packet_with_opcode!(NpcLeaveFieldResp, SendOpcodes::NpcLeaveField);
 
 #[derive(ShroomPacket, Debug)]
 pub struct NpcImitateData {
@@ -49,13 +49,13 @@ pub struct NpcImitateData {
 pub struct NpcImitateDataResp {
     pub data: ShroomList8<NpcImitateData>,
 }
-packet_opcode!(NpcImitateDataResp, SendOpcodes::ImitatedNPCData);
+packet_with_opcode!(NpcImitateDataResp, SendOpcodes::ImitatedNPCData);
 
 #[derive(ShroomPacket, Debug)]
 pub struct NpcUpdateLimitedDisableInfoResp {
     pub data: ShroomList8<ObjectId>,
 }
-packet_opcode!(
+packet_with_opcode!(
     NpcUpdateLimitedDisableInfoResp,
     SendOpcodes::LimitedNPCDisableInfo
 );
@@ -68,7 +68,7 @@ pub struct NpcChangeControllerResp {
     pub tmpl_id: NpcId,
     pub init_data: NpcInitData,
 }
-packet_opcode!(NpcChangeControllerResp, SendOpcodes::NpcChangeController);
+packet_with_opcode!(NpcChangeControllerResp, SendOpcodes::NpcChangeController);
 
 #[derive(ShroomPacket, Debug)]
 pub struct ScriptInfo {
@@ -87,7 +87,7 @@ pub struct ModScript {
 pub struct NpcSetScriptResp {
     pub scripts: ShroomList8<ModScript>,
 }
-packet_opcode!(NpcSetScriptResp, SendOpcodes::NpcSetScript);
+packet_with_opcode!(NpcSetScriptResp, SendOpcodes::NpcSetScript);
 
 #[derive(ShroomPacket, Debug)]
 pub struct NpcMove {
@@ -96,25 +96,25 @@ pub struct NpcMove {
     pub move_path: MovePath,
 }
 pub type NpcMoveResp = NpcPoolPacket<NpcMove>;
-packet_opcode!(NpcMoveResp, SendOpcodes::NpcMove);
+packet_with_opcode!(NpcMoveResp, SendOpcodes::NpcMove);
 
 #[derive(ShroomPacket, Debug)]
 pub struct NpcUpdateLimitedInfo {
     pub enabled: bool,
 }
 pub type NpcUpdateLimitedInfoResp = NpcPoolPacket<NpcUpdateLimitedInfo>;
-packet_opcode!(NpcUpdateLimitedInfoResp, SendOpcodes::NpcUpdateLimitedInfo);
+packet_with_opcode!(NpcUpdateLimitedInfoResp, SendOpcodes::NpcUpdateLimitedInfo);
 
 #[derive(ShroomPacket, Debug)]
 pub struct NpcSetSpecialAction {
     pub action: String,
 }
 pub type NpcSetSpecialActionResp = NpcPoolPacket<NpcSetSpecialAction>;
-packet_opcode!(NpcSetSpecialActionResp, SendOpcodes::NpcSpecialAction);
+packet_with_opcode!(NpcSetSpecialActionResp, SendOpcodes::NpcSpecialAction);
 
 #[derive(ShroomPacket, Debug)]
 pub struct UserSelectNpcReq {
     pub id: NpcId,
     pub pos: Vec2,
 }
-packet_opcode!(UserSelectNpcReq, RecvOpcodes::UserSelectNpc);
+packet_with_opcode!(UserSelectNpcReq, RecvOpcodes::UserSelectNpc);

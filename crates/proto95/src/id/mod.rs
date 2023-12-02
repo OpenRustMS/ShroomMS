@@ -30,6 +30,7 @@ macro_rules! shroom_id {
 
         impl shroom_pkt::PacketWrapped for $name {
             type Inner = $ty;
+            type IntoValue<'a> = $ty;
 
             fn packet_into_inner(&self) -> Self::Inner {
                 self.0

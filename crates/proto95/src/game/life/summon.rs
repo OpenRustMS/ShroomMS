@@ -1,5 +1,5 @@
 use num_enum::{TryFromPrimitive, IntoPrimitive};
-use shroom_pkt::{packet_opcode, ShroomList8, ShroomOption8, ShroomPacket, mark_shroom_enum};
+use shroom_pkt::{packet_with_opcode, ShroomList8, ShroomOption8, ShroomPacket, mark_shroom_enum};
 
 use crate::{
     id::SkillId,
@@ -124,7 +124,7 @@ pub struct SummonCreateResp {
     pub skill_level: u8,
     pub init: SummonInitData,
 }
-packet_opcode!(SummonCreateResp, SendOpcodes::SummonedEnterField);
+packet_with_opcode!(SummonCreateResp, SendOpcodes::SummonedEnterField);
 
 #[derive(Debug, ShroomPacket)]
 pub struct SummonDeleteResp {
@@ -132,7 +132,7 @@ pub struct SummonDeleteResp {
     pub summon_id: SummonId,
     pub leave: SummonLeaveType
 }
-packet_opcode!(SummonDeleteResp, SendOpcodes::SummonedLeaveField);
+packet_with_opcode!(SummonDeleteResp, SendOpcodes::SummonedLeaveField);
 
 #[derive(Debug, ShroomPacket)]
 pub struct SummonMoveResp {
@@ -140,7 +140,7 @@ pub struct SummonMoveResp {
     pub summon_id: SummonId,
     pub path: MovePath,
 }
-packet_opcode!(SummonMoveResp, SendOpcodes::SummonedMove);
+packet_with_opcode!(SummonMoveResp, SendOpcodes::SummonedMove);
 
 #[derive(Debug, ShroomPacket)]
 pub struct SummonAttackInfo {
@@ -157,7 +157,7 @@ pub struct SummonAttackResp {
     pub attack_info: ShroomList8<SummonAttackInfo>,
     pub u: u8, // TODO
 }
-packet_opcode!(SummonAttackResp, SendOpcodes::SummonedAttack);
+packet_with_opcode!(SummonAttackResp, SendOpcodes::SummonedAttack);
 
 #[derive(Debug, ShroomPacket)]
 pub struct SummonSkillResp {
@@ -165,7 +165,7 @@ pub struct SummonSkillResp {
     pub summon_id: SummonId,
     pub attack_action: bool, // TODO: this is used as bool 0x7F
 }
-packet_opcode!(SummonSkillResp, SendOpcodes::SummonedSkill);
+packet_with_opcode!(SummonSkillResp, SendOpcodes::SummonedSkill);
 
 #[derive(Debug, ShroomPacket)]
 pub struct SummonHitResp {
@@ -177,4 +177,4 @@ pub struct SummonHitResp {
     pub mob_tmpl_id: u32,
     pub left: bool,
 }
-packet_opcode!(SummonHitResp, SendOpcodes::SummonedHit);
+packet_with_opcode!(SummonHitResp, SendOpcodes::SummonedHit);

@@ -1,10 +1,5 @@
 use std::collections::VecDeque;
 
-use crate::services::{
-    data::character::CharacterID,
-    field::{FieldRoomSet, SessionMsg},
-};
-
 use meta::{FieldMob, MetaService, MobMeta};
 use proto95::{
     game::{
@@ -19,6 +14,7 @@ use proto95::{
     shared::{FootholdId, Vec2},
 };
 use shroom_pkt::util::packet_buf::PacketBuf;
+use shroom_srv::srv::{room_set::RoomSessionSet, server_room::RoomSessionHandler};
 
 use super::{next_id, Pool, PoolItem, SimplePool};
 
@@ -151,7 +147,10 @@ impl MobPool {
         }
     }
 
-    pub fn respawn(&mut self, sessions: &FieldRoomSet) -> anyhow::Result<()> {
+    pub fn respawn<H: RoomSessionHandler>(
+        &mut self,
+        sessions: &mut RoomSessionSet<H>,
+    ) -> anyhow::Result<()> {
         if self.respawn_queue.is_empty() {
             return Ok(());
         }
@@ -176,10 +175,10 @@ impl MobPool {
         Ok(())
     }
 
-    pub fn assign_controller(
+    pub fn assign_controller<H: RoomSessionHandler>(
         &self,
-        session_id: CharacterID,
-        sessions: &FieldRoomSet,
+        session_id: H::SessionId,
+        sessions: &mut RoomSessionSet<H>,
     ) -> anyhow::Result<()> {
         //TODO move out loop
         for (id, mob) in self.mobs.items.iter() {
@@ -202,18 +201,17 @@ impl MobPool {
                 .into(),
             };
 
-            sessions.send_to(&session_id, SessionMsg::from_packet(pkt))?;
+            sessions.send_to_encode(session_id, pkt)?;
         }
         Ok(())
     }
 
-    pub fn attack_mob(
+    pub fn attack_mob<H: RoomSessionHandler>(
         &mut self,
-        attacker: CharacterID,
+        attacker: H::SessionId,
         id: ObjectId,
         dmg: u32,
-        buf: &mut PacketBuf,
-        sessions: &FieldRoomSet,
+        sessions: &mut RoomSessionSet<H>,
     ) -> anyhow::Result<bool> {
         let mob = self
             .mobs
@@ -230,22 +228,24 @@ impl MobPool {
             max_hp: mob.meta.max_hp,
         };
 
-        sessions.broadcast_filter(SessionMsg::from_packet(pkt), &attacker)?;
-
-        buf.encode_packet(MobHPIndicatorResp {
-            id,
-            hp_perc: mob.perc,
-        })?;
+        sessions.broadcast_encode_filter(pkt, attacker)?;
+        sessions.send_to_encode(
+            attacker,
+            MobHPIndicatorResp {
+                id,
+                hp_perc: mob.perc,
+            },
+        )?;
 
         Ok(mob.is_dead())
     }
 
-    pub fn mob_move(
+    pub fn mob_move<H: RoomSessionHandler>(
         &mut self,
         id: ObjectId,
         req: MobMoveReq,
-        controller: CharacterID,
-        sessions: &FieldRoomSet,
+        controller: H::SessionId,
+        sessions: &mut RoomSessionSet<H>,
     ) -> anyhow::Result<()> {
         let Some(mob) = self.mobs.items.get_mut(&id) else {
             return Ok(());
@@ -271,11 +271,15 @@ impl MobPool {
             move_path: req.move_path.path,
         };
 
-        sessions.broadcast_filter(SessionMsg::from_packet(pkt), &controller)?;
+        sessions.broadcast_encode_filter(pkt, controller)?;
         Ok(())
     }
 
-    pub fn kill_mob(&mut self, id: ObjectId, sessions: &FieldRoomSet) -> anyhow::Result<Mob> {
+    pub fn kill_mob<H: RoomSessionHandler>(
+        &mut self,
+        id: ObjectId,
+        sessions: &mut RoomSessionSet<H>,
+    ) -> anyhow::Result<Mob> {
         let mob = self.remove(id, MobLeaveType::Etc(()), sessions)?;
         if let Some(ix) = mob.spawn_ix {
             self.respawn_queue.push_back(ix);

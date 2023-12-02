@@ -1,5 +1,5 @@
 use shroom_pkt::{
-    packet_opcode, partial::PartialFlag, ShroomDurationMs32, ShroomIndexListZ8, ShroomList32,
+    packet_with_opcode, partial::PartialFlag, ShroomDurationMs32, ShroomIndexListZ8, ShroomList32,
     ShroomOption8, ShroomPacket,
 };
 
@@ -122,13 +122,13 @@ pub struct UserEnterFieldResp {
     pub char_id: CharacterId,
     pub user_init_data: UserRemoteInitData,
 }
-packet_opcode!(UserEnterFieldResp, SendOpcodes::UserEnterField);
+packet_with_opcode!(UserEnterFieldResp, SendOpcodes::UserEnterField);
 
 #[derive(ShroomPacket, Debug)]
 pub struct UserLeaveFieldResp {
     pub char_id: CharacterId,
 }
-packet_opcode!(UserLeaveFieldResp, SendOpcodes::UserLeaveField);
+packet_with_opcode!(UserLeaveFieldResp, SendOpcodes::UserLeaveField);
 
 #[derive(ShroomPacket, Debug)]
 pub struct UserSkillPrepareResp {
@@ -138,7 +138,7 @@ pub struct UserSkillPrepareResp {
     pub action_dir: ActionDir,
     pub action_speed: u8,
 }
-packet_opcode!(UserSkillPrepareResp, SendOpcodes::UserSkillPrepare);
+packet_with_opcode!(UserSkillPrepareResp, SendOpcodes::UserSkillPrepare);
 
 #[derive(ShroomPacket, Debug)]
 pub struct UserMovingShootPrepareResp {
@@ -148,7 +148,7 @@ pub struct UserMovingShootPrepareResp {
     pub action_dir: ActionDir,
     pub action_speed: u8,
 }
-packet_opcode!(
+packet_with_opcode!(
     UserMovingShootPrepareResp,
     SendOpcodes::UserMovingShootAttackPrepare
 );
@@ -158,7 +158,7 @@ pub struct UserSkillCancelResp {
     pub char_id: CharacterId,
     pub skill: SkillId,
 }
-packet_opcode!(UserSkillCancelResp, SendOpcodes::UserSkillCancel);
+packet_with_opcode!(UserSkillCancelResp, SendOpcodes::UserSkillCancel);
 
 #[derive(ShroomPacket, Debug)]
 pub struct UserEmotionResp {
@@ -166,14 +166,14 @@ pub struct UserEmotionResp {
     pub emotion: u32,
     pub dur: ShroomDurationMs32,
 }
-packet_opcode!(UserEmotionResp, SendOpcodes::UserEmotion);
+packet_with_opcode!(UserEmotionResp, SendOpcodes::UserEmotion);
 
 #[derive(ShroomPacket, Debug)]
 pub struct UserSetActiveItemEffectResp {
     pub char_id: CharacterId,
     pub item: ItemId,
 }
-packet_opcode!(
+packet_with_opcode!(
     UserSetActiveItemEffectResp,
     SendOpcodes::UserSetActiveEffectItem
 );
@@ -184,7 +184,7 @@ pub struct UserShowUpgradeTombEffectResp {
     pub item: ItemId,
     pub pos: TagPoint,
 }
-packet_opcode!(
+packet_with_opcode!(
     UserShowUpgradeTombEffectResp,
     SendOpcodes::UserShowUpgradeTombEffect
 );
@@ -197,21 +197,21 @@ pub struct UserThrowGrenadeResp {
     pub skill: SkillId,
     pub slv: u32,
 }
-packet_opcode!(UserThrowGrenadeResp, SendOpcodes::UserThrowGrenade);
+packet_with_opcode!(UserThrowGrenadeResp, SendOpcodes::UserThrowGrenade);
 
 #[derive(ShroomPacket, Debug)]
 pub struct UserMoveResp {
     pub char_id: CharacterId,
     pub move_path: MovePath,
 }
-packet_opcode!(UserMoveResp, SendOpcodes::UserMove);
+packet_with_opcode!(UserMoveResp, SendOpcodes::UserMove);
 
 #[derive(ShroomPacket, Debug)]
 pub struct UserSetActivePortablChairResp {
     pub char_id: CharacterId,
     pub chair_id: ItemId,
 }
-packet_opcode!(
+packet_with_opcode!(
     UserSetActivePortablChairResp,
     SendOpcodes::UserSetActivePortableChair
 );
@@ -238,19 +238,19 @@ pub struct UserAvatarModifiedResp {
     pub marriage: ShroomOption8<MarriageData>,
     pub completed_set_item_id: u32,
 }
-packet_opcode!(UserAvatarModifiedResp, SendOpcodes::UserAvatarModified);
+packet_with_opcode!(UserAvatarModifiedResp, SendOpcodes::UserAvatarModified);
 
 #[derive(ShroomPacket, Debug)]
 pub struct UserSetTemporaryStatResp {
     stats: PartialSecondaryStats,
 }
-packet_opcode!(UserSetTemporaryStatResp, SendOpcodes::UserTemporaryStatSet);
+packet_with_opcode!(UserSetTemporaryStatResp, SendOpcodes::UserTemporaryStatSet);
 
 #[derive(ShroomPacket, Debug)]
 pub struct UserResetTemporaryStatResp {
     flags: RemoteCharSecondaryStatFlags,
 }
-packet_opcode!(
+packet_with_opcode!(
     UserResetTemporaryStatResp,
     SendOpcodes::UserTemporaryStatReset
 );
@@ -260,16 +260,16 @@ pub struct UserReceiveHPResp {
     pub hp: u32,
     pub max_hp: u32,
 }
-packet_opcode!(UserReceiveHPResp, SendOpcodes::UserHP);
+packet_with_opcode!(UserReceiveHPResp, SendOpcodes::UserHP);
 
 #[derive(ShroomPacket, Debug)]
 pub struct UserGuildNameChangedResp {
     pub guild_name: String,
 }
-packet_opcode!(UserGuildNameChangedResp, SendOpcodes::UserGuildNameChanged);
+packet_with_opcode!(UserGuildNameChangedResp, SendOpcodes::UserGuildNameChanged);
 
 #[derive(ShroomPacket, Debug)]
 pub struct UserGuildMarkChangedResp {
     pub guild_mark: GuildMarkData,
 }
-packet_opcode!(UserGuildMarkChangedResp, SendOpcodes::UserGuildMarkChanged);
+packet_with_opcode!(UserGuildMarkChangedResp, SendOpcodes::UserGuildMarkChanged);

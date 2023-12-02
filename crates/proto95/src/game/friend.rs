@@ -1,5 +1,5 @@
 use shroom_pkt::{
-    packet_opcode, string::FixedPacketString, ShroomOption8, ShroomPacket, ShroomPacketEnum,
+    packet_with_opcode, string::FixedPacketString, ShroomOption8, ShroomPacket, ShroomPacketEnum,
 };
 
 use crate::{
@@ -87,4 +87,4 @@ pub enum FriendResultResp {
     MaxFriends(u8) = 0xe,
     UnknownF(ShroomOption8<String>) = 0xf,
 }
-packet_opcode!(FriendResultResp, SendOpcodes::FriendResult);
+packet_with_opcode!(FriendResultResp, SendOpcodes::FriendResult);

@@ -1,4 +1,4 @@
-use shroom_pkt::{ShroomPacket, packet_opcode, CondOption};
+use shroom_pkt::{ShroomPacket, packet_with_opcode, CondOption};
 
 use crate::{id::FieldId, shared::Vec2, game::ObjectId, send_opcodes::SendOpcodes, recv_opcodes::RecvOpcodes};
 
@@ -17,7 +17,7 @@ pub struct TownPortalChangedResp {
     pub skill: CondOption<TownPortalSkill>
     
 }
-packet_opcode!(TownPortalChangedResp, SendOpcodes::TownPortal);
+packet_with_opcode!(TownPortalChangedResp, SendOpcodes::TownPortal);
 
 #[derive(ShroomPacket, Debug)]
 pub struct TownPortalCreateResp {
@@ -26,7 +26,7 @@ pub struct TownPortalCreateResp {
     pub pos: Vec2,
 
 }
-packet_opcode!(TownPortalCreateResp, SendOpcodes::TownPortalCreated);
+packet_with_opcode!(TownPortalCreateResp, SendOpcodes::TownPortalCreated);
 
 #[derive(ShroomPacket, Debug)]
 pub struct TownPortalRemoveResp {
@@ -34,11 +34,11 @@ pub struct TownPortalRemoveResp {
     pub id: ObjectId,
 
 }
-packet_opcode!(TownPortalRemoveResp, SendOpcodes::TownPortalRemoved);
+packet_with_opcode!(TownPortalRemoveResp, SendOpcodes::TownPortalRemoved);
 
 #[derive(ShroomPacket, Debug)]
 pub struct TownPortalEnterReq {
     pub char_or_party_id: u32, // TODO check what this is
     pub u: bool, // TODO: always true?
 }
-packet_opcode!(TownPortalEnterReq, RecvOpcodes::EnterTownPortalRequest);
+packet_with_opcode!(TownPortalEnterReq, RecvOpcodes::EnterTownPortalRequest);

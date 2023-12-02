@@ -6,7 +6,7 @@ use super::shroom_session_backend::{
     SessionIngameData, SessionLoginData, ShroomSessionData, ShroomSessionError,
 };
 
-use shroom_net::session::{
+use shroom_srv::session::{
     migration::MigrationManager, OwnedMappedSession, OwnedSession, SessionBackend, SessionManager,
     SessionResult,
 };

@@ -10,7 +10,7 @@ pub mod script;
 pub mod shop;
 pub mod user;
 
-use shroom_pkt::{packet_opcode, time::Ticks, ShroomList32, ShroomPacket, ShroomPacketEnum};
+use shroom_pkt::{packet_with_opcode, time::Ticks, ShroomList32, ShroomPacket, ShroomPacketEnum};
 
 use crate::{
     id::job_id::JobId,
@@ -33,7 +33,7 @@ pub struct AntiMacroResultResp {
     pub u3: u8, // 1
     pub data: ShroomList32<u8>,
 }
-packet_opcode!(AntiMacroResultResp, SendOpcodes::AntiMacroResult);
+packet_with_opcode!(AntiMacroResultResp, SendOpcodes::AntiMacroResult);
 
 #[derive(ShroomPacket, Debug)]
 pub struct CharacterInfoReq {
@@ -41,7 +41,7 @@ pub struct CharacterInfoReq {
     pub char_id: CharacterId,
     pub pet_info: bool,
 }
-packet_opcode!(CharacterInfoReq, RecvOpcodes::UserCharacterInfoRequest);
+packet_with_opcode!(CharacterInfoReq, RecvOpcodes::UserCharacterInfoRequest);
 
 #[derive(ShroomPacket, Debug)]
 pub struct CharacterInfoResp {
@@ -49,7 +49,7 @@ pub struct CharacterInfoResp {
     pub level: u8,
     pub job: JobId,
 }
-packet_opcode!(CharacterInfoResp, SendOpcodes::CharacterInfo);
+packet_with_opcode!(CharacterInfoResp, SendOpcodes::CharacterInfo);
 
 #[derive(ShroomPacket, Debug)]
 pub struct MigrateInGameReq {
@@ -59,27 +59,27 @@ pub struct MigrateInGameReq {
     pub unknown: bool,
     pub client_key: ClientKey,
 }
-packet_opcode!(MigrateInGameReq, RecvOpcodes::MigrateIn);
+packet_with_opcode!(MigrateInGameReq, RecvOpcodes::MigrateIn);
 
 #[derive(ShroomPacket, Debug)]
 pub struct TransferChannelReq {
     pub channel_id: u8,
     pub ticks: Ticks,
 }
-packet_opcode!(TransferChannelReq, RecvOpcodes::UserTransferChannelRequest);
+packet_with_opcode!(TransferChannelReq, RecvOpcodes::UserTransferChannelRequest);
 
 #[derive(ShroomPacket, Debug)]
 pub struct MigrateCommandResp {
     pub unknown: bool, //always true?
     pub addr: ServerSocketAddr,
 }
-packet_opcode!(MigrateCommandResp, SendOpcodes::MigrateCommand);
+packet_with_opcode!(MigrateCommandResp, SendOpcodes::MigrateCommand);
 
 #[derive(ShroomPacket, Debug)]
 pub struct UpdateGMBoardReq {
     board_id: u32,
 }
-packet_opcode!(UpdateGMBoardReq, RecvOpcodes::UpdateGMBoard);
+packet_with_opcode!(UpdateGMBoardReq, RecvOpcodes::UpdateGMBoard);
 
 #[derive(ShroomPacket, Debug)]
 pub struct UserPortalScriptReq {
@@ -87,24 +87,24 @@ pub struct UserPortalScriptReq {
     portal_name: String,
     pos: Vec2,
 }
-packet_opcode!(UserPortalScriptReq, RecvOpcodes::UserPortalScriptRequest);
+packet_with_opcode!(UserPortalScriptReq, RecvOpcodes::UserPortalScriptRequest);
 
 #[derive(ShroomPacket, Debug)]
 pub struct ResetNLCPQ;
 //TODO opcode name??
-packet_opcode!(ResetNLCPQ, RecvOpcodes::RequireFieldObstacleStatus);
+packet_with_opcode!(ResetNLCPQ, RecvOpcodes::RequireFieldObstacleStatus);
 
 #[derive(ShroomPacket, Debug)]
 pub struct CtxSetGenderResp {
     pub gender: Gender,
 }
-packet_opcode!(CtxSetGenderResp, SendOpcodes::SetGender);
+packet_with_opcode!(CtxSetGenderResp, SendOpcodes::SetGender);
 
 #[derive(ShroomPacket, Debug)]
 pub struct ClaimSvrStatusChangedResp {
     pub connected: bool,
 }
-packet_opcode!(
+packet_with_opcode!(
     ClaimSvrStatusChangedResp,
     SendOpcodes::ClaimSvrStatusChanged
 );
@@ -152,4 +152,4 @@ pub enum BroadcastMessageResp {
     HeartSpeaker(()) = 19,
     SkillSpeaker(()) = 20,
 }
-packet_opcode!(BroadcastMessageResp, SendOpcodes::BroadcastMsg);
+packet_with_opcode!(BroadcastMessageResp, SendOpcodes::BroadcastMsg);

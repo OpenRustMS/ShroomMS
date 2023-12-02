@@ -49,10 +49,11 @@ nom = "7"
 serde_json = "1"
 trackr = "0.1"
 num = "0.4"
-wasmtime = "14"
+wasmtime = "15"
 meta = { version = "0.1", path = "../../crates/meta" }
 shroom-net = "0.4"
 shroom-pkt = "0.1.1"
+shroom-srv = "0.1"
 proto95 = { version = "0.1.0", path = "../../crates/proto95" }
 plugins = { version = "0.1.0", path = "../plugins" }
 

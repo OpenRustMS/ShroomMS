@@ -1,4 +1,4 @@
-use shroom_pkt::{packet_opcode, CondOption, ShroomList16, ShroomList8, ShroomPacket};
+use shroom_pkt::{packet_with_opcode, CondOption, ShroomList16, ShroomList8, ShroomPacket};
 
 use crate::{recv_opcodes::RecvOpcodes, send_opcodes::SendOpcodes, shared::Vec2};
 
@@ -10,21 +10,21 @@ pub type ChannelId = u16;
 
 #[derive(ShroomPacket, Debug)]
 pub struct LogoutWorldReq;
-packet_opcode!(LogoutWorldReq, RecvOpcodes::LogoutWorld);
+packet_with_opcode!(LogoutWorldReq, RecvOpcodes::LogoutWorld);
 
 #[derive(Debug, ShroomPacket)]
 pub struct WorldInfoReq;
-packet_opcode!(WorldInfoReq, RecvOpcodes::WorldInfoRequest);
+packet_with_opcode!(WorldInfoReq, RecvOpcodes::WorldInfoRequest);
 
 #[derive(Debug, ShroomPacket)]
 pub struct WorldReq;
-packet_opcode!(WorldReq, RecvOpcodes::WorldRequest);
+packet_with_opcode!(WorldReq, RecvOpcodes::WorldRequest);
 
 #[derive(Debug, ShroomPacket)]
 pub struct WorldCheckUserLimitReq {
     pub world: WorldId16,
 }
-packet_opcode!(WorldCheckUserLimitReq, RecvOpcodes::CheckUserLimit);
+packet_with_opcode!(WorldCheckUserLimitReq, RecvOpcodes::CheckUserLimit);
 
 #[derive(Debug, ShroomPacket)]
 pub struct WorldCheckUserLimitResp {
@@ -32,7 +32,7 @@ pub struct WorldCheckUserLimitResp {
     //TODO seems like a bool
     pub populate_level: u8,
 }
-packet_opcode!(WorldCheckUserLimitResp, SendOpcodes::CheckUserLimitResult);
+packet_with_opcode!(WorldCheckUserLimitResp, SendOpcodes::CheckUserLimitResult);
 
 #[derive(Debug, ShroomPacket)]
 pub struct RecommendWorldMessage {
@@ -44,7 +44,7 @@ pub struct RecommendWorldMessage {
 pub struct RecommendWorldMessageResp {
     messages: ShroomList8<RecommendWorldMessage>,
 }
-packet_opcode!(
+packet_with_opcode!(
     RecommendWorldMessageResp,
     SendOpcodes::RecommendWorldMessage
 );
@@ -53,7 +53,7 @@ packet_opcode!(
 pub struct LastConnectedWorldResp {
     last_world: WorldId,
 }
-packet_opcode!(LastConnectedWorldResp, SendOpcodes::LatestConnectedWorld);
+packet_with_opcode!(LastConnectedWorldResp, SendOpcodes::LatestConnectedWorld);
 
 #[derive(Debug, ShroomPacket)]
 pub struct ChannelItem {
@@ -92,7 +92,7 @@ pub struct WorldInfoResp {
     #[pkt(check(field = "world_id", cond = "has_world_info"))]
     pub world: CondOption<WorldItem>,
 }
-packet_opcode!(WorldInfoResp, SendOpcodes::WorldInformation);
+packet_with_opcode!(WorldInfoResp, SendOpcodes::WorldInformation);
 
 impl WorldInfoResp {
     pub fn end() -> Self {
@@ -118,4 +118,4 @@ pub struct SelectWorldReq {
     // TODO: 2-5 of sa_data
     pub sa_data: u32,
 }
-packet_opcode!(SelectWorldReq, RecvOpcodes::SelectWorld);
+packet_with_opcode!(SelectWorldReq, RecvOpcodes::SelectWorld);

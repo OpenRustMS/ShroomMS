@@ -6,7 +6,7 @@ pub mod pet;
 use bitflags::bitflags;
 use bytes::BufMut;
 use shroom_pkt::{
-    mark_shroom_bitflags, packet_opcode, time::Ticks, CondOption, DecodePacket, EncodePacket,
+    mark_shroom_bitflags, packet_with_opcode, time::Ticks, CondOption, DecodePacket, EncodePacket,
     PacketReader, PacketResult, PacketWrapped, PacketWriter, ShroomDurationMs16,
     ShroomDurationMs32, ShroomEncodePacket, ShroomExpirationTime, ShroomList16, ShroomList8,
     ShroomOption8, ShroomPacket, ShroomPacketEnum, SizeHint,
@@ -30,7 +30,7 @@ pub struct UserDropMoneyReq {
     pub ticks: Ticks,
     pub money: u32,
 }
-packet_opcode!(UserDropMoneyReq, RecvOpcodes::UserDropMoneyRequest);
+packet_with_opcode!(UserDropMoneyReq, RecvOpcodes::UserDropMoneyRequest);
 
 #[derive(ShroomPacket, Debug)]
 pub struct UserDropPickUpReq {
@@ -40,7 +40,7 @@ pub struct UserDropPickUpReq {
     pub drop_id: ObjectId,
     pub crc: u32,
 }
-packet_opcode!(UserDropPickUpReq, RecvOpcodes::DropPickUpRequest);
+packet_with_opcode!(UserDropPickUpReq, RecvOpcodes::DropPickUpRequest);
 
 #[derive(ShroomPacket, Debug)]
 pub struct UserPortalScriptReq {
@@ -48,7 +48,7 @@ pub struct UserPortalScriptReq {
     pub portal: String,
     pub pos: Vec2,
 }
-packet_opcode!(UserPortalScriptReq, RecvOpcodes::UserPortalScriptRequest);
+packet_with_opcode!(UserPortalScriptReq, RecvOpcodes::UserPortalScriptRequest);
 
 fn is_not_empty(s: &str) -> bool {
     !s.is_empty()
@@ -65,7 +65,7 @@ pub struct UserTransferFieldReq {
     pub premium: bool,
     pub chase_target_pos: ShroomOption8<TagPoint>,
 }
-packet_opcode!(UserTransferFieldReq, RecvOpcodes::UserTransferFieldRequest);
+packet_with_opcode!(UserTransferFieldReq, RecvOpcodes::UserTransferFieldRequest);
 
 #[derive(ShroomPacket, Debug)]
 pub struct UserMoveReq {
@@ -80,7 +80,7 @@ pub struct UserMoveReq {
     pub movement_crc: u32,
     pub move_path: MovePath,
 }
-packet_opcode!(UserMoveReq, RecvOpcodes::UserMove);
+packet_with_opcode!(UserMoveReq, RecvOpcodes::UserMove);
 
 #[derive(ShroomPacket, Debug)]
 pub struct UserStatChangeReq {
@@ -91,7 +91,7 @@ pub struct UserStatChangeReq {
     pub mp: u16,
     pub option: u8,
 }
-packet_opcode!(UserStatChangeReq, RecvOpcodes::UserChangeStatRequest);
+packet_with_opcode!(UserStatChangeReq, RecvOpcodes::UserChangeStatRequest);
 
 #[derive(ShroomPacket, Debug)]
 pub struct UserHitKnockback {
@@ -118,7 +118,7 @@ pub struct UserHitReq {
     //non 0xfe end here
     pub unknown: u8,
 }
-packet_opcode!(UserHitReq, RecvOpcodes::UserHit);
+packet_with_opcode!(UserHitReq, RecvOpcodes::UserHit);
 
 bitflags! {
     #[derive(Debug)]
@@ -145,6 +145,7 @@ pub struct HitTargetCount {
 
 impl PacketWrapped for HitTargetCount {
     type Inner = u8;
+    type IntoValue<'a> = Self::Inner;  
 
     fn packet_into_inner(&self) -> Self::Inner {
         (self.targets << 4) | (self.hits & 0xF)
@@ -166,6 +167,7 @@ pub struct ActionDir {
 
 impl PacketWrapped for ActionDir {
     type Inner = u16;
+    type IntoValue<'a> = Self::Inner;  
 
     fn packet_into_inner(&self) -> Self::Inner {
         (self.left as u16) << 15 | (self.action & 0x7FFF)
@@ -187,6 +189,7 @@ pub struct ForeActionDir {
 
 impl PacketWrapped for ForeActionDir {
     type Inner = u8;
+    type IntoValue<'a> = Self::Inner;  
 
     fn packet_into_inner(&self) -> Self::Inner {
         (self.left as u8) << 7 | (self.action & 0x7F)
@@ -230,16 +233,16 @@ impl AttackTargetInfo {
         (0..targets)
             .map(|_| {
                 Ok(AttackTargetInfo {
-                    mob_id: ObjectId::decode_packet(pr)?,
-                    hit_action: u8::decode_packet(pr)?,
-                    fore_action: ForeActionDir::decode_packet(pr)?,
-                    frame_id: u8::decode_packet(pr)?,
-                    calc_damage_stat_ix: u8::decode_packet(pr)?,
-                    pos_a: Vec2::decode_packet(pr)?,
-                    pos_b: Vec2::decode_packet(pr)?,
-                    delay: u16::decode_packet(pr)?,
-                    hits: u32::decode_packet_n(pr, hits)?,
-                    mob_crc: u32::decode_packet(pr)?,
+                    mob_id: ObjectId::decode(pr)?,
+                    hit_action: u8::decode(pr)?,
+                    fore_action: ForeActionDir::decode(pr)?,
+                    frame_id: u8::decode(pr)?,
+                    calc_damage_stat_ix: u8::decode(pr)?,
+                    pos_a: Vec2::decode(pr)?,
+                    pos_b: Vec2::decode(pr)?,
+                    delay: u16::decode(pr)?,
+                    hits: u32::decode_n(pr, hits)?,
+                    mob_crc: u32::decode(pr)?,
                 })
             })
             .collect()
@@ -266,10 +269,10 @@ where
     Info: AttackInfo + DecodePacket<'de>,
     Extra: DecodePacket<'de>,
 {
-    fn decode_packet(pr: &mut PacketReader<'de>) -> PacketResult<Self> {
-        let info = Info::decode_packet(pr)?;
+    fn decode(pr: &mut PacketReader<'de>) -> PacketResult<Self> {
+        let info = Info::decode(pr)?;
         let targets = AttackTargetInfo::decode(pr, info.targets(), info.hits())?;
-        let extra = Extra::decode_packet(pr)?;
+        let extra = Extra::decode(pr)?;
         Ok(Self {
             info,
             targets,
@@ -294,15 +297,15 @@ pub struct ReactorFlag(pub bool);
 impl EncodePacket for ReactorFlag {
     const SIZE_HINT: SizeHint = SizeHint::NONE;
 
-    fn encode_packet<B: BufMut>(&self, pw: &mut PacketWriter<B>) -> PacketResult<()> {
+    fn encode<B: BufMut>(&self, pw: &mut PacketWriter<B>) -> PacketResult<()> {
         if self.0 {
-            self.0.encode_packet(pw)?;
+            self.0.encode(pw)?;
         }
 
         Ok(())
     }
 
-    fn packet_len(&self) -> usize {
+    fn encode_len(&self) -> usize {
         if self.0 {
             1
         } else {
@@ -312,7 +315,7 @@ impl EncodePacket for ReactorFlag {
 }
 
 impl<'de> DecodePacket<'de> for ReactorFlag {
-    fn decode_packet(pr: &mut PacketReader<'de>) -> PacketResult<Self> {
+    fn decode(pr: &mut PacketReader<'de>) -> PacketResult<Self> {
         let n = pr.remaining_slice().len();
         if n == 60 {
             let _ = pr.read_u8()?;
@@ -368,6 +371,7 @@ pub struct DrHitTargetCount {
 
 impl PacketWrapped for DrHitTargetCount {
     type Inner = (u32, u32, HitTargetCount, u32, u32);
+    type IntoValue<'a> = Self::Inner;  
 
     fn packet_into_inner(&self) -> Self::Inner {
         (
@@ -393,7 +397,7 @@ impl PacketWrapped for DrHitTargetCount {
 }
 
 pub type UserMeleeAttackReq = AttackReq<MeleeAttackInfo, MeleeAttackTail>;
-packet_opcode!(UserMeleeAttackReq, RecvOpcodes::UserMeleeAttack);
+packet_with_opcode!(UserMeleeAttackReq, RecvOpcodes::UserMeleeAttack);
 
 #[derive(ShroomPacket, Debug)]
 pub struct SkillInfoCrc {
@@ -445,7 +449,7 @@ impl AttackInfo for MagicAttackInfo {
 }
 
 pub type UserMagicAttackReq = AttackReq<MagicAttackInfo, MagicAttackTail>;
-packet_opcode!(UserMagicAttackReq, RecvOpcodes::UserMagicAttack);
+packet_with_opcode!(UserMagicAttackReq, RecvOpcodes::UserMagicAttack);
 
 #[derive(Debug, ShroomPacket)]
 pub struct BodyAttackInfo {
@@ -482,7 +486,7 @@ impl AttackInfo for BodyAttackInfo {
 }
 
 pub type UserBodyAttackReq = AttackReq<BodyAttackInfo, BodyAttackTail>;
-packet_opcode!(UserBodyAttackReq, RecvOpcodes::UserBodyAttack);
+packet_with_opcode!(UserBodyAttackReq, RecvOpcodes::UserBodyAttack);
 
 bitflags! {
     #[derive(Debug)]
@@ -544,14 +548,14 @@ impl AttackInfo for ShotAttackInfo {
 }
 
 pub type UserShotAttackReq = AttackReq<ShotAttackInfo, ShootAttackTail>;
-packet_opcode!(UserShotAttackReq, RecvOpcodes::UserShootAttack);
+packet_with_opcode!(UserShotAttackReq, RecvOpcodes::UserShootAttack);
 
 #[derive(ShroomPacket, Debug)]
 pub struct UserSkillUpReq {
     pub ticks: Ticks,
     pub skill_id: SkillId,
 }
-packet_opcode!(UserSkillUpReq, RecvOpcodes::UserSkillUpRequest);
+packet_with_opcode!(UserSkillUpReq, RecvOpcodes::UserSkillUpRequest);
 
 #[derive(Debug, ShroomEncodePacket)]
 pub struct AffectedMembers(Option<u8>);
@@ -564,14 +568,14 @@ impl AffectedMembers {
 }
 
 impl<'de> DecodePacket<'de> for AffectedMembers {
-    fn decode_packet(pr: &mut PacketReader<'de>) -> PacketResult<Self> {
+    fn decode(pr: &mut PacketReader<'de>) -> PacketResult<Self> {
         let rem = pr.remaining();
         Ok(Self(match rem {
             // Either without Dispel(3) or with Dispel(+2) the remaining + the delay at the end
             _ if rem.checked_sub(3 + 1).map_or(false, |n| n % 4 == 0)
                 || rem.checked_sub(5 + 1).map_or(false, |n| n % 4 == 0) =>
             {
-                Some(u8::decode_packet(pr)?)
+                Some(u8::decode(pr)?)
             }
             _ => None,
         }))
@@ -588,11 +592,11 @@ impl AffectedMobs {
 }
 
 impl<'de> DecodePacket<'de> for AffectedMobs {
-    fn decode_packet(pr: &mut PacketReader<'de>) -> PacketResult<Self> {
+    fn decode(pr: &mut PacketReader<'de>) -> PacketResult<Self> {
         // Remaining must be 2 + 1(n) + 4*n
         let rem = pr.remaining().saturating_sub(3);
         Ok(Self(if rem != 0 && rem % 4 == 0 {
-            Some(ShroomList8::decode_packet(pr)?)
+            Some(ShroomList8::decode(pr)?)
         } else {
             None
         }))
@@ -614,7 +618,7 @@ pub struct UserSkillUseReq {
     pub affected_mobs: AffectedMobs,
     pub delay: ShroomDurationMs16,
 }
-packet_opcode!(UserSkillUseReq, RecvOpcodes::UserSkillUseRequest);
+packet_with_opcode!(UserSkillUseReq, RecvOpcodes::UserSkillUseRequest);
 
 #[derive(ShroomPacket, Debug)]
 pub struct UpdatedSkillRecord {
@@ -630,21 +634,21 @@ pub struct ChangeSkillRecordResp {
     pub skill_records: ShroomList16<UpdatedSkillRecord>,
     pub updated_secondary_stat: bool,
 }
-packet_opcode!(ChangeSkillRecordResp, SendOpcodes::ChangeSkillRecordResult);
+packet_with_opcode!(ChangeSkillRecordResp, SendOpcodes::ChangeSkillRecordResult);
 
 #[derive(Debug, ShroomPacket)]
 pub struct SkillUseResultResp {
     // Unused, the client reset excl regardless
     pub unknown: u8,
 }
-packet_opcode!(SkillUseResultResp, SendOpcodes::SkillUseResult);
+packet_with_opcode!(SkillUseResultResp, SendOpcodes::SkillUseResult);
 
 #[derive(ShroomPacket, Debug)]
 pub struct SkillCooldownSetResp {
     pub skill_id: SkillId,
     pub cooldown_s: u16, //TODO ShroomDurationSec16
 }
-packet_opcode!(SkillCooldownSetResp, SendOpcodes::SkillCooltimeSet);
+packet_with_opcode!(SkillCooldownSetResp, SendOpcodes::SkillCooltimeSet);
 
 #[derive(ShroomPacket, Debug)]
 pub struct PopularityResult {
@@ -663,7 +667,7 @@ pub enum GivePopularityResp {
     Notify(PopularityResult) = 5,
 }
 
-packet_opcode!(GivePopularityResp, SendOpcodes::GivePopularityResult);
+packet_with_opcode!(GivePopularityResp, SendOpcodes::GivePopularityResult);
 
 #[derive(ShroomPacketEnum, Debug)]
 #[repr(u8)]
@@ -725,7 +729,7 @@ pub enum MessageResp {
     SkillExpire(ShroomList8<SkillId>) = 14,
 }
 
-packet_opcode!(MessageResp, SendOpcodes::Message);
+packet_with_opcode!(MessageResp, SendOpcodes::Message);
 
 #[cfg(test)]
 mod tests {

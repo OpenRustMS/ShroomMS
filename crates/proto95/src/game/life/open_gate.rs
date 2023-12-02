@@ -1,4 +1,4 @@
-use shroom_pkt::{packet_opcode, ShroomPacket};
+use shroom_pkt::{packet_with_opcode, ShroomPacket};
 
 use crate::{
     send_opcodes::SendOpcodes,
@@ -13,7 +13,7 @@ pub struct OpenGateCreateResp {
     pub first: bool, // Either first or second gate
     pub party_id: PartyID,
 }
-packet_opcode!(OpenGateCreateResp, SendOpcodes::OpenGateCreated);
+packet_with_opcode!(OpenGateCreateResp, SendOpcodes::OpenGateCreated);
 
 #[derive(ShroomPacket, Debug)]
 pub struct OpenGateRemoveResp {
@@ -21,7 +21,7 @@ pub struct OpenGateRemoveResp {
     pub char_id: CharacterId,
     pub first: bool,
 }
-packet_opcode!(OpenGateRemoveResp, SendOpcodes::OpenGateRemoved);
+packet_with_opcode!(OpenGateRemoveResp, SendOpcodes::OpenGateRemoved);
 
 #[derive(ShroomPacket, Debug)]
 pub struct OpenGateEntryReq {
@@ -29,4 +29,4 @@ pub struct OpenGateEntryReq {
     pub pos: Vec2,
     pub first: bool
 }
-packet_opcode!(OpenGateEntryReq, RecvOpcodes::EnterOpenGateRequest);
+packet_with_opcode!(OpenGateEntryReq, RecvOpcodes::EnterOpenGateRequest);

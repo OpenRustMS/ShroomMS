@@ -30,8 +30,8 @@ enum Account {
 enum Ban {
     Table,
     Id,
-    BanReason,
-    BanTime,
+    Reason,
+    Time,
     AccId,
 }
 
@@ -107,8 +107,8 @@ enum Skill {
     Table,
     Id,
     CharId,
-    SkillId,
-    SkillLevel,
+    GameId,
+    Level,
     MasterLevel,
     ExpiresAt,
     Cooldown,
@@ -176,7 +176,7 @@ impl Default for Migration {
         let ban_table = ShroomTbl::new(
             Ban::Table,
             Ban::Id,
-            [shroom_str(Ban::BanReason), date_time(Ban::BanTime)],
+            [shroom_str(Ban::Reason), date_time(Ban::Time)],
             [Ref::ownership(Ban::AccId, &acc_table)],
         );
 
@@ -247,8 +247,8 @@ impl Default for Migration {
             Skill::Table,
             Skill::Id,
             [
-                shroom_id(Skill::SkillId),
-                shroom_int(Skill::SkillLevel),
+                shroom_id(Skill::GameId),
+                shroom_int(Skill::Level),
                 shroom_int(Skill::MasterLevel),
                 date_time(Skill::ExpiresAt),
                 date_time(Skill::Cooldown),

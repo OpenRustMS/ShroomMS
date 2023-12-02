@@ -1,5 +1,5 @@
 use shroom_pkt::{
-    list::ShroomListLen, packet_opcode, CondEither, ShroomList, ShroomList16, ShroomOption8,
+    list::ShroomListLen, packet_with_opcode, CondEither, ShroomList, ShroomList16, ShroomOption8,
     ShroomPacket, ShroomTime,
 };
 
@@ -63,7 +63,7 @@ impl NotificationList {
     }
 
     pub fn ban_reason(&self) -> Option<&str> {
-        self.0.get(0).map(|s| s.as_str())
+        self.0.first().map(|s| s.as_str())
     }
 
     pub fn extra(&self) -> impl Iterator<Item = &str> {
@@ -111,4 +111,4 @@ pub struct SetFieldResp {
     pub char_data: CondEither<FieldCharData, FieldTransferData>,
     pub server_time: ShroomTime,
 }
-packet_opcode!(SetFieldResp, SendOpcodes::SetField);
+packet_with_opcode!(SetFieldResp, SendOpcodes::SetField);

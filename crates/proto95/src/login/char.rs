@@ -1,5 +1,5 @@
 use shroom_pkt::{
-    packet_opcode, shroom_enum_code, ShroomList8, ShroomOption8, ShroomPacket, ShroomPacketEnum,
+    packet_with_opcode, shroom_enum_code, ShroomList8, ShroomOption8, ShroomPacket, ShroomPacketEnum,
 };
 
 use crate::{
@@ -25,7 +25,7 @@ type CharacterId = u32;
 pub struct ViewAllCharFlagSet {
     pub set: bool,
 }
-packet_opcode!(ViewAllCharFlagSet, RecvOpcodes::VACFlagSet);
+packet_with_opcode!(ViewAllCharFlagSet, RecvOpcodes::VACFlagSet);
 
 #[derive(ShroomPacket, Debug)]
 pub struct MigrateStageInfo {
@@ -48,14 +48,14 @@ pub struct SelectCharResp {
     //TODO add all options
     pub result: SelectCharResult,
 }
-packet_opcode!(SelectCharResp, SendOpcodes::SelectCharacterResult);
+packet_with_opcode!(SelectCharResp, SendOpcodes::SelectCharacterResult);
 
 //TODO how does this work? must use prestored world i guess
 #[derive(ShroomPacket, Debug)]
 pub struct ViewAllCharReq {
     start_mode: StartModeInfo,
 }
-packet_opcode!(ViewAllCharReq, RecvOpcodes::ViewAllChar);
+packet_with_opcode!(ViewAllCharReq, RecvOpcodes::ViewAllChar);
 
 #[derive(Debug, ShroomPacketEnum)]
 #[repr(u8)]
@@ -69,7 +69,7 @@ pub enum ViewAllCharResp {
     Error6(ViewAllCharCustomError) = 6,
     Error7(ViewAllCharCustomError) = 7,
 }
-packet_opcode!(ViewAllCharResp, SendOpcodes::ViewAllCharResult);
+packet_with_opcode!(ViewAllCharResp, SendOpcodes::ViewAllCharResult);
 
 #[derive(Debug, ShroomPacketEnum)]
 #[repr(u8)]
@@ -77,17 +77,17 @@ pub enum SelectWorldResp {
     Success(SelectWorldCharList) = 0,
     Err(()) = 1, //TODO add more errors
 }
-packet_opcode!(SelectWorldResp, SendOpcodes::SelectWorldResult);
+packet_with_opcode!(SelectWorldResp, SendOpcodes::SelectWorldResult);
 
 #[derive(Debug, ShroomPacketEnum)]
 #[repr(u8)]
 pub enum CreateCharResp {
-    Success(ViewChar) = 0,
+    Success(Box<ViewChar>) = 0,
     Timeout(()) = 0xa,
     SystemError(()) = 0x1a,
     InvalidCharName(()) = 0x1e, //TODO more errors?
 }
-packet_opcode!(CreateCharResp, SendOpcodes::CreateNewCharacterResult);
+packet_with_opcode!(CreateCharResp, SendOpcodes::CreateNewCharacterResult);
 
 shroom_enum_code!(
     SelectCharResultCode,
@@ -124,14 +124,14 @@ pub struct DeleteCharResp {
     pub char_id: CharacterId,
     pub result: DeleteCharResult,
 }
-packet_opcode!(DeleteCharResp, SendOpcodes::DeleteCharacterResult);
+packet_with_opcode!(DeleteCharResp, SendOpcodes::DeleteCharacterResult);
 
 #[derive(ShroomPacket, Debug)]
 pub struct DeleteCharReq {
     pub pic: String,
     pub char_id: CharacterId,
 }
-packet_opcode!(DeleteCharReq, RecvOpcodes::DeleteCharacter);
+packet_with_opcode!(DeleteCharReq, RecvOpcodes::DeleteCharacter);
 
 #[derive(ShroomPacket, Debug)]
 pub struct EnableSecondPasswordResp {
@@ -139,20 +139,20 @@ pub struct EnableSecondPasswordResp {
     // TODO <= 0x17, some error code like others
     pub result: u8,
 }
-packet_opcode!(EnableSecondPasswordResp, SendOpcodes::EnableSPWResult);
+packet_with_opcode!(EnableSecondPasswordResp, SendOpcodes::EnableSPWResult);
 
 #[derive(ShroomPacket, Debug)]
 pub struct CheckSecondPasswordResp {
     pub u1: u8, // Todo: Unused code??
 }
-packet_opcode!(CheckSecondPasswordResp, SendOpcodes::CheckSPWResult);
+packet_with_opcode!(CheckSecondPasswordResp, SendOpcodes::CheckSPWResult);
 
 #[derive(Debug, ShroomPacket)]
 pub struct ExtraCharInfoResp {
     pub acc_id: AccountId,
     pub no_extra_char: bool,
 }
-packet_opcode!(ExtraCharInfoResp, SendOpcodes::CheckExtraCharInfoResult);
+packet_with_opcode!(ExtraCharInfoResp, SendOpcodes::CheckExtraCharInfoResult);
 
 #[derive(ShroomPacket, Debug)]
 pub struct ViewChar {
@@ -229,7 +229,7 @@ pub struct SelectCharEnablePicReq {
     pub hw_info: HardwareInfo,
     pub pic: String,
 }
-packet_opcode!(SelectCharEnablePicReq, RecvOpcodes::EnableSPWRequest);
+packet_with_opcode!(SelectCharEnablePicReq, RecvOpcodes::EnableSPWRequest);
 
 #[derive(ShroomPacket, Debug)]
 pub struct SelectCharCheckPicReq {
@@ -237,14 +237,14 @@ pub struct SelectCharCheckPicReq {
     pub char_id: CharacterId,
     pub hw_info: HardwareInfo,
 }
-packet_opcode!(SelectCharCheckPicReq, RecvOpcodes::CheckSPWRequest);
+packet_with_opcode!(SelectCharCheckPicReq, RecvOpcodes::CheckSPWRequest);
 
 #[derive(ShroomPacket, Debug)]
 pub struct SelectCharReq {
     pub char_id: CharacterId,
     pub hw_info: HardwareInfo,
 }
-packet_opcode!(SelectCharReq, RecvOpcodes::SelectCharacter);
+packet_with_opcode!(SelectCharReq, RecvOpcodes::SelectCharacter);
 
 // Login Opt 0  == Enable Second Password
 #[derive(ShroomPacket, Debug)]
@@ -255,7 +255,7 @@ pub struct SelectCharEnablePicVac {
     pub hw_info: HardwareInfo,
     pub pic: String,
 }
-packet_opcode!(SelectCharEnablePicVac, RecvOpcodes::EnableSPWRequestByVAC);
+packet_with_opcode!(SelectCharEnablePicVac, RecvOpcodes::EnableSPWRequestByVAC);
 
 // Login Opt 1  == Check Second Password
 #[derive(ShroomPacket, Debug)]
@@ -265,7 +265,7 @@ pub struct SelectCharCheckPicVac {
     pub world_id: WorldId,
     pub hw_info: HardwareInfo,
 }
-packet_opcode!(SelectCharCheckPicVac, RecvOpcodes::CheckSPWRequestByVAC);
+packet_with_opcode!(SelectCharCheckPicVac, RecvOpcodes::CheckSPWRequestByVAC);
 
 // Login Opt 2/3
 #[derive(ShroomPacket, Debug)]
@@ -274,7 +274,7 @@ pub struct SelectCharReqVac {
     world_id: WorldId,
     hw_info: HardwareInfo,
 }
-packet_opcode!(SelectCharReqVac, RecvOpcodes::SelectCharacterByVAC);
+packet_with_opcode!(SelectCharReqVac, RecvOpcodes::SelectCharacterByVAC);
 
 #[derive(ShroomPacket, Debug)]
 pub struct CharStarterSet {
@@ -296,7 +296,7 @@ pub struct CreateCharReq {
     pub starter_set: CharStarterSet,
     pub gender: Gender,
 }
-packet_opcode!(CreateCharReq, RecvOpcodes::CreateNewCharacter);
+packet_with_opcode!(CreateCharReq, RecvOpcodes::CreateNewCharacter);
 
 #[derive(ShroomPacket, Debug)]
 pub struct CreateCharSale {
@@ -305,13 +305,13 @@ pub struct CreateCharSale {
     pub sale_job: u32,
     pub starter_set: CharStarterSet,
 }
-packet_opcode!(CreateCharSale, RecvOpcodes::CreateNewCharacterInCS);
+packet_with_opcode!(CreateCharSale, RecvOpcodes::CreateNewCharacterInCS);
 
 #[derive(ShroomPacket, Debug)]
 pub struct CheckDuplicateIDReq {
     pub name: String,
 }
-packet_opcode!(CheckDuplicateIDReq, RecvOpcodes::CheckDuplicatedID);
+packet_with_opcode!(CheckDuplicateIDReq, RecvOpcodes::CheckDuplicatedID);
 
 shroom_enum_code!(
     CheckDuplicateIDResult,
@@ -330,4 +330,4 @@ pub struct CheckDuplicateIDResp {
     pub name: String,
     pub result: CheckDuplicateIDResult,
 }
-packet_opcode!(CheckDuplicateIDResp, SendOpcodes::CheckDuplicatedIDResult);
+packet_with_opcode!(CheckDuplicateIDResp, SendOpcodes::CheckDuplicatedIDResult);

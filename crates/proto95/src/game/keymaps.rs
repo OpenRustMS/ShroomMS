@@ -1,4 +1,4 @@
-use shroom_pkt::{packet_opcode, ShroomOptionR8, ShroomPacket};
+use shroom_pkt::{packet_with_opcode, ShroomOptionR8, ShroomPacket};
 
 use crate::send_opcodes::SendOpcodes;
 
@@ -22,4 +22,4 @@ impl FuncKeyMapInitResp {
     }
 }
 
-packet_opcode!(FuncKeyMapInitResp, SendOpcodes::FuncKeyMappedInit);
+packet_with_opcode!(FuncKeyMapInitResp, SendOpcodes::FuncKeyMappedInit);

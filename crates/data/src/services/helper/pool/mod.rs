@@ -2,24 +2,22 @@ pub mod drop;
 pub mod mob;
 pub mod npc;
 pub mod reactor;
-pub mod user;
 pub mod summoned;
+pub mod user;
 pub use drop::Drop;
 
 use meta::MetaService;
 pub use mob::Mob;
 pub use npc::Npc;
-use shroom_pkt::{util::packet_buf::PacketBuf, EncodePacket, HasOpcode};
+use shroom_pkt::{util::packet_buf::PacketBuf, ShroomPacket};
+use shroom_srv::srv::{room_set::RoomSessionSet, server_room::{RoomHandler, RoomSessionHandler}};
 
 use std::{collections::BTreeMap, sync::atomic::AtomicU32};
 
 use proto95::game::ObjectId;
 use std::fmt::Debug;
 
-use crate::services::{
-    data::character::CharacterID,
-    field::{FieldRoomSet, SessionMsg},
-};
+use crate::services::data::character::CharacterID;
 
 pub fn next_id() -> ObjectId {
     static ID: AtomicU32 = AtomicU32::new(0);
@@ -30,8 +28,8 @@ pub trait PoolId {}
 
 pub trait PoolItem {
     type Id: Clone + Eq + std::fmt::Debug;
-    type EnterPacket: EncodePacket + HasOpcode;
-    type LeavePacket: EncodePacket + HasOpcode;
+    type EnterPacket: ShroomPacket;
+    type LeavePacket: ShroomPacket;
     type LeaveParam;
 
     fn get_id(&self) -> Self::Id;
@@ -47,41 +45,43 @@ pub trait Pool {
     fn add_item(&mut self, id: Self::Id, item: Self::Item) -> anyhow::Result<()>;
     fn remove_item(&mut self, id: &Self::Id) -> anyhow::Result<Option<Self::Item>>;
 
-    fn add_filter(
+    fn add_filter<H: RoomSessionHandler>(
         &mut self,
         item: Self::Item,
-        sessions: &FieldRoomSet,
-        src: CharacterID,
+        sessions: &mut RoomSessionSet<H>,
+        src: H::SessionId,
     ) -> anyhow::Result<Self::Id> {
         let id = Self::Item::get_id(&item);
         let pkt = item.get_enter_pkt(id.clone());
         self.add_item(id.clone(), item)?;
-
-        sessions.broadcast_filter(SessionMsg::from_packet(pkt), &src)?;
+        sessions.broadcast_encode_filter(pkt, src)?;
         Ok(id)
     }
 
-    fn add(&mut self, item: Self::Item, sessions: &FieldRoomSet) -> anyhow::Result<Self::Id> {
+    fn add<H: RoomSessionHandler>(
+        &mut self,
+        item: Self::Item,
+        sessions: &mut RoomSessionSet<H>,
+    ) -> anyhow::Result<Self::Id> {
         let id = Self::Item::get_id(&item);
         let pkt = item.get_enter_pkt(id.clone());
         self.add_item(id.clone(), item)?;
-
-        sessions.broadcast(SessionMsg::from_packet(pkt))?;
+        sessions.broadcast_encode(pkt)?;
         Ok(id)
     }
 
-    fn remove(
+    fn remove<H: RoomSessionHandler>(
         &mut self,
         id: Self::Id,
         param: <Self::Item as PoolItem>::LeaveParam,
-        sessions: &FieldRoomSet,
+        sessions: &mut RoomSessionSet<H>,
     ) -> anyhow::Result<Self::Item> {
         let Some(item) = self.remove_item(&id)? else {
             anyhow::bail!("Item does not exist");
         };
 
         let pkt = item.get_leave_pkt(id, param);
-        sessions.broadcast(SessionMsg::from_packet(pkt))?;
+        sessions.broadcast_encode(pkt)?;
         Ok(item)
     }
 
@@ -112,7 +112,7 @@ where
 
     fn on_enter(&self, packet_buf: &mut PacketBuf) -> anyhow::Result<()> {
         for (id, pkt) in self.items.iter() {
-            packet_buf.encode_packet(pkt.get_enter_pkt(id.clone()))?;
+            packet_buf.encode(pkt.get_enter_pkt(id.clone()))?;
         }
 
         Ok(())

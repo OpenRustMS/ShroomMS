@@ -1,89 +1,49 @@
-use std::{sync::Arc, time::Duration};
+use std::{num::Saturating, sync::Arc};
 
-use dashmap::{mapref::entry::Entry, DashMap};
 use meta::{field::FhTree, FieldLife, FieldMeta, MetaService};
 use proto95::{
     game::{
-        chat::UserChatMsgResp,
         drop::{DropId, DropOwner},
-        ObjectId, life::mob::{MobLeaveType, MobMoveReq},
+        life::{
+            mob::{MobLeaveType, MobMoveReq},
+            npc::NpcId,
+        },
+        ObjectId,
     },
-    id::{FieldId, ItemId, SkillId},
+    id::ItemId,
     shared::{
         char::{AvatarData, Money},
         movement::MovePath,
-        FootholdId, Range2, Vec2,
+        Range2, Vec2,
     },
 };
-use shroom_net::server::{
-    room::{Room, RoomJoinHandle, RoomSet, RoomState},
-    tick::Tick,
+use shroom_pkt::util::packet_buf::PacketBuf;
+use shroom_srv::{
+    srv::{server_room::{RoomCtx, RoomHandler, RoomSessionHandler}, room_set::ServerSessionData, server_socket::ServerSocketHandle},
+    util::delay_queue::DelayQueue,
+    Context,
 };
-use shroom_pkt::{
-    util::packet_buf::PacketBuf, EncodePacket, HasOpcode, PacketWriter, ShroomPacketData,
-};
-use tokio::sync::{mpsc, oneshot};
 
 use super::{
     data::character::CharacterID,
-    helper::{
-        delay_queue::DelayQueue,
-        pool::{
-            drop::{DropLeaveParam, DropTypeValue},
-            mob::MobPool,
-            reactor::Reactor,
-            summoned::Summon,
-            user::User,
-            Drop, Mob, Npc, Pool, SimplePool,
-        },
+    game::GameSession,
+    helper::pool::{
+        drop::{Drop, DropLeaveParam, DropTypeValue},
+        mob::MobPool,
+        reactor::Reactor,
+        summoned::Summon,
+        user::User,
+        Mob, Npc, Pool, SimplePool,
     },
+    GameCtx,
 };
 
-#[derive(Clone, Debug)]
-pub enum SessionMsg {
-    Pkt(ShroomPacketData),
-    PktBuf(Arc<PacketBuf>),
-}
-
-impl SessionMsg {
-    pub fn from_packet<T: EncodePacket + HasOpcode>(pkt: T) -> Self {
-        let mut pw = PacketWriter::default();
-        pw.write_opcode(T::OPCODE).expect("op");
-        pkt.encode_packet(&mut pw).expect("pw");
-
-        Self::Pkt(ShroomPacketData::from_writer(pw))
-    }
-}
-
-impl From<PacketBuf> for SessionMsg {
-    fn from(pkt: PacketBuf) -> Self {
-        Self::PktBuf(Arc::new(pkt))
-    }
-}
-
 #[derive(Debug)]
-pub struct SharedFieldState {
-    field_meta: FieldMeta,
-    field_fh: &'static FhTree,
-    drops: DashMap<DropId, Drop>,
-}
+pub struct FieldService;
 
-impl SharedFieldState {
-    /// Fast way to loot items
-    pub fn try_claim_drop(
-        &self,
-        drop_id: DropId,
-        check: impl FnOnce(&Drop) -> bool,
-    ) -> Option<Drop> {
-        let Entry::Occupied(drop) = self.drops.entry(drop_id) else {
-            return None;
-        };
-
-        if check(drop.get()) {
-            Some(drop.remove())
-        } else {
-            None
-        }
+impl FieldService {
+    pub fn new(_meta: &'static MetaService) -> Self {
+        Self
     }
 }
 
@@ -93,7 +53,13 @@ pub enum FieldEvent {
 }
 
 #[derive(Debug)]
-pub struct FieldData {
+pub struct SharedFieldState {
+    pub field_meta: FieldMeta,
+    pub field_fh: &'static FhTree,
+}
+
+#[derive(Debug)]
+pub struct FieldHandler {
     shared: Arc<SharedFieldState>,
     drop_pool: SimplePool<Drop>,
     mob_pool: MobPool,
@@ -101,173 +67,220 @@ pub struct FieldData {
     reactor_pool: SimplePool<Reactor>,
     user_pool: SimplePool<User>,
     summon_pool: SimplePool<Summon>,
-    sessions: FieldRoomSet,
     drop_spam: Option<Vec2>,
     field_events: DelayQueue<FieldEvent>,
     meta: &'static MetaService,
 }
 
-pub type FieldRoomSet = RoomSet<CharacterID, SessionMsg>;
-pub type FieldSessionHandle = mpsc::Sender<SessionMsg>;
+impl RoomHandler for FieldHandler {
+    type Ctx = GameCtx;
+    type SessionHandler = GameSession;
 
-pub enum FieldMsg {
-    UserUpdatePos(MovePath),
-    NpcAdd(Npc),
-    NpcRemove(ObjectId),
-    MobAdd(Mob),
-    MobRemove(ObjectId, MobLeaveType),
-    MobUpdatePos(MobMoveReq, CharacterID),
-    MobAssignController(CharacterID),
-    MobAttack {
-        id: ObjectId,
-        dmg: u32,
-    },
-    DropAdd(Drop),
-    DropRemove(DropId, DropLeaveParam),
-    Chat(UserChatMsgResp),
-    SlowLoot(DropId, DropLeaveParam, oneshot::Sender<Option<Drop>>),
-    StartSpamDrop(Vec2),
-    StopSpamDrop,
-    ReactorAttack {
-        id: ObjectId,
-        attacker: CharacterID,
-    },
-    SummonSpawn {
-        char_id: CharacterID,
-        char_level: u8,
-        skill_id: SkillId,
-        skill_level: u8,
-        pos: Vec2,
-        fh: FootholdId,
-    },
+    fn on_enter(
+        &mut self,
+        ctx: &mut Self::Ctx,
+        session: &mut ServerSessionData<Self::SessionHandler>,
+    ) -> anyhow::Result<()> {
+        log::info!("Session entering field");
+        Ok(())
+    }
+    fn on_leave(
+        ctx: &mut RoomCtx<'_, Self::SessionHandler>,
+        id: <Self::SessionHandler as RoomSessionHandler>::SessionId,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+    fn on_update(ctx: &mut RoomCtx<'_, Self::SessionHandler>) -> anyhow::Result<()> {
+        ctx.handle_update()
+    }
 }
 
-impl RoomState for FieldData {
-    type ConnMsg = SessionMsg;
-    type Key = CharacterID;
-    type Msg = FieldMsg;
-    type JoinData = AvatarData;
-    type CreateData = (&'static MetaService, Arc<SharedFieldState>);
+pub trait FieldRoomCtxExt {
+    fn ctx(&self) -> &RoomCtx<'_, GameSession>;
+    fn ctx_mut(&mut self) -> &mut RoomCtx<'_, GameSession>;
 
-    fn create(
-        create_data: Self::CreateData,
-        conns: RoomSet<Self::Key, Self::ConnMsg>,
-    ) -> anyhow::Result<Self> {
-        Ok(FieldData::new(create_data.0, create_data.1, conns))
-    }
-
-    fn session_mut(&mut self) -> &mut RoomSet<Self::Key, Self::ConnMsg> {
-        &mut self.sessions
-    }
-
-    fn sessions(&self) -> &RoomSet<Self::Key, Self::ConnMsg> {
-        &self.sessions
-    }
-
-    fn handle_leave(&mut self, id: Self::Key) -> anyhow::Result<()> {
-        self.leave_field(id);
+    fn update_user_pos(&mut self, move_path: MovePath, id: CharacterID) -> anyhow::Result<()> {
+        let ctx = self.ctx_mut();
+        ctx.room
+            .user_pool
+            .user_move(id, move_path, &mut ctx.room_sessions)?;
         Ok(())
     }
 
-    fn handle_join(&mut self, id: Self::Key, data: Self::JoinData) -> anyhow::Result<()> {
-        self.enter_field(id, data)
+    fn add_npc(&mut self, npc: Npc) -> anyhow::Result<()> {
+        let ctx = self.ctx_mut();
+        ctx.room.npc_pool.add(npc, &mut ctx.room_sessions)?;
+        Ok(())
     }
 
-    fn handle_msg(&mut self, src: Option<Self::Key>, msg: Self::Msg) -> anyhow::Result<()> {
-        match msg {
-            FieldMsg::UserUpdatePos(move_path) => {
-                self.update_user_pos(move_path, src.expect("user pos"))?;
-            }
-            FieldMsg::NpcAdd(npc) => {
-                self.add_npc(npc)?;
-            }
-            FieldMsg::NpcRemove(id) => {
-                self.remove_npc(id, ())?;
-            }
-            FieldMsg::MobAdd(mob) => {
-                self.add_mob(mob)?;
-            }
-            FieldMsg::MobRemove(id, leave) => {
-                self.remove_mob(id, leave)?;
-            }
-            FieldMsg::MobUpdatePos(movement, id) => {
-                self.update_mob_pos(movement, id)?;
-            }
-            FieldMsg::MobAssignController(id) => {
-                self.assign_mob_controller(id)?;
-            }
-            FieldMsg::MobAttack { id, dmg } => {
-                self.attack_mob(id, dmg, src.expect("attacker"))?;
-            }
-            FieldMsg::DropAdd(drop) => {
-                self.add_drop(drop)?;
-            }
-            FieldMsg::DropRemove(id, param) => {
-                self.remove_drop(id, param)?;
-            }
-            FieldMsg::Chat(msg) => {
-                self.add_chat(msg)?;
-            }
-            FieldMsg::SlowLoot(id, reason, tx) => {
-                let drop = self.remove_drop(id, reason).ok();
-                tx.send(drop).ok();
-            }
-            FieldMsg::StartSpamDrop(pos) => self.drop_spam = Some(pos),
-            FieldMsg::StopSpamDrop => {
-                self.drop_spam = None;
-            }
-            FieldMsg::ReactorAttack { id, attacker } => {
-                let reactor = self.reactor_pool.must_get_mut(&id)?;
-                reactor.state = reactor.state.saturating_sub(1);
-                if reactor.state == 0 {
-                    let drops = self.meta.get_reactor_drops(reactor.tmpl_id);
-                    let pos = reactor.pos.clone();
-                    self.reactor_pool.remove(id, (), &self.sessions)?;
-                    self.spread_drops(pos, DropOwner::User(attacker as u32), &drops, 10)?;
-                }
-            }
-            FieldMsg::SummonSpawn {
-                char_id,
-                char_level,
-                skill_id,
-                skill_level,
-                pos,
-                fh
-            } => {
-                self.summon_pool.add(
-                    Summon {
-                        pos,
-                        fh,
-                        skill_id,
-                        skill_level,
-                        char_level,
-                        char_id: char_id as u32,
-                    },
-                    &self.sessions,
-                )?;
-            }
+    fn remove_npc(&mut self, id: NpcId) -> anyhow::Result<()> {
+        let ctx = self.ctx_mut();
+        ctx.room.npc_pool.remove(id, (), &mut ctx.room_sessions)?;
+        Ok(())
+    }
+
+    fn add_mob(&mut self, mob: Mob) -> anyhow::Result<()> {
+        let ctx = self.ctx_mut();
+        ctx.room.mob_pool.add(mob, &mut ctx.room_sessions)?;
+        Ok(())
+    }
+
+    fn remove_mob(&mut self, id: ObjectId, leave: MobLeaveType) -> anyhow::Result<()> {
+        let ctx = self.ctx_mut();
+        ctx.room
+            .mob_pool
+            .remove(id, leave, &mut ctx.room_sessions)?;
+        Ok(())
+    }
+
+    fn update_mob_pos(
+        &mut self,
+        movement: MobMoveReq,
+        controller: CharacterID,
+    ) -> anyhow::Result<()> {
+        let ctx = self.ctx_mut();
+        ctx.room
+            .mob_pool
+            .mob_move(movement.id, movement, controller, &mut ctx.room_sessions)?;
+        Ok(())
+    }
+
+    fn assign_mob_controller(&mut self, session_id: CharacterID) -> anyhow::Result<()> {
+        let ctx = self.ctx_mut();
+        ctx.room
+            .mob_pool
+            .assign_controller(session_id, &mut ctx.room_sessions)?;
+        Ok(())
+    }
+
+    fn attack_mob(&mut self, id: ObjectId, dmg: u32, attacker: CharacterID) -> anyhow::Result<()> {
+        let ctx = self.ctx_mut();
+        let killed = ctx
+            .room
+            .mob_pool
+            .attack_mob(attacker, id, dmg, &mut ctx.room_sessions)?;
+
+        if killed {
+            let mob = ctx.room.mob_pool.kill_mob(id, &mut ctx.room_sessions)?;
+            let meta = ctx.room.meta;
+            let drops = meta.get_drops_for_mob(mob.tmpl_id);
+            let money = meta.get_money_drops_for_mob(mob.tmpl_id);
+
+            let fh = ctx
+                .room
+                .shared
+                .field_fh
+                .get_foothold_below((mob.pos.x as f32, mob.pos.y as f32 - 20.).into());
+
+            ctx.room.drop_pool.add_drops(
+                &drops,
+                money,
+                mob.pos,
+                fh,
+                DropOwner::User(attacker as u32),
+                &mut ctx.room_sessions,
+            )?;
         }
 
         Ok(())
     }
 
-    fn handle_tick(&mut self) -> anyhow::Result<()> {
-        self.mob_pool.respawn(&self.sessions)?;
+    fn add_drop(&mut self, drop: Drop) -> anyhow::Result<()> {
+        let ctx = self.ctx_mut();
+        let drop_id = ctx.room.drop_pool.add(drop, &mut ctx.room_sessions)?;
+        ctx.room.field_events.push(
+            FieldEvent::DropTimeout(drop_id),
+            ctx.room_ctx.time().add_ms(60_000),
+        );
+        Ok(())
+    }
 
-        for event in self.field_events.drain_expired() {
+    fn remove_drop(&mut self, id: DropId, param: DropLeaveParam) -> anyhow::Result<Drop> {
+        let ctx = self.ctx_mut();
+        ctx.room.drop_pool.remove(id, param, &mut ctx.room_sessions)
+    }
+
+    fn chat(&mut self, msg: proto95::game::chat::UserChatMsgResp) -> anyhow::Result<()> {
+        let ctx = self.ctx_mut();
+        ctx.room_sessions.broadcast_encode(msg)?;
+        Ok(())
+    }
+
+    fn start_spam_drop(&mut self, pos: Vec2) -> anyhow::Result<()> {
+        let ctx = self.ctx_mut();
+        ctx.room.drop_spam = Some(pos);
+        Ok(())
+    }
+
+    fn stop_spam_drop(&mut self) -> anyhow::Result<()> {
+        let ctx = self.ctx_mut();
+        ctx.room.drop_spam = None;
+        Ok(())
+    }
+
+    fn attack_reactor(&mut self, id: ObjectId, attacker: CharacterID) -> anyhow::Result<()> {
+        let ctx = self.ctx_mut();
+
+        let reactor = ctx.room.reactor_pool.must_get_mut(&id)?;
+        reactor.state -= 1;
+        if reactor.state.0 == 0 {
+            let drops = ctx.room.meta.get_reactor_drops(reactor.tmpl_id);
+            let pos = reactor.pos;
+            ctx.room
+                .reactor_pool
+                .remove(id, (), &mut ctx.room_sessions)?;
+            self.spread_drops(pos, DropOwner::User(attacker as u32), &drops, 10)?;
+        }
+
+        Ok(())
+    }
+
+    fn summon_spawn(
+        &mut self,
+        char_id: CharacterID,
+        char_level: u8,
+        skill_id: proto95::id::SkillId,
+        skill_level: u8,
+        pos: Vec2,
+        fh: u16,
+    ) -> anyhow::Result<()> {
+        let ctx = self.ctx_mut();
+        ctx.room.summon_pool.add(
+            Summon {
+                pos,
+                fh,
+                skill_id,
+                skill_level,
+                char_level,
+                char_id: char_id as u32,
+            },
+            &mut ctx.room_sessions,
+        )?;
+        Ok(())
+    }
+
+    fn handle_update(&mut self) -> anyhow::Result<()> {
+        let ctx = self.ctx_mut();
+        let t = ctx.time();
+
+        ctx.room.mob_pool.respawn(&mut ctx.room_sessions)?;
+
+        for event in ctx.room.field_events.drain_expired(t) {
             match event {
                 FieldEvent::DropTimeout(id) => {
                     // Remove fail is not a problem
-                    let _ = self
-                        .drop_pool
-                        .remove(id, DropLeaveParam::TimeOut, &self.sessions);
+                    let _ = ctx.room.drop_pool.remove(
+                        id,
+                        DropLeaveParam::TimeOut,
+                        &mut ctx.room_sessions,
+                    );
                 }
             }
         }
 
-        if let Some(pos) = self.drop_spam {
+        if let Some(pos) = ctx.room.drop_spam {
             for _ in 0..10 {
-                self.drop_pool.add(
+                ctx.room.drop_pool.add(
                     Drop {
                         owner: proto95::game::drop::DropOwner::None,
                         pos,
@@ -275,21 +288,75 @@ impl RoomState for FieldData {
                         value: DropTypeValue::Mesos(100),
                         quantity: 1,
                     },
-                    &self.sessions,
+                    &mut ctx.room_sessions,
                 )?;
             }
         }
 
         Ok(())
     }
+
+    fn spread_drops(
+        &mut self,
+        pos: Vec2,
+        owner: DropOwner,
+        drops: &[(ItemId, usize)],
+        money: Money,
+    ) -> anyhow::Result<()> {
+        let ctx = self.ctx_mut();
+        let fh = ctx
+            .room
+            .shared
+            .field_fh
+            .get_foothold_below((pos.x as f32, pos.y as f32 - 20.).into());
+
+        ctx.room
+            .drop_pool
+            .add_drops(drops, money, pos, fh, owner, &mut ctx.room_sessions)?;
+
+        Ok(())
+    }
+
+    fn enter_field(&mut self, char_id: CharacterID, avatar_data: AvatarData, sck: &mut ServerSocketHandle) -> anyhow::Result<()> {
+        log::info!("Char entering field1");
+        let ctx = self.ctx_mut();
+        ctx.room.user_pool.add_filter(
+            User {
+                char_id: char_id as u32,
+                pos: Vec2::from((0, 0)),
+                fh: 1,
+                avatar_data,
+            },
+            &mut ctx.room_sessions,
+            char_id,
+        )?;
+        log::info!("Char entering field2");
+
+        let mut buf = PacketBuf::default();
+        ctx.room.user_pool.on_enter(&mut buf)?;
+        ctx.room.drop_pool.on_enter(&mut buf)?;
+        ctx.room.npc_pool.on_enter(&mut buf)?;
+        ctx.room.mob_pool.on_enter(&mut buf)?;
+        ctx.room.reactor_pool.on_enter(&mut buf)?;
+        log::info!("sending enter field pkt: {}", buf.packets().count());
+        sck.send_buf(buf);
+
+        log::info!("Char entering field3");
+
+        Ok(())
+    }
+
+    fn leave_field(&mut self, id: CharacterID) {
+        let ctx = self.ctx_mut();
+        ctx.room
+            .user_pool
+            .remove(id as u32, (), &mut ctx.room_sessions)
+            .expect("Must remove user");
+    }
 }
 
-impl FieldData {
-    pub fn new(
-        meta_svc: &'static MetaService,
-        shared: Arc<SharedFieldState>,
-        sessions: FieldRoomSet,
-    ) -> Self {
+impl FieldHandler {
+    pub fn new(meta_svc: &'static MetaService, shared: Arc<SharedFieldState>) -> Self {
         let meta = shared.field_meta;
         let npcs = meta
             .life
@@ -326,7 +393,7 @@ impl FieldData {
             name: r.name.clone(),
             pos: r.pos,
             tmpl_id: r.id,
-            state: 0,
+            state: Saturating(0),
         });
 
         Self {
@@ -337,169 +404,23 @@ impl FieldData {
             reactor_pool: SimplePool::from_elems(meta_svc, reactors),
             user_pool: SimplePool::new(meta_svc),
             summon_pool: SimplePool::new(meta_svc),
-            sessions,
             drop_spam: None,
             field_events: DelayQueue::new(),
             meta: meta_svc,
         }
     }
-
-    pub fn enter_field(
-        &mut self,
-        char_id: CharacterID,
-        avatar_data: AvatarData,
-    ) -> anyhow::Result<()> {
-        self.user_pool.add_filter(
-            User {
-                char_id: char_id as u32,
-                pos: Vec2::from((0, 0)),
-                fh: 1,
-                avatar_data,
-            },
-            &self.sessions,
-            char_id,
-        )?;
-        let mut buf = PacketBuf::default();
-        self.user_pool.on_enter(&mut buf)?;
-        self.drop_pool.on_enter(&mut buf)?;
-        self.npc_pool.on_enter(&mut buf)?;
-        self.mob_pool.on_enter(&mut buf)?;
-        self.reactor_pool.on_enter(&mut buf)?;
-        self.sessions
-            .send_to(&char_id, SessionMsg::PktBuf(Arc::new(buf)))?;
-
-        Ok(())
-    }
-
-    pub fn leave_field(&mut self, id: CharacterID) {
-        self.user_pool
-            .remove(id as u32, (), &self.sessions)
-            .expect("Must remove user");
-    }
-
-    pub fn add_user(&mut self, user: User) -> anyhow::Result<()> {
-        self.user_pool.add(user, &self.sessions)?;
-        Ok(())
-    }
-
-    pub fn remove_user(&mut self, id: CharacterID) -> anyhow::Result<()> {
-        self.user_pool.remove(id as u32, (), &self.sessions)?;
-        Ok(())
-    }
-
-    pub fn add_npc(&mut self, npc: Npc) -> anyhow::Result<()> {
-        self.npc_pool.add(npc, &self.sessions)?;
-        Ok(())
-    }
-
-    pub fn remove_npc(&mut self, id: u32, param: ()) -> anyhow::Result<()> {
-        self.npc_pool.remove(id, param, &self.sessions)?;
-        Ok(())
-    }
-
-    pub fn add_mob(&mut self, drop: Mob) -> anyhow::Result<()> {
-        self.mob_pool.add(drop, &self.sessions)?;
-        Ok(())
-    }
-
-    pub fn remove_mob(&mut self, id: u32, param: MobLeaveType) -> anyhow::Result<()> {
-        self.mob_pool.remove(id, param, &self.sessions)?;
-        Ok(())
-    }
-
-    pub fn update_user_pos(&mut self, move_path: MovePath, id: CharacterID) -> anyhow::Result<()> {
-        self.user_pool.user_move(id, move_path, &self.sessions)?;
-        Ok(())
-    }
-
-    pub fn update_mob_pos(
-        &mut self,
-        movement: MobMoveReq,
-        controller: CharacterID,
-    ) -> anyhow::Result<()> {
-        self.mob_pool
-            .mob_move(movement.id, movement, controller, &self.sessions)?;
-
-        Ok(())
-    }
-
-    pub fn add_drop(&mut self, drop: Drop) -> anyhow::Result<()> {
-        let drop_id = self.drop_pool.add(drop, &self.sessions)?;
-        self.field_events
-            .push_after(FieldEvent::DropTimeout(drop_id), Duration::from_secs(60));
-        Ok(())
-    }
-
-    pub fn remove_drop(&mut self, id: DropId, param: DropLeaveParam) -> anyhow::Result<Drop> {
-        self.drop_pool.remove(id, param, &self.sessions)
-    }
-
-    pub fn assign_mob_controller(&self, session_id: CharacterID) -> anyhow::Result<()> {
-        self.mob_pool
-            .assign_controller(session_id, &self.sessions)?;
-        Ok(())
-    }
-
-    pub fn add_chat(&self, chat: UserChatMsgResp) -> anyhow::Result<()> {
-        self.sessions.broadcast(SessionMsg::from_packet(chat))?;
-        Ok(())
-    }
-
-    fn spread_drops(
-        &mut self,
-        pos: Vec2,
-        owner: DropOwner,
-        drops: &[(ItemId, usize)],
-        money: Money,
-    ) -> anyhow::Result<()> {
-        let fh = self
-            .shared
-            .field_fh
-            .get_foothold_below((pos.x as f32, pos.y as f32 - 20.).into());
-
-        self.drop_pool
-            .add_drops(drops, money, pos, fh, owner, &self.sessions)?;
-
-        Ok(())
-    }
-
-    pub fn attack_mob(
-        &mut self,
-        id: ObjectId,
-        dmg: u32,
-        attacker: CharacterID,
-    ) -> anyhow::Result<()> {
-        let mut buf = PacketBuf::default();
-        let killed = self
-            .mob_pool
-            .attack_mob(attacker, id, dmg, &mut buf, &self.sessions)?;
-        self.sessions
-            .send_to(&attacker, SessionMsg::PktBuf(Arc::new(buf)))?;
-
-        if killed {
-            let mob = self.mob_pool.kill_mob(id, &self.sessions)?;
-            let drops = self.reactor_pool.meta.get_drops_for_mob(mob.tmpl_id);
-            let money = self.reactor_pool.meta.get_money_drops_for_mob(mob.tmpl_id);
-
-            let fh = self
-                .shared
-                .field_fh
-                .get_foothold_below((mob.pos.x as f32, mob.pos.y as f32 - 20.).into());
-
-            self.drop_pool.add_drops(
-                &drops,
-                money,
-                mob.pos,
-                fh,
-                DropOwner::User(attacker as u32),
-                &self.sessions,
-            )?;
-        }
-
-        Ok(())
-    }
 }
 
+impl FieldRoomCtxExt for RoomCtx<'_, GameSession> {
+    fn ctx(&self) -> &RoomCtx<'_, GameSession> {
+        self
+    }
+    fn ctx_mut(&mut self) -> &mut RoomCtx<'_, GameSession> {
+        //TODO find a better way
+        unsafe { std::mem::transmute(self) }
+    }
+}
+/*
 pub type FieldRoom = Room<FieldData>;
 
 pub struct FieldJoinHandle {
@@ -599,3 +520,4 @@ impl FieldService {
         Ok(())
     }
 }
+*/

@@ -9,7 +9,7 @@ use super::{FootholdId, Rect, Vec2};
 pub struct KeyPadState(u8, Vec<u8>);
 
 impl<'de> DecodePacket<'de> for KeyPadState {
-    fn decode_packet(pr: &mut shroom_pkt::PacketReader<'de>) -> PacketResult<Self> {
+    fn decode(pr: &mut shroom_pkt::PacketReader<'de>) -> PacketResult<Self> {
         let n = pr.read_u8()? as usize / 2;
 
         let state = (0..n)

@@ -9,12 +9,14 @@ use proto95::{
     id::{job_id::JobId, ItemId},
     shared::{
         char::{AvatarData, CharacterId},
-        Vec2, movement::MovePath,
+        movement::MovePath,
+        Vec2,
     },
 };
 use shroom_pkt::ShroomIndexListZ;
+use shroom_srv::srv::{room_set::RoomSessionSet, server_room::{RoomHandler, RoomSessionHandler}};
 
-use crate::services::{data::character::CharacterID, field::{FieldRoomSet, SessionMsg}};
+use crate::services::data::character::CharacterID;
 
 use super::{PoolItem, SimplePool};
 
@@ -93,17 +95,16 @@ impl PoolItem for User {
 }
 
 impl SimplePool<User> {
-    pub fn user_move(
+    pub fn user_move<H: RoomSessionHandler<SessionId = CharacterID>>(
         &mut self,
-        id: CharacterID,
+        id: H::SessionId,
         move_path: MovePath,
-        sessions: &FieldRoomSet,
+        sessions: &mut RoomSessionSet<H>,
     ) -> anyhow::Result<()> {
         // Non-existing users are silent errors
         let Some(usr) = self.items.get_mut(&(id as u32)) else {
-            return Ok(())
+            return Ok(());
         };
-        
 
         let last_pos_fh = move_path.get_last_pos_fh();
         if let Some((pos, fh)) = last_pos_fh {
@@ -116,7 +117,7 @@ impl SimplePool<User> {
             move_path,
         };
 
-        sessions.broadcast_filter(SessionMsg::from_packet(pkt), &id)?;
+        sessions.broadcast_encode_filter(pkt, id)?;
         Ok(())
     }
 }

@@ -7,9 +7,11 @@ pub mod wz2;
 pub mod schemas {
     //#[allow(unused)]
     //pub mod skill;
+    #[allow(clippy::all)]
     pub mod field_mapper;
+    #[allow(clippy::all)]
     pub mod shroom_schemas;
-    #[allow(unused)]
+    #[allow(unused, clippy::all)]
     pub mod skill_mapper;
 
     impl From<shroom_schemas::Bool> for bool {

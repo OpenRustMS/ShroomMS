@@ -1,5 +1,5 @@
 use shroom_pkt::{
-    packet_opcode, shroom_enum_code, time::Ticks, ShroomIndexListZ16, ShroomIndexListZ8,
+    packet_with_opcode, shroom_enum_code, time::Ticks, ShroomIndexListZ16, ShroomIndexListZ8,
     ShroomList8, ShroomPacket, ShroomPacketEnum, ShroomTime,
 };
 
@@ -271,14 +271,14 @@ pub struct InventoryOperationsResp {
     pub secondary_stat_changed: bool, //TODO optional tail byte
                                       // Updated when operation is done on equip inv, either Move(2), Remove(3)
 }
-packet_opcode!(InventoryOperationsResp, SendOpcodes::InventoryOperation);
+packet_with_opcode!(InventoryOperationsResp, SendOpcodes::InventoryOperation);
 
 #[derive(ShroomPacket, Debug)]
 pub struct InvGrowResp {
     pub inv_type: InventoryType, //TODO only first 6 inv can grow
     pub new_size: u8,
 }
-packet_opcode!(InvGrowResp, SendOpcodes::InventoryGrow);
+packet_with_opcode!(InvGrowResp, SendOpcodes::InventoryGrow);
 
 #[derive(ShroomPacket, Debug)]
 pub struct InvChangeSlotPosReq {
@@ -288,7 +288,7 @@ pub struct InvChangeSlotPosReq {
     pub to: i16,
     pub count: u16,
 }
-packet_opcode!(
+packet_with_opcode!(
     InvChangeSlotPosReq,
     RecvOpcodes::UserChangeSlotPositionRequest
 );
@@ -298,7 +298,7 @@ pub struct InvSortRequest {
     pub ticks: Ticks,
     pub inv_type: InventoryType,
 }
-packet_opcode!(InvSortRequest, RecvOpcodes::UserSortItemRequest);
+packet_with_opcode!(InvSortRequest, RecvOpcodes::UserSortItemRequest);
 
 // Use an item like magnifying glass, maybe hammer aswell?
 #[derive(ShroomPacket, Debug)]
@@ -307,14 +307,14 @@ pub struct ItemReleaseReq {
     pub use_slot: u16,
     pub equip_slot: u16,
 }
-packet_opcode!(ItemReleaseReq, RecvOpcodes::UserItemReleaseRequest);
+packet_with_opcode!(ItemReleaseReq, RecvOpcodes::UserItemReleaseRequest);
 
 #[derive(Debug, ShroomPacket)]
 pub struct GatherItemReq {
     pub timestamp: Ticks,
     pub inv_ty: InventoryType,
 }
-packet_opcode!(GatherItemReq, RecvOpcodes::UserGatherItemRequest);
+packet_with_opcode!(GatherItemReq, RecvOpcodes::UserGatherItemRequest);
 
 #[derive(Debug, ShroomPacket)]
 pub struct ItemOptionUpgradeReq {
@@ -323,7 +323,7 @@ pub struct ItemOptionUpgradeReq {
     pub equip_slot: u16,
     pub enchant_skill: bool,
 }
-packet_opcode!(
+packet_with_opcode!(
     ItemOptionUpgradeReq,
     RecvOpcodes::UserItemOptionUpgradeItemUseRequest
 );
@@ -335,7 +335,7 @@ pub struct ItemHyperUpgradeReq {
     pub equip_slot: u16,
     pub enchant_skill: bool,
 }
-packet_opcode!(
+packet_with_opcode!(
     ItemHyperUpgradeReq,
     RecvOpcodes::UserHyperUpgradeItemUseRequest
 );
@@ -348,7 +348,7 @@ pub struct ItemUpgradeReq {
     pub white_scroll_slot: u16,
     pub enchant_skill: bool,
 }
-packet_opcode!(ItemUpgradeReq, RecvOpcodes::UserUpgradeItemUseRequest);
+packet_with_opcode!(ItemUpgradeReq, RecvOpcodes::UserUpgradeItemUseRequest);
 
 #[derive(Debug, ShroomPacket)]
 pub struct TamingMobUseFoodReq {
@@ -356,7 +356,7 @@ pub struct TamingMobUseFoodReq {
     pub food_slot: u16,
     pub item_id: ItemId,
 }
-packet_opcode!(
+packet_with_opcode!(
     TamingMobUseFoodReq,
     RecvOpcodes::UserTamingMobFoodItemUseRequest
 );
@@ -367,7 +367,7 @@ pub struct ItemOpenUIReq {
     pub slot: u16,
     pub item_id: ItemId,
 }
-packet_opcode!(ItemOpenUIReq, RecvOpcodes::UserUIOpenItemUseRequest);
+packet_with_opcode!(ItemOpenUIReq, RecvOpcodes::UserUIOpenItemUseRequest);
 
 #[derive(Debug, ShroomPacket)]
 pub struct ItemLearnSkillReq {
@@ -375,7 +375,7 @@ pub struct ItemLearnSkillReq {
     pub slot: u16,
     pub item_id: ItemId,
 }
-packet_opcode!(ItemLearnSkillReq, RecvOpcodes::UserSkillLearnItemUseRequest);
+packet_with_opcode!(ItemLearnSkillReq, RecvOpcodes::UserSkillLearnItemUseRequest);
 
 #[derive(Debug, ShroomPacket)]
 pub struct UserSitReq {
@@ -391,4 +391,4 @@ impl UserSitReq {
         Self { seat_id }
     }
 }
-packet_opcode!(UserSitReq, RecvOpcodes::UserSitRequest);
+packet_with_opcode!(UserSitReq, RecvOpcodes::UserSitRequest);

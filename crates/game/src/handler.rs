@@ -121,7 +121,7 @@ impl GameHandler {
         if op != MigrateInGameReq::OPCODE {
             anyhow::bail!("Wrong client hello packet: {op:?}")
         }
-        let req = MigrateInGameReq::decode_packet(&mut pr)?;
+        let req = MigrateInGameReq::decode(&mut pr)?;
 
         // Look up session in the migration manager
         let peer_addr = ctx.session().peer_addr().ip();

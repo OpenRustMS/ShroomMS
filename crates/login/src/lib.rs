@@ -1,11 +1,10 @@
 pub mod config;
 pub mod login_state;
 
+use std::future::Future;
 use std::sync::Arc;
-
-use async_trait::async_trait;
 use config::LoginConfig;
-use data::services;
+use data::services::{self, SharedServices};
 use data::services::data::account::AccountServiceError;
 use data::services::data::character::{CharWithEquips, CharacterCreateDTO, ItemStarterSet};
 use data::services::session::shroom_session_backend::{
@@ -16,7 +15,7 @@ use data::services::Services;
 use login_state::LoginState;
 
 use proto95::shared::char::AvatarEquips;
-use proto95::shared::{ExceptionLogReq, PingResp, PongReq};
+use proto95::shared::{ExceptionLogReq, PongReq};
 use proto95::{
     id::{FaceId, HairId, ItemId, Skin},
     login::{
@@ -45,107 +44,105 @@ use proto95::{
 };
 
 use shroom_net::codec::legacy::LegacyCodec;
-use shroom_net::server::server_conn::{IntoServerHandleResult, ShroomConnEvent, ShroomConnHandler};
-use shroom_net::server::{ServerHandleResult, SharedConnHandle};
-use shroom_net::session::SessionError;
-use shroom_net::shroom_router_fn;
-use shroom_pkt::{PacketReader, ShroomPacketData, ShroomTime};
+use shroom_pkt::{PacketReader, ShroomTime, ShroomPacketBytes, ShroomPacket};
+use shroom_srv::rpc::{RpcService, RpcCtx, RpcResponse};
+use shroom_srv::session::SessionError;
 use tokio::net::TcpStream;
 
-pub type LoginResult<T> = Result<T, anyhow::Error>;
 
-pub struct LoginHandler {
+pub struct LoginService {
     services: services::SharedServices,
     cfg: Arc<LoginConfig>,
-    login_state: LoginState,
+    login_state: Box<LoginState>,
 }
 
-impl LoginHandler {
+impl LoginService {
     pub fn new(services: services::SharedServices, cfg: Arc<LoginConfig>) -> Self {
         Self {
             services,
             cfg,
-            login_state: LoginState::new(),
+            login_state: Box::new(LoginState::new()),
         }
     }
 }
 
-type Ctx = shroom_net::server::server_conn::ServerConnCtx<LoginHandler>;
+pub type Ctx = RpcCtx<LegacyCodec<TcpStream>>;
+impl RpcService for LoginService {
+    type Ctx = SharedServices;
+    type Codec = LegacyCodec<TcpStream>;
+    type PingPacket = PongReq;
+
+    fn create(ctx: &Self::Ctx) -> anyhow::Result<Self> {
+        Ok(LoginService::new(ctx.clone(), Arc::new(LoginConfig::default())))
+    }
+
+    fn ping_packet(&self) -> Self::PingPacket {
+        PongReq
+    }
+
+    fn on_packet(&mut self, pkt: ShroomPacketBytes, ctx: &mut Ctx) -> impl Future<Output = anyhow::Result<RpcResponse>> + Send {
+        self.handle_packet(pkt, ctx)
+    }
+
+    async fn finish(self) -> anyhow::Result<()> {
+        tokio::time::sleep(std::time::Duration::from_secs(7)).await;
+        Ok(())
+    }
+}
+
 
 pub struct LoginMakeState {
     pub services: Arc<Services>,
     pub cfg: Arc<LoginConfig>,
 }
 
-#[async_trait]
-impl ShroomConnHandler for LoginHandler {
-    type Codec = LegacyCodec<TcpStream>;
-    type Error = anyhow::Error;
-    type Msg = ();
-    type MakeState = LoginMakeState;
 
-    async fn make_handler(
-        state: &Self::MakeState,
-        _ctx: &mut Ctx,
-        _handle: SharedConnHandle<Self::Msg>,
-    ) -> Result<Self, Self::Error> {
-        log::info!("Making new login client");
-        Ok(LoginHandler::new(state.services.clone(), state.cfg.clone()))
-    }
-
-    async fn handle_msg(
-        &mut self,
-        ctx: &mut Ctx,
-        msg: ShroomConnEvent<Self::Msg>,
-    ) -> Result<ServerHandleResult, Self::Error> {
-        Ok(match msg {
-            ShroomConnEvent::IncomingPacket(pkt) => self.handle_packet(&pkt, ctx).await?,
-            ShroomConnEvent::Message(_) => ServerHandleResult::Ok,
-            ShroomConnEvent::Ping => {
-                ctx.send(PingResp).await?;
-                ServerHandleResult::Ok
-            }
-            ShroomConnEvent::Tick(_) => ServerHandleResult::Ok,
-        })
-    }
-
-    async fn finish(self, _is_migrating: bool) -> Result<(), Self::Error> {
-        Ok(())
-    }
-}
-
-impl LoginHandler {
+pub type LoginResponse = anyhow::Result<RpcResponse> ;
+impl LoginService {
     pub async fn handle_packet(
         &mut self,
-        pkt: &ShroomPacketData,
+        pkt: ShroomPacketBytes,
         ctx: &mut Ctx,
-    ) -> anyhow::Result<ServerHandleResult> {
-        shroom_router_fn!(
-            handler,
-            LoginHandler,
-            anyhow::Error,
-            LoginHandler::handle_default,
-            PongReq => LoginHandler::handle_pong,
-            CreateSecurityHandleReq => LoginHandler::handle_create_security_handle,
-            UpdateScreenSettingReq => LoginHandler::handle_update_screen_setting,
-            CheckPasswordReq => LoginHandler::handle_check_password,
-            SetGenderReq => LoginHandler::handle_set_gender,
-            CheckPinReq => LoginHandler::handle_check_pin,
-            UpdatePinReq => LoginHandler::handle_register_pin,
-            ConfirmEULAReq => LoginHandler::handle_accept_tos,
-            WorldInfoReq => LoginHandler::handle_world_information,
-            LogoutWorldReq => LoginHandler::handle_world_logout,
-            WorldReq => LoginHandler::handle_world_request,
-            WorldCheckUserLimitReq => LoginHandler::handle_world_check_user_limit,
-            SelectWorldReq => LoginHandler::handle_select_world,
-            CheckDuplicateIDReq => LoginHandler::handle_check_duplicate_id,
-            CreateCharReq => LoginHandler::handle_create_char,
-            DeleteCharReq => LoginHandler::handle_delete_character,
-            SelectCharReq => LoginHandler::handle_select_char,
-            ExceptionLogReq => LoginHandler::handle_exception_log
-        );
+    ) -> anyhow::Result<RpcResponse> {
+        macro_rules! handler {
+            ($op:ident, $ctx:ident, $pr:ident, $this:ident, $default:ident, $($req:ty => $handler:ident),*) => {
+                match $op {
+                    $(
+                        <$req>::OPCODE => $this.$handler($ctx, <$req>::decode_packet(&mut $pr)?).await,
+                    )*
+                    _ => $this.$default($ctx, $op, $pr).await
+                }
+            };
+        }
 
-        handler(self, ctx, pkt.into_reader()).await
+        let op = RecvOpcodes::try_from(pkt.read_opcode()?)?;
+        let mut pr = pkt.into_reader();
+
+        handler!(
+            op,
+            ctx,
+            pr,
+            self,
+            handle_default,
+            PongReq => handle_pong,
+            CreateSecurityHandleReq => handle_create_security_handle,
+            UpdateScreenSettingReq => handle_update_screen_setting,
+            CheckPasswordReq => handle_check_password,
+            SetGenderReq => handle_set_gender,
+            CheckPinReq => handle_check_pin,
+            UpdatePinReq => handle_register_pin,
+            ConfirmEULAReq => handle_accept_tos,
+            WorldInfoReq => handle_world_information,
+            LogoutWorldReq => handle_world_logout,
+            WorldReq => handle_world_request,
+            WorldCheckUserLimitReq => handle_world_check_user_limit,
+            SelectWorldReq => handle_select_world,
+            CheckDuplicateIDReq => handle_check_duplicate_id,
+            CreateCharReq => handle_create_char,
+            DeleteCharReq => handle_delete_character,
+            SelectCharReq => handle_select_char,
+            ExceptionLogReq => handle_exception_log
+        )
     }
 
     pub async fn handle_default(
@@ -153,46 +150,46 @@ impl LoginHandler {
         _ctx: &mut Ctx,
         _op: RecvOpcodes,
         pr: PacketReader<'_>,
-    ) -> anyhow::Result<ServerHandleResult> {
+    ) -> LoginResponse {
         log::info!("Unhandled packet: {:?}", pr.into_inner());
-        Ok(().into_handle_result())
+        Ok(RpcResponse::Ok)
     }
 
     async fn handle_pong(
         &mut self,
         _ctx: &mut Ctx,
         _req: PongReq,
-    ) -> anyhow::Result<ServerHandleResult> {
-        Ok(ServerHandleResult::Pong)
+    ) -> LoginResponse {
+        Ok(RpcResponse::Pong)
     }
 
     async fn handle_exception_log(
         &mut self,
         _ctx: &mut Ctx,
         _req: ExceptionLogReq,
-    ) -> LoginResult<()> {
+    ) -> LoginResponse {
         dbg!(&_req);
-        Ok(())
+        Ok(RpcResponse::Ok)
     }
 
     async fn handle_create_security_handle(
         &mut self,
         _ctx: &mut Ctx,
         _req: CreateSecurityHandleReq,
-    ) -> anyhow::Result<()> {
+    ) -> LoginResponse {
         dbg!(&_req);
-        Ok(())
+        Ok(RpcResponse::Ok)
     }
 
     async fn handle_update_screen_setting(
         &mut self,
         _ctx: &mut Ctx,
         _req: UpdateScreenSettingReq,
-    ) -> anyhow::Result<()> {
-        Ok(())
+    ) -> LoginResponse {
+        Ok(RpcResponse::Ok)
     }
 
-    async fn handle_accept_tos(&mut self, ctx: &mut Ctx, req: ConfirmEULAReq) -> LoginResult<()> {
+    async fn handle_accept_tos(&mut self, ctx: &mut Ctx, req: ConfirmEULAReq) -> LoginResponse {
         self.login_state.get_accept_tos()?;
 
         if !req.accepted {
@@ -206,10 +203,11 @@ impl LoginHandler {
             .await?;
         self.login_state.reset();
 
-        ctx.send(ConfirmEULAResp { success: true }).await
+        ctx.send(ConfirmEULAResp { success: true }).await?;
+        Ok(RpcResponse::Ok)
     }
 
-    async fn handle_check_pin(&mut self, ctx: &mut Ctx, req: CheckPinReq) -> LoginResult<()> {
+    async fn handle_check_pin(&mut self, ctx: &mut Ctx, req: CheckPinReq) -> LoginResponse {
         let acc = self.login_state.get_pin()?;
 
         ctx.send(if self.cfg.enable_pin {
@@ -226,10 +224,12 @@ impl LoginHandler {
         } else {
             CheckPinResp::Accepted
         })
-        .await
+        .await?;
+
+        Ok(RpcResponse::Ok)
     }
 
-    async fn handle_register_pin(&mut self, ctx: &mut Ctx, req: UpdatePinReq) -> LoginResult<()> {
+    async fn handle_register_pin(&mut self, ctx: &mut Ctx, req: UpdatePinReq) -> LoginResponse {
         self.login_state.get_pin()?;
 
         let Some(pin) = req.pin.opt else {
@@ -243,10 +243,12 @@ impl LoginHandler {
             .update_account(|acc| svc.game.data.account.set_pin(acc, pin))
             .await?;
 
-        ctx.send(UpdatePinResp { success: true }).await
+        ctx.send(UpdatePinResp { success: true }).await?;
+
+        Ok(RpcResponse::Ok)
     }
 
-    async fn handle_set_gender(&mut self, _ctx: &mut Ctx, req: SetGenderReq) -> LoginResult<()> {
+    async fn handle_set_gender(&mut self, _ctx: &mut Ctx, req: SetGenderReq) -> LoginResponse {
         let _ = self.login_state.get_set_gender()?;
 
         let gender = req
@@ -276,25 +278,27 @@ impl LoginHandler {
         &mut self,
         _ctx: &mut Ctx,
         _req: LogoutWorldReq,
-    ) -> LoginResult<()> {
+    ) -> LoginResponse {
         self.login_state.get_char_select()?;
         self.login_state.transition_server_select()?;
 
-        Ok(())
+        Ok(RpcResponse::Ok)
     }
 
     async fn handle_world_check_user_limit(
         &mut self,
         ctx: &mut Ctx,
         _req: WorldCheckUserLimitReq,
-    ) -> LoginResult<()> {
+    ) -> LoginResponse {
         let _acc = self.login_state.get_server_selection()?;
 
         ctx.send(WorldCheckUserLimitResp {
             over_user_limit: false,
             populate_level: 0,
         })
-        .await
+        .await?;
+
+        Ok(RpcResponse::Ok)
     }
 
     fn get_world_info(&self) -> Vec<WorldInfoResp> {
@@ -310,19 +314,23 @@ impl LoginHandler {
         &mut self,
         ctx: &mut Ctx,
         _req: WorldInfoReq,
-    ) -> LoginResult<()> {
-        ctx.reply(self.get_world_info()).await
+    ) -> LoginResponse {
+        ctx.send_all(self.get_world_info().into_iter()).await?;
+
+        Ok(RpcResponse::Ok)
     }
 
-    async fn handle_world_request(&mut self, ctx: &mut Ctx, _req: WorldReq) -> LoginResult<()> {
-        ctx.reply(self.get_world_info()).await
+    async fn handle_world_request(&mut self, ctx: &mut Ctx, _req: WorldReq) -> LoginResponse {
+        ctx.send_all(self.get_world_info().into_iter()).await?;
+
+        Ok(RpcResponse::Ok)
     }
 
     pub async fn handle_check_password(
         &mut self,
         ctx: &mut Ctx,
         req: CheckPasswordReq,
-    ) -> LoginResult<()> {
+    ) -> LoginResponse {
         let login_result = self
             .services
             .session_manager
@@ -382,10 +390,12 @@ impl LoginHandler {
             _ => todo!("Unhandled Account Service Login Result: {:?}", login_result),
         };
 
-        ctx.send(resp).await
+        ctx.send(resp).await?;
+
+        Ok(RpcResponse::Ok)
     }
 
-    async fn handle_select_world(&mut self, ctx: &mut Ctx, req: SelectWorldReq) -> LoginResult<()> {
+    async fn handle_select_world(&mut self, ctx: &mut Ctx, req: SelectWorldReq) -> LoginResponse {
         let acc = self.login_state.get_server_selection()?;
         let char_list = self
             .services
@@ -410,14 +420,15 @@ impl LoginHandler {
             char_list,
         )?;
 
-        ctx.send(SelectWorldResp::Success(select_char_list)).await
+        ctx.send(SelectWorldResp::Success(select_char_list)).await?;
+        Ok(RpcResponse::Ok)
     }
 
     async fn handle_check_duplicate_id(
         &mut self,
         ctx: &mut Ctx,
         req: CheckDuplicateIDReq,
-    ) -> LoginResult<()> {
+    ) -> LoginResponse {
         let _ = self.login_state.get_char_select()?;
         let name_used = !self.services.game.data.char.check_name(&req.name).await?;
 
@@ -433,10 +444,12 @@ impl LoginHandler {
             }
         };
 
-        ctx.send(resp).await
+        ctx.send(resp).await?;
+
+        Ok(RpcResponse::Ok)
     }
 
-    async fn handle_create_char(&mut self, ctx: &mut Ctx, req: CreateCharReq) -> LoginResult<()> {
+    async fn handle_create_char(&mut self, ctx: &mut Ctx, req: CreateCharReq) -> LoginResponse {
         let (acc, _, _, _) = self.login_state.get_char_select()?;
 
         let starter_set = ItemStarterSet {
@@ -474,14 +487,15 @@ impl LoginHandler {
             char,
             equips: Default::default(),
         };
-        ctx.send(CreateCharResp::Success(map_char(&empty_eq))).await
+        ctx.send(CreateCharResp::Success(Box::new(map_char(&empty_eq)))).await?;
+        Ok(RpcResponse::Ok)
     }
 
     async fn handle_delete_character(
         &mut self,
         ctx: &mut Ctx,
         req: DeleteCharReq,
-    ) -> LoginResult<()> {
+    ) -> LoginResponse {
         let (acc, _, _, _) = self.login_state.get_char_select()?;
         let status = self
             .services
@@ -501,14 +515,16 @@ impl LoginHandler {
             char_id: req.char_id,
             result,
         })
-        .await
+        .await?;
+
+        Ok(RpcResponse::Ok)
     }
 
     async fn handle_select_char(
         &mut self,
         ctx: &mut Ctx,
         req: SelectCharReq,
-    ) -> LoginResult<ServerHandleResult> {
+    ) -> LoginResponse {
         let (char, client_key, world, channel) =
             self.login_state.transition_game(req.char_id as i32)?;
 
@@ -516,7 +532,7 @@ impl LoginHandler {
         self.services
             .session_manager
             .transition_migrate_session(
-                ShroomMigrationKey::new(client_key, ctx.session().peer_addr().ip()),
+                ShroomMigrationKey::new(client_key, ctx.peer_addr().ip()),
                 session,
                 char,
             )
@@ -540,7 +556,7 @@ impl LoginHandler {
         };
 
         ctx.send(pkt).await?;
-        Ok(ServerHandleResult::Migrate)
+        Ok(RpcResponse::Migrate)
     }
 }
 

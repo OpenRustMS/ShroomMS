@@ -21,6 +21,7 @@ pub enum PartyMemberStatus {
 
 impl PacketTryWrapped for PartyMemberStatus {
     type Inner = i32;
+    type IntoValue<'a> = Self::Inner;  
 
     fn packet_into_inner(&self) -> Self::Inner {
         match self {
@@ -51,6 +52,7 @@ pub enum PartyMemberFieldId {
 
 impl PacketTryWrapped for PartyMemberFieldId {
     type Inner = i32;
+    type IntoValue<'a> = Self::Inner;  
 
     fn packet_into_inner(&self) -> Self::Inner {
         match self {

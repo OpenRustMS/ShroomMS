@@ -18,7 +18,7 @@
 			"pub struct $1 {",
 			"\t$0",
 			"}",
-			"packet_opcode!($1, $2);"
+			"packet_with_opcode!($1, $2);"
 		],
 		"description": "Shroom Packet"
 	},

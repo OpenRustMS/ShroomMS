@@ -62,6 +62,7 @@ where
         }
     }
 
+    #[allow(clippy::unnecessary_filter_map)]
     pub fn run<const BLOCK_SIZE: usize>(&mut self) -> io::Result<()> {
         let replacments: Vec<_> = self
             .patches

@@ -17,14 +17,15 @@ serde = { version = "1", features = ["derive"] }
 tokio = "1"
 uuid = "1"
 shroom-pkt = "0.1"
+shroom-srv = "0.1"
 shroom-net = "0.4"
 dotenv = "0.15"
 warp = "0.3"
 data = { version = "0.1.0", path = "../data" }
-game = { version = "0.1", path = "../game" }
 login = { version = "0.1", path = "../login" }
 proto95 = { version = "0.1.0", path = "../proto95" }
 meta = { version = "0.1", path = "../meta" }
+
 
 
 [dependencies.openssl]

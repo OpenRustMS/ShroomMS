@@ -1,4 +1,4 @@
-use shroom_pkt::{packet_opcode, ShroomList8, ShroomPacket};
+use shroom_pkt::{packet_with_opcode, ShroomList8, ShroomPacket};
 
 use crate::{id::SkillId, send_opcodes::SendOpcodes};
 
@@ -15,4 +15,4 @@ pub type MacroSysData = ShroomList8<SkillMacro>;
 pub struct MacroSysDataInitResp {
     pub data: MacroSysData,
 }
-packet_opcode!(MacroSysDataInitResp, SendOpcodes::MacroSysDataInit);
+packet_with_opcode!(MacroSysDataInitResp, SendOpcodes::MacroSysDataInit);

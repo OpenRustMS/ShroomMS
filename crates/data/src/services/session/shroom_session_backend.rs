@@ -10,7 +10,7 @@ use crate::{
     },
 };
 
-use shroom_net::session::SessionBackend;
+use shroom_srv::session::SessionBackend;
 
 #[derive(Debug, Error)]
 pub enum ShroomSessionError {
@@ -112,7 +112,6 @@ impl ShroomSessionBackend {
     }
 }
 
-#[async_trait::async_trait]
 impl SessionBackend for ShroomSessionBackend {
     type Data = ShroomSessionData;
     type LoadParam = AccountAuth;

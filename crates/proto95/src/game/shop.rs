@@ -1,4 +1,4 @@
-use shroom_pkt::{packet_opcode, ShroomList16, ShroomPacket, ShroomPacketEnum, ShroomOption8};
+use shroom_pkt::{packet_with_opcode, ShroomList16, ShroomPacket, ShroomPacketEnum, ShroomOption8};
 
 use crate::{id::ItemId, send_opcodes::SendOpcodes, recv_opcodes::RecvOpcodes};
 
@@ -22,7 +22,7 @@ pub struct OpenShopResp {
     pub npc_tmpl_id: NpcId,
     pub items: ShroomList16<ShopItem>,
 }
-packet_opcode!(OpenShopResp, SendOpcodes::OpenShopDlg);
+packet_with_opcode!(OpenShopResp, SendOpcodes::OpenShopDlg);
 
 #[derive(ShroomPacketEnum, Debug)]
 #[repr(u8)]
@@ -48,7 +48,7 @@ pub enum ShopResultResp {
     BuyLimit(()) = 0x12,
     ServerMsg(ShroomOption8<String>) = 0x13,
 }
-packet_opcode!(ShopResultResp, SendOpcodes::ShopResult);
+packet_with_opcode!(ShopResultResp, SendOpcodes::ShopResult);
 
 #[derive(ShroomPacket, Debug)]
 pub struct ShopBuy {
@@ -73,4 +73,4 @@ pub enum ShopUserReq {
     Recharge(u16) = 2,
     Close(()) = 3,
 }
-packet_opcode!(ShopUserReq, RecvOpcodes::UserShopRequest);
+packet_with_opcode!(ShopUserReq, RecvOpcodes::UserShopRequest);

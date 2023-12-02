@@ -10,11 +10,10 @@ use proto95::{
     id::ItemId,
     shared::Vec2,
 };
+use shroom_srv::srv::{room_set::RoomSessionSet, server_room::RoomSessionHandler};
 use std::{ops::Add, time::Duration};
 
 use shroom_pkt::ShroomExpirationTime;
-
-use crate::services::field::FieldRoomSet;
 
 use super::{next_id, Pool, PoolItem, SimplePool};
 
@@ -74,7 +73,7 @@ impl PoolItem for Drop {
             enter_type: DropEnterType::Create,
             id,
             drop_type,
-            drop_owner: self.owner.clone(),
+            drop_owner: self.owner,
             pos: self.pos,
             src_id: 0,
             start_pos: Some(start_pos).into(),
@@ -115,14 +114,14 @@ impl SimplePool<Drop> {
         }
     }
 
-    pub fn add_drops(
+    pub fn add_drops<H: RoomSessionHandler>(
         &mut self,
         drops: &[(ItemId, usize)],
         money: u32,
         pos: Vec2,
         fh: Option<&Foothold>,
         owner: DropOwner,
-        sessions: &FieldRoomSet,
+        sessions: &mut RoomSessionSet<H>,
     ) -> anyhow::Result<()> {
         let n = drops.len() + usize::from(money > 0);
         if n == 0 {

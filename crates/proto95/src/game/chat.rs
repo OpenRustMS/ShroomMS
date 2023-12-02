@@ -1,5 +1,5 @@
 use shroom_pkt::{
-    packet_opcode, shroom_enum_code, time::Ticks, ShroomList8, ShroomPacket, ShroomPacketEnum,
+    packet_with_opcode, shroom_enum_code, time::Ticks, ShroomList8, ShroomPacket, ShroomPacketEnum,
 };
 
 use crate::{
@@ -89,7 +89,7 @@ pub struct ChatMsgReq {
     pub msg: String,
     pub only_balloon: bool,
 }
-packet_opcode!(ChatMsgReq, RecvOpcodes::UserChat);
+packet_with_opcode!(ChatMsgReq, RecvOpcodes::UserChat);
 
 #[derive(Debug, ShroomPacket)]
 pub struct WhisperData {
@@ -111,7 +111,7 @@ pub enum WhiperMsgReq {
     Whisper(WhisperData) = 6,
     WhisperFind(WhisperFindData) = 5,
 }
-packet_opcode!(WhiperMsgReq, RecvOpcodes::Whisper);
+packet_with_opcode!(WhiperMsgReq, RecvOpcodes::Whisper);
 
 #[derive(ShroomPacket, Debug)]
 pub struct UserChatMsgResp {
@@ -120,4 +120,4 @@ pub struct UserChatMsgResp {
     pub msg: String,
     pub only_balloon: bool,
 }
-packet_opcode!(UserChatMsgResp, SendOpcodes::UserChat);
+packet_with_opcode!(UserChatMsgResp, SendOpcodes::UserChat);

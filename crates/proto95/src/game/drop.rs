@@ -1,5 +1,5 @@
 use shroom_pkt::{
-    packet_opcode, shroom_enum_code, CondOption, PacketResult, PacketTryWrapped,
+    packet_with_opcode, shroom_enum_code, CondOption, PacketResult, PacketTryWrapped,
     ShroomDurationMs16, ShroomExpirationTime, ShroomPacket, ShroomPacketEnum,
 };
 
@@ -22,6 +22,7 @@ pub enum DropOwner {
 
 impl PacketTryWrapped for DropOwner {
     type Inner = (u32, u8);
+    type IntoValue<'a> = Self::Inner;  
 
     fn packet_into_inner(&self) -> Self::Inner {
         match self {
@@ -90,7 +91,7 @@ pub struct DropEnterFieldResp {
     // If this is set to true It throws an exception
     pub u1_flag: bool,
 }
-packet_opcode!(DropEnterFieldResp, SendOpcodes::DropEnterField);
+packet_with_opcode!(DropEnterFieldResp, SendOpcodes::DropEnterField);
 
 shroom_enum_code!(
     DropLeaveType,
@@ -118,7 +119,7 @@ pub struct DropLeaveFieldResp {
     #[pkt(check(field = "leave_type", cond = "DropLeaveType::has_pickup_id"))]
     pub pickup_id: CondOption<u32>,
 }
-packet_opcode!(DropLeaveFieldResp, SendOpcodes::DropLeaveField);
+packet_with_opcode!(DropLeaveFieldResp, SendOpcodes::DropLeaveField);
 
 #[cfg(test)]
 mod tests {

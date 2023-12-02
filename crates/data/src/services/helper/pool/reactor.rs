@@ -1,3 +1,5 @@
+use std::num::Saturating;
+
 use proto95::{
     game::{
         life::reactor::{ReactorEnterFieldResp, ReactorId, ReactorLeaveFieldResp},
@@ -12,7 +14,7 @@ use super::{next_id, PoolItem};
 pub struct Reactor {
     pub pos: Vec2,
     pub tmpl_id: ReactorId,
-    pub state: u8,
+    pub state: Saturating<u8>,
     pub name: Option<String>,
 }
 
@@ -33,7 +35,7 @@ impl PoolItem for Reactor {
         ReactorEnterFieldResp {
             id,
             tmpl_id: self.tmpl_id,
-            state: self.state,
+            state: self.state.0,
             pos: self.pos,
             flipped: false,
             name: String::new(),
@@ -43,7 +45,7 @@ impl PoolItem for Reactor {
     fn get_leave_pkt(&self, id: Self::Id, _param: Self::LeaveParam) -> Self::LeavePacket {
         ReactorLeaveFieldResp {
             id,
-            state: self.state,
+            state: self.state.0,
             pos: self.pos,
         }
     }

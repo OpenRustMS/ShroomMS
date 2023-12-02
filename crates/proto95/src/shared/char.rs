@@ -1,5 +1,5 @@
 use shroom_pkt::{
-    packet_opcode, partial::PartialFlag, partial_data, CondEither, CondOption, ShroomDurationMs16,
+    packet_with_opcode, partial::PartialFlag, partial_data, CondEither, CondOption, ShroomDurationMs16,
     ShroomExpirationTime, ShroomIndexList8, ShroomIndexListZ16, ShroomList16, ShroomList32,
     ShroomOption8, ShroomPacket, ShroomTime,
 };
@@ -280,11 +280,11 @@ partial_data!(
 pub struct CharForcedStatSetResp {
     pub stats: PartialFlag<(), CharForcedStatPartial>,
 }
-packet_opcode!(CharForcedStatSetResp, SendOpcodes::ForcedStatSet);
+packet_with_opcode!(CharForcedStatSetResp, SendOpcodes::ForcedStatSet);
 
 #[derive(ShroomPacket, Debug)]
 pub struct CharForcedStatResetResp;
-packet_opcode!(CharForcedStatResetResp, SendOpcodes::ForcedStatReset);
+packet_with_opcode!(CharForcedStatResetResp, SendOpcodes::ForcedStatReset);
 
 partial_data!(
     CharStat,
@@ -325,7 +325,7 @@ pub struct CharStatChangedResp {
     pub secondary_stat: bool,
     pub battle_recovery: bool,
 }
-packet_opcode!(CharStatChangedResp, SendOpcodes::StatChanged);
+packet_with_opcode!(CharStatChangedResp, SendOpcodes::StatChanged);
 
 #[derive(ShroomPacket, Debug)]
 pub struct CharTempStatSetResp {
@@ -333,13 +333,13 @@ pub struct CharTempStatSetResp {
     pub unknown: u16, // Delay?
     pub movement_affecting: bool,
 }
-packet_opcode!(CharTempStatSetResp, SendOpcodes::TemporaryStatSet);
+packet_with_opcode!(CharTempStatSetResp, SendOpcodes::TemporaryStatSet);
 
 #[derive(ShroomPacket, Debug)]
 pub struct CharTempStatResetResp {
     pub flags: CharSecondaryStatFlags,
 }
-packet_opcode!(CharTempStatResetResp, SendOpcodes::TemporaryStatReset);
+packet_with_opcode!(CharTempStatResetResp, SendOpcodes::TemporaryStatReset);
 
 // TODO always has combat orders + extra data
 

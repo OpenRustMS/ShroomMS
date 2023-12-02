@@ -1,5 +1,5 @@
 use num_enum::{TryFromPrimitive, IntoPrimitive};
-use shroom_pkt::{packet_opcode, ShroomDurationMs16, ShroomPacket, mark_shroom_enum};
+use shroom_pkt::{packet_with_opcode, ShroomDurationMs16, ShroomPacket, mark_shroom_enum};
 
 use crate::{
     game::ObjectId,
@@ -30,11 +30,11 @@ pub struct AffectedAreaCreateResp {
     pub area: Rect32,                  // TODO check for correct rect
     pub phase: u32,
 }
-packet_opcode!(AffectedAreaCreateResp, SendOpcodes::AffectedAreaCreated);
+packet_with_opcode!(AffectedAreaCreateResp, SendOpcodes::AffectedAreaCreated);
 
 
 #[derive(ShroomPacket, Debug)]
 pub struct AffectedAreaRemoveResp {
     pub id: ObjectId,
 }
-packet_opcode!(AffectedAreaRemoveResp, SendOpcodes::AffectedAreaRemoved);
+packet_with_opcode!(AffectedAreaRemoveResp, SendOpcodes::AffectedAreaRemoved);

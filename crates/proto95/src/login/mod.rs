@@ -1,5 +1,5 @@
 pub mod pin;
-use shroom_pkt::{packet_opcode, shroom_enum_code, CondOption, ShroomPacket};
+use shroom_pkt::{packet_with_opcode, shroom_enum_code, CondOption, ShroomPacket};
 
 use crate::recv_opcodes::RecvOpcodes;
 
@@ -13,7 +13,7 @@ pub type ClientKey = [u8; 8];
 
 #[derive(ShroomPacket, Debug)]
 pub struct CreateSecurityHandleReq;
-packet_opcode!(CreateSecurityHandleReq, RecvOpcodes::CreateSecurityHandle);
+packet_with_opcode!(CreateSecurityHandleReq, RecvOpcodes::CreateSecurityHandle);
 
 shroom_enum_code!(StartMode, u8, WebStart = 0, Unknown1 = 1, GameLaunching = 2);
 

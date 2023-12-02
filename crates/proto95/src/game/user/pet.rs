@@ -1,4 +1,4 @@
-use shroom_pkt::{packet_opcode, shroom_enum_code, ShroomList8, ShroomPacket};
+use shroom_pkt::{packet_with_opcode, shroom_enum_code, ShroomList8, ShroomPacket};
 
 use crate::{
     id::ItemId,
@@ -12,7 +12,7 @@ pub struct PetMoveResp {
     pub pet_id: u8,
     pub move_path: MovePath,
 }
-packet_opcode!(PetMoveResp, SendOpcodes::PetMove);
+packet_with_opcode!(PetMoveResp, SendOpcodes::PetMove);
 
 #[derive(ShroomPacket, Debug)]
 pub struct PetNameChangedResp {
@@ -21,7 +21,7 @@ pub struct PetNameChangedResp {
     pub name: String,
     pub name_tag: bool,
 }
-packet_opcode!(PetNameChangedResp, SendOpcodes::PetNameChanged);
+packet_with_opcode!(PetNameChangedResp, SendOpcodes::PetNameChanged);
 
 #[derive(ShroomPacket, Debug)]
 pub struct PetExceptionListResp {
@@ -30,7 +30,7 @@ pub struct PetExceptionListResp {
     pub pet_sn: u64,
     pub exception_list: ShroomList8<ItemId>,
 }
-packet_opcode!(PetExceptionListResp, SendOpcodes::PetLoadExceptionList);
+packet_with_opcode!(PetExceptionListResp, SendOpcodes::PetLoadExceptionList);
 
 #[derive(ShroomPacket, Debug)]
 pub struct PetActionResp {
@@ -41,7 +41,7 @@ pub struct PetActionResp {
     pub chat: String,
     pub chat_balloon: bool,
 }
-packet_opcode!(PetActionResp, SendOpcodes::PetAction);
+packet_with_opcode!(PetActionResp, SendOpcodes::PetAction);
 
 shroom_enum_code!(
     PetActivateError,
@@ -68,6 +68,6 @@ pub struct PetActivateResp {
     pub name_tag: bool,
     pub chat_balloon: bool,
 }
-packet_opcode!(PetActivateResp, SendOpcodes::PetActivated);
+packet_with_opcode!(PetActivateResp, SendOpcodes::PetActivated);
 
 

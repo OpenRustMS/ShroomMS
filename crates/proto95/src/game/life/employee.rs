@@ -1,4 +1,4 @@
-use shroom_pkt::{packet_opcode, ShroomPacket, ShroomOption8};
+use shroom_pkt::{packet_with_opcode, ShroomPacket, ShroomOption8};
 
 use crate::{
     game::ObjectId,
@@ -25,7 +25,7 @@ pub struct EmployeeCreateResp {
     // TODO: the u8 is mini room ty
     pub balloon: ShroomOption8<EmployeeMiniRoomBalloon>
 }
-packet_opcode!(EmployeeCreateResp, SendOpcodes::EmployeeEnterField);
+packet_with_opcode!(EmployeeCreateResp, SendOpcodes::EmployeeEnterField);
 
 
 #[derive(ShroomPacket, Debug)]
@@ -34,10 +34,10 @@ pub struct EmployeeMiniRoomBalloonResp {
     // TODO: the u8 is mini room ty
     pub balloon: ShroomOption8<EmployeeMiniRoomBalloon>
 }
-packet_opcode!(EmployeeMiniRoomBalloonResp, SendOpcodes::EmployeeMiniRoomBalloon);
+packet_with_opcode!(EmployeeMiniRoomBalloonResp, SendOpcodes::EmployeeMiniRoomBalloon);
 
 #[derive(ShroomPacket, Debug)]
 pub struct EmployeeRemoveResp {
     pub id: ObjectId,
 }
-packet_opcode!(EmployeeRemoveResp, SendOpcodes::EmployeeLeaveField);
+packet_with_opcode!(EmployeeRemoveResp, SendOpcodes::EmployeeLeaveField);

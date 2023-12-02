@@ -22,7 +22,7 @@ use proto95::{
     },
     id::{item_id::InventoryType, job_id::JobId, FaceId, HairId, ItemId, FieldId, SkillId, Skin},
     shared::{
-        char::{AvatarData, AvatarEquips, CharStat, CharStatPartial, InventorySize, PetIds},
+        char::{AvatarData, AvatarEquips, CharStat, CharStatPartial, InventorySize},
         inventory::InventoryOperation,
         FootholdId, Gender, Vec2,
     },
@@ -506,7 +506,8 @@ impl Character {
 
         let stats = &skill.meta.stats;
 
-        if let Some(_) = skill.meta.summon  {
+        if let Some(ref summon) = skill.meta.summon  {
+            dbg!(&summon);
             self.do_summon = Some(Summon {
                 pos: self.pos,
                 fh: self.fh,

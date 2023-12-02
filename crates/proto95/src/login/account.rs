@@ -1,5 +1,5 @@
 use shroom_pkt::{
-    packet_opcode, CondOption, ShroomOption8, ShroomPacket, ShroomPacketEnum, ShroomTime,
+    packet_with_opcode, CondOption, ShroomOption8, ShroomPacket, ShroomPacketEnum, ShroomTime,
 };
 
 use crate::{
@@ -24,7 +24,7 @@ pub struct CheckPasswordReq {
     pub u2: u8,
     pub partner_code: u32,
 }
-packet_opcode!(CheckPasswordReq, RecvOpcodes::CheckPassword);
+packet_with_opcode!(CheckPasswordReq, RecvOpcodes::CheckPassword);
 
 #[derive(ShroomPacket, Debug)]
 pub struct BlockedIp {
@@ -107,13 +107,13 @@ pub enum CheckPasswordResp {
     TOS(LoginResultHeader) = 23,
     Unknown(LoginResultHeader) = 255,
 }
-packet_opcode!(CheckPasswordResp, SendOpcodes::CheckPasswordResult);
+packet_with_opcode!(CheckPasswordResp, SendOpcodes::CheckPasswordResult);
 
 #[derive(Debug, ShroomPacket)]
 pub struct SetGenderReq {
     pub gender: ShroomOption8<Gender>,
 }
-packet_opcode!(SetGenderReq, RecvOpcodes::SetGender);
+packet_with_opcode!(SetGenderReq, RecvOpcodes::SetGender);
 
 impl SetGenderReq {
     pub fn set(gender: Gender) -> Self {
@@ -134,16 +134,16 @@ pub struct SetGenderResp {
     pub gender: Gender,
     pub success: bool,
 }
-packet_opcode!(SetGenderResp, SendOpcodes::SetAccountResult);
+packet_with_opcode!(SetGenderResp, SendOpcodes::SetAccountResult);
 
 #[derive(ShroomPacket, Debug)]
 pub struct ConfirmEULAReq {
     pub accepted: bool,
 }
-packet_opcode!(ConfirmEULAReq, RecvOpcodes::ConfirmEULA);
+packet_with_opcode!(ConfirmEULAReq, RecvOpcodes::ConfirmEULA);
 
 #[derive(Debug, ShroomPacket)]
 pub struct ConfirmEULAResp {
     pub success: bool,
 }
-packet_opcode!(ConfirmEULAResp, SendOpcodes::ConfirmEULAResult);
+packet_with_opcode!(ConfirmEULAResp, SendOpcodes::ConfirmEULAResult);

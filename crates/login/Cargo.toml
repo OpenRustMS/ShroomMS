@@ -12,6 +12,7 @@ bytes = "1"
 log = "0.4"
 tokio = "1"
 shroom-pkt = "0.1"
+shroom-srv = "0.1"
 shroom-net = "0.4"
 data = { version = "0.1.0", path = "..//data" }
 proto95 = { version = "0.1.0", path = "..//proto95" }

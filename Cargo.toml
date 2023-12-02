@@ -13,16 +13,17 @@ members = [
 
     "crates/proto95",
     "crates/meta",
-    "crates/login",
-    "crates/game",
     "crates/mono",
-    "crates/data",
     "crates/plugins",
     "crates/data/migration",
+    #"crates/game",
+    "crates/login",
+    "crates/data",
 ]
-exclude = ["client/shroom_hook","client/shroom_ffi"]
+exclude = ["client/shroom_hook","client/shroom_ffi", "crates/game"]
 
 # Shroom crates for now
 [patch.crates-io]
-shroom-net = { git = "https://github.com/OpenRustMS/net.git", branch = "jz/tick_feature" }
-shroom-pkt = { git = "https://github.com/OpenRustMS/net.git", branch = "jz/tick_feature" }
+shroom-net = { path = "/home/jonas/Dokumente/projects/shroom-net/crates/shroom-net" }
+shroom-pkt = { path = "/home/jonas/Dokumente/projects/shroom-net/crates/shroom-pkt" }
+shroom-srv = { path = "/home/jonas/Dokumente/projects/shroom-net/crates/shroom-srv" }

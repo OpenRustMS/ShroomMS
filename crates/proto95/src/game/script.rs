@@ -1,5 +1,5 @@
 use shroom_pkt::{
-    mark_shroom_bitflags, packet_opcode, CondOption, PacketWrapped, ShroomList32, ShroomList8,
+    mark_shroom_bitflags, packet_with_opcode, CondOption, PacketWrapped, ShroomList32, ShroomList8,
     ShroomOption8, ShroomPacket, ShroomPacketEnum,
 };
 
@@ -128,7 +128,7 @@ pub struct ScriptMessageResp {
     pub speaker_id: u32,
     pub msg: ScriptMessage,
 }
-packet_opcode!(ScriptMessageResp, SendOpcodes::ScriptMessage);
+packet_with_opcode!(ScriptMessageResp, SendOpcodes::ScriptMessage);
 
 #[derive(Debug)]
 pub struct OptionAnswer(pub Option<bool>);
@@ -141,6 +141,8 @@ impl OptionAnswer {
 
 impl PacketWrapped for OptionAnswer {
     type Inner = u8;
+    type IntoValue<'a> = Self::Inner;  
+    
     fn packet_from(inner: Self::Inner) -> Self {
         Self(match inner {
             0 => Some(false),
@@ -172,4 +174,4 @@ pub enum ScriptAnswerReq {
     InputBoxText(ShroomOption8<String>) = 14,
     InputSliderValue(ShroomOption8<u32>) = 15,
 }
-packet_opcode!(ScriptAnswerReq, RecvOpcodes::UserScriptMessageAnswer);
+packet_with_opcode!(ScriptAnswerReq, RecvOpcodes::UserScriptMessageAnswer);

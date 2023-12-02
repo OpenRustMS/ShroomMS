@@ -8,8 +8,7 @@ use std::net::{Ipv4Addr, SocketAddr};
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use shroom_pkt::{
-    mark_shroom_enum, packet_opcode, string::FixedPacketString, time::DurationMs, PacketWrapped,
-    ShroomPacket,
+    mark_shroom_enum, packet_with_opcode, string::FixedPacketString, PacketWrapped, ShroomPacket,
 };
 
 use crate::{recv_opcodes::RecvOpcodes, send_opcodes::SendOpcodes};
@@ -26,28 +25,28 @@ pub struct ClientDumpLogReq {
     unknown3: u32,
     //TODO: data: ShroomList16<u8>,
 }
-packet_opcode!(ClientDumpLogReq, RecvOpcodes::ClientDumpLog);
+packet_with_opcode!(ClientDumpLogReq, RecvOpcodes::ClientDumpLog);
 
 #[derive(ShroomPacket, Debug)]
 pub struct ExceptionLogReq {
     pub log: String,
 }
-packet_opcode!(ExceptionLogReq, RecvOpcodes::ExceptionLog);
+packet_with_opcode!(ExceptionLogReq, RecvOpcodes::ExceptionLog);
 
 #[derive(ShroomPacket, Debug)]
 pub struct UpdateScreenSettingReq {
     large_screen: bool,
     window_mode: bool,
 }
-packet_opcode!(UpdateScreenSettingReq, RecvOpcodes::UpdateScreenSetting);
+packet_with_opcode!(UpdateScreenSettingReq, RecvOpcodes::UpdateScreenSetting);
 
 #[derive(ShroomPacket, Debug)]
 pub struct PongReq;
-packet_opcode!(PongReq, RecvOpcodes::AliveAck);
+packet_with_opcode!(PongReq, RecvOpcodes::AliveAck);
 
 #[derive(ShroomPacket, Debug, Clone)]
 pub struct PingResp;
-packet_opcode!(PingResp, SendOpcodes::AliveReq);
+packet_with_opcode!(PingResp, SendOpcodes::AliveReq);
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone, TryFromPrimitive, IntoPrimitive, Default)]
 #[repr(u8)]
@@ -129,7 +128,6 @@ pub struct Rect32 {
     pub bottom: i32,
 }
 
-
 #[derive(Debug, Clone)]
 pub struct ServerAddr(pub Ipv4Addr);
 
@@ -155,6 +153,7 @@ impl TryFrom<SocketAddr> for ServerSocketAddr {
 
 impl PacketWrapped for ServerAddr {
     type Inner = [u8; 4];
+    type IntoValue<'a> = Self::Inner;
 
     fn packet_into_inner(&self) -> Self::Inner {
         self.0.octets()
@@ -162,28 +161,5 @@ impl PacketWrapped for ServerAddr {
 
     fn packet_from(v: Self::Inner) -> Self {
         Self(Ipv4Addr::from(v))
-    }
-}
-
-//TODO: should this go into the net crate
-/// This is the the offset from time::getTime
-/// in milliseconds
-/// in_future means the encoded time is behind time::getTime
-#[derive(Debug, Clone)]
-pub struct ShroomTimeOffset(pub DurationMs<i32>);
-
-impl PacketWrapped for ShroomTimeOffset {
-    type Inner = (bool, u32);
-
-    fn packet_into_inner(&self) -> Self::Inner {
-        let v = self.0 .0;
-        (v >= 0, v.unsigned_abs())
-    }
-    fn packet_from(v: Self::Inner) -> Self {
-        if v.0 {
-            Self(DurationMs(-(v.1 as i32)))
-        } else {
-            Self(DurationMs(v.1 as i32))
-        }
     }
 }

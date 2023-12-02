@@ -1,9 +1,10 @@
-use crate::{game::life::mob::MobId, send_opcodes::SendOpcodes, shared::ShroomTimeOffset};
+use crate::{game::life::mob::MobId, send_opcodes::SendOpcodes};
 use shroom_pkt::{
-    packet_opcode,
+    packet_with_opcode,
     partial::{PartialData, PartialFlag},
     partial_data,
     time::DurationMs,
+    time::ShroomTimeOffset,
     CondOption, PacketConditional, ShroomDurationMs16, ShroomDurationMs32, ShroomPacket,
 };
 
@@ -369,8 +370,8 @@ impl CharSecondaryStatFlags {
 }
 
 impl<'de> shroom_pkt::DecodePacket<'de> for LocalSecondaryStatSetResp {
-    fn decode_packet(pr: &mut shroom_pkt::PacketReader<'de>) -> shroom_pkt::PacketResult<Self> {
-        let stats = PartialFlag::<(), CharSecondaryStatPartial>::decode_packet(pr)?;
+    fn decode(pr: &mut shroom_pkt::PacketReader<'de>) -> shroom_pkt::PacketResult<Self> {
+        let stats = PartialFlag::<(), CharSecondaryStatPartial>::decode(pr)?;
         let flags = stats.data.get_flags();
         dbg!(&stats);
         dbg!(&flags);
@@ -379,15 +380,15 @@ impl<'de> shroom_pkt::DecodePacket<'de> for LocalSecondaryStatSetResp {
             stats,
             defense_atk: pr.read_u8()?,
             defense_state: pr.read_u8()?,
-            swallow_buff_time: CondOption::decode_packet_cond(flags.has_swallow_stats(), pr)?,
-            dice_info: CondOption::decode_packet_cond(flags.has_dice(), pr)?,
-            blessing_armor_inc_pad: CondOption::decode_packet_cond(flags.has_blessingarmor(), pr)?,
-            two_states: CharSecondaryTwoStatesPartial::partial_decode_packet(
+            swallow_buff_time: CondOption::decode_cond(flags.has_swallow_stats(), pr)?,
+            dice_info: CondOption::decode_cond(flags.has_dice(), pr)?,
+            blessing_armor_inc_pad: CondOption::decode_cond(flags.has_blessingarmor(), pr)?,
+            two_states: CharSecondaryTwoStatesPartial::partial_decode(
                 CharSecondaryTwoStatesFlags::from_bits_truncate(flags.bits()),
                 pr,
             )?,
-            delay: ShroomDurationMs16::decode_packet(pr)?,
-            movement_affecting: CondOption::decode_packet_cond(flags.is_movement_affecting(), pr)?,
+            delay: ShroomDurationMs16::decode(pr)?,
+            movement_affecting: CondOption::decode_cond(flags.is_movement_affecting(), pr)?,
         })
     }
 }
@@ -395,49 +396,49 @@ impl<'de> shroom_pkt::DecodePacket<'de> for LocalSecondaryStatSetResp {
 impl shroom_pkt::EncodePacket for LocalSecondaryStatSetResp {
     const SIZE_HINT: shroom_pkt::SizeHint = shroom_pkt::SizeHint::NONE;
 
-    fn packet_len(&self) -> usize {
-        self.stats.packet_len()
-            + self.defense_atk.packet_len()
-            + self.defense_state.packet_len()
-            + self.swallow_buff_time.packet_len()
-            + self.dice_info.packet_len()
-            + self.blessing_armor_inc_pad.packet_len()
+    fn encode_len(&self) -> usize {
+        self.stats.encode_len()
+            + self.defense_atk.encode_len()
+            + self.defense_state.encode_len()
+            + self.swallow_buff_time.encode_len()
+            + self.dice_info.encode_len()
+            + self.blessing_armor_inc_pad.encode_len()
             + self
                 .two_states
-                .partial_packet_len(self.stats.data.get_flags().to_two_state_flags())
-            + self.delay.packet_len()
-            + self.movement_affecting.packet_len()
+                .partial_encode_len(self.stats.data.get_flags().to_two_state_flags())
+            + self.delay.encode_len()
+            + self.movement_affecting.encode_len()
     }
 
-    fn encode_packet<T: bytes::BufMut>(
+    fn encode<T: bytes::BufMut>(
         &self,
         pw: &mut shroom_pkt::PacketWriter<T>,
     ) -> shroom_pkt::PacketResult<()> {
-        self.stats.encode_packet(pw)?;
-        self.defense_atk.encode_packet(pw)?;
-        self.defense_state.encode_packet(pw)?;
+        self.stats.encode(pw)?;
+        self.defense_atk.encode(pw)?;
+        self.defense_state.encode(pw)?;
 
         // Check for swallow
-        self.swallow_buff_time.encode_packet(pw)?;
-        self.dice_info.encode_packet(pw)?;
-        self.blessing_armor_inc_pad.encode_packet(pw)?;
+        self.swallow_buff_time.encode(pw)?;
+        self.dice_info.encode(pw)?;
+        self.blessing_armor_inc_pad.encode(pw)?;
         self.two_states
-            .partial_encode_packet(self.stats.data.get_flags().to_two_state_flags(), pw)?;
-        self.delay.encode_packet(pw)?;
-        self.movement_affecting.encode_packet(pw)?;
+            .partial_encode(self.stats.data.get_flags().to_two_state_flags(), pw)?;
+        self.delay.encode(pw)?;
+        self.movement_affecting.encode(pw)?;
 
         Ok(())
     }
 }
 
-packet_opcode!(LocalSecondaryStatSetResp, SendOpcodes::TemporaryStatSet);
+packet_with_opcode!(LocalSecondaryStatSetResp, SendOpcodes::TemporaryStatSet);
 
 #[derive(ShroomPacket)]
 pub struct LocalSecondaryStatResetResp {
     pub flags: CharSecondaryStatFlags,
     pub movement_affecting: bool, // Should be an option
 }
-packet_opcode!(LocalSecondaryStatResetResp, SendOpcodes::TemporaryStatReset);
+packet_with_opcode!(LocalSecondaryStatResetResp, SendOpcodes::TemporaryStatReset);
 
 #[cfg(test)]
 mod tests {
