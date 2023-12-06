@@ -56,6 +56,7 @@ shroom-pkt = "0.1.1"
 shroom-srv = "0.1"
 proto95 = { version = "0.1.0", path = "../../crates/proto95" }
 plugins = { version = "0.1.0", path = "../plugins" }
+clap = { version = "4.4.11", features = ["derive"] }
 
 
 [dependencies.uuid]

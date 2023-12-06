@@ -10,14 +10,12 @@ use meta::MetaService;
 pub use mob::Mob;
 pub use npc::Npc;
 use shroom_pkt::{util::packet_buf::PacketBuf, ShroomPacket};
-use shroom_srv::srv::{room_set::RoomSessionSet, server_room::{RoomHandler, RoomSessionHandler}};
+use shroom_srv::srv::{room_set::RoomSessionSet, server_room::RoomSessionHandler};
 
 use std::{collections::BTreeMap, sync::atomic::AtomicU32};
 
 use proto95::game::ObjectId;
 use std::fmt::Debug;
-
-use crate::services::data::character::CharacterID;
 
 pub fn next_id() -> ObjectId {
     static ID: AtomicU32 = AtomicU32::new(0);

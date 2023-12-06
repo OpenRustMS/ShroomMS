@@ -54,11 +54,13 @@ pub struct LoginService {
     services: services::SharedServices,
     cfg: Arc<LoginConfig>,
     login_state: Box<LoginState>,
+    migrating: bool,
 }
 
 impl LoginService {
     pub fn new(services: services::SharedServices, cfg: Arc<LoginConfig>) -> Self {
         Self {
+            migrating: false,
             services,
             cfg,
             login_state: Box::new(LoginState::new()),
@@ -85,7 +87,11 @@ impl RpcService for LoginService {
     }
 
     async fn finish(self) -> anyhow::Result<()> {
-        tokio::time::sleep(std::time::Duration::from_secs(7)).await;
+        //TODO check migrate
+        if self.migrating {
+            tokio::time::sleep(std::time::Duration::from_secs(7)).await;
+        }
+
         Ok(())
     }
 }
@@ -556,6 +562,7 @@ impl LoginService {
         };
 
         ctx.send(pkt).await?;
+        self.migrating = true;
         Ok(RpcResponse::Migrate)
     }
 }

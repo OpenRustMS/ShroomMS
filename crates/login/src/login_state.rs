@@ -227,7 +227,7 @@ impl LoginState {
         Ok(())
     }
 
-    pub fn get_account_info(&mut self) -> anyhow::Result<AccountInfo> {
+    pub fn get_account_info(&self) -> anyhow::Result<AccountInfo> {
         Ok(self.get_account()?.into())
     }
 }

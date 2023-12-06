@@ -14,7 +14,7 @@ use proto95::{
     },
 };
 use shroom_pkt::ShroomIndexListZ;
-use shroom_srv::srv::{room_set::RoomSessionSet, server_room::{RoomHandler, RoomSessionHandler}};
+use shroom_srv::srv::{room_set::RoomSessionSet, server_room::RoomSessionHandler};
 
 use crate::services::data::character::CharacterID;
 

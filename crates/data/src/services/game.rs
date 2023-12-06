@@ -58,7 +58,7 @@ use super::{
         Drop,
     },
     session::shroom_session_manager::OwnedShroomGameSession,
-    SharedServices,
+    SharedServices, repl::GameRepl,
 };
 
 pub struct GameSession {
@@ -72,11 +72,12 @@ pub struct GameSession {
     pub script_handle: NpcScriptHandle,
     pub field_id: FieldId,
     pub field_meta: FieldMeta,
+    pub repl: GameRepl
 }
 
 pub struct Ctx<'ctx, 'ctxx, 'sck> {
-    sck: &'sck mut ServerSocketHandle,
-    ctx: &'ctx mut RoomCtx<'ctxx, GameSession>,
+    pub sck: &'sck mut ServerSocketHandle,
+    pub ctx: &'ctx mut RoomCtx<'ctxx, GameSession>,
 }
 
 impl<'ctx, 'ctxx, 'sck> Deref for Ctx<'ctx, 'ctxx, 'sck> {
@@ -426,14 +427,24 @@ impl GameSession {
         Ok(())
     }
 
+    pub fn do_field_transfer(&mut self, mut ctx: Ctx, field: FieldId, spawn: u8) -> anyhow::Result<()> {
+        let meta = &self.services.game.meta;
+        ctx.room_sessions.register_transition(self.char_id(), field);
+        self.session.char.transfer_map(field, spawn);
+        self.field_id = field;
+        self.field_meta = meta.get_field_data(field).unwrap();
+        log::info!("Transfering map");
+        Ok(())
+    }
+
     fn handle_field_transfer(
         &mut self,
-        mut ctx: Ctx,
+        ctx: Ctx,
         req: UserTransferFieldReq,
     ) -> anyhow::Result<()> {
         let meta = &self.services.game.meta;
         let field_meta = &self.field_meta;
-        let (map, spawn) = if self.session.char.is_dead() {
+        let (field, spawn) = if self.session.char.is_dead() {
             self.session.char.respawn();
             // TODO the portal is not correct
             meta.get_return_field_spawn(field_meta).unwrap_or_else(|| {
@@ -447,11 +458,7 @@ impl GameSession {
                 .ok_or_else(|| anyhow::format_err!("Invalid portal"))?
         };
 
-        ctx.room_sessions.register_transition(self.char_id(), map);
-        self.session.char.transfer_map(map, spawn);
-        self.field_id = map;
-        self.field_meta = meta.get_field_data(map).unwrap();
-        log::info!("Transfering map");
+        self.do_field_transfer(ctx, field, spawn)?;
         Ok(())
     }
 
@@ -466,17 +473,16 @@ impl GameSession {
         let admin = false;
         if let Some(s) = req.msg.strip_prefix('@') {
             log::info!("repl: {}", s);
-            /*let repl_resp = self.handle_repl(ctx, s).await?;
-            let Some(msg) = repl_resp else { return Ok(()) };
-            let resp = UserChatMsgResp {
+            let _repl_resp = self.handle_repl(ctx, s)?;
+            //let Some(msg) = repl_resp else { return Ok(()) };
+            /*let resp = UserChatMsgResp {
                 char: self.session.char.id as u32,
                 is_admin: admin,
                 msg,
                 only_balloon: false,
             };
 
-            ctx.send(resp).await?;*/
-            todo!("repl")
+            ctx.reply(resp)?;*/
         } else {
             ctx.chat(UserChatMsgResp {
                 char: self.session.char.id as u32,
@@ -608,7 +614,7 @@ impl GameSession {
         } else {
             Either::Right(FieldTransferData {
                 revive: false,
-                map: FieldId::AMHERST,
+                map: self.session.char.map_id,
                 portal: sp,
                 hp: self.session.char.stats.hp.value as u32,
                 chase_target_pos: None.into(),
@@ -645,167 +651,3 @@ impl GameSession {
         Ok(())
     }
 }
-
-/*
-
-async fn init_char(&mut self, ctx: &mut Ctx) -> anyhow::Result<()> {
-        ctx.send(self.set_field(true, 0)).await?;
-
-        ctx.send(FriendResultResp::Reset3(FriendList::empty()))
-            .await?;
-        ctx.send(FuncKeyMapInitResp::default_map()).await?;
-        ctx.send(ClaimSvrStatusChangedResp { connected: true })
-            .await?;
-        ctx.send(CtxSetGenderResp {
-            gender: self.session.char.gender,
-        })
-        .await?;
-
-        ctx.send(BroadcastMessageResp::PinkMessage("Hello".to_string()))
-            .await?;
-
-        self.session.char.unlock_char();
-
-        Ok(())
-    }
-
-    fn set_field(&self, char_data: bool, sp: u8) -> SetFieldResp {
-        let field_data = if char_data {
-            let char = &self.session.char;
-
-            let equipped: ShroomIndexListZ16<Item> = self
-                .session
-                .char
-                .inventory
-                .invs
-                .equipped
-                .item_with_slots()
-                .map(|(slot, item)| (slot as u16, Item::Equip(item.0.item.as_ref().into())))
-                .collect();
-
-            let equip: ShroomIndexListZ16<Item> = self
-                .session
-                .char
-                .inventory
-                .invs
-                .equip
-                .item_with_slots()
-                .map(|(slot, item)| (slot as u16 + 1, Item::Equip(item.item.as_ref().into())))
-                .collect();
-
-            let etc: ShroomIndexListZ8<Item> = self
-                .session
-                .char
-                .inventory
-                .invs
-                .etc
-                .item_with_slots()
-                .map(|(slot, item)| (slot as u8 + 1, Item::Stack(item.into())))
-                .collect();
-
-            let setup: ShroomIndexListZ8<Item> = self
-                .session
-                .char
-                .inventory
-                .invs
-                .misc
-                .item_with_slots()
-                .map(|(slot, item)| (slot as u8 + 1, Item::Stack(item.into())))
-                .collect();
-
-            let cash: ShroomIndexListZ8<Item> = self
-                .session
-                .char
-                .inve.char()ntory
-                .invs
-                .cash
-                .item_with_slots()
-                .map(|(slot, item)| (slot as u8 + 1, Item::Stack(item.into())))
-                .collect();
-
-            let use_: ShroomIndexListZ8<Item> = self
-                .session
-                .char
-                .inventory
-                .invs
-                .use_
-                .item_with_slots()
-                .map(|(slot, item)| (slot as u8 + 1, Item::Stack(item.into())))
-                .collect();
-
-            let char_equipped = CharDataEquipped {
-                equipped,
-                equip,
-                ..Default::default()
-            };
-
-            let skillrecords: ShroomList16<SkillInfo> =
-                self.session.char.skills.get_skill_info().into();
-
-            let char_data = CharDataAll {
-                stat: CharDataStat {
-                    stat: char.get_all_stats(),
-                    friend_max: 30,
-                    linked_character: None.into(),
-                },
-                money: char.money(),
-                invsize: char.get_inv_slots(),
-                equipextslotexpiration: ShroomExpirationTime::never(),
-                equipped: char_equipped,
-                useinv: use_,
-                setupinv: setup,
-                etcinv: etc,
-                cashinv: cash,
-                skillrecords,
-                skllcooltime: ShroomList16::default(),
-                quests: ShroomList16::default(),
-                questscompleted: ShroomList16::default(),
-                minigamerecords: ShroomList16::default(),
-                socialrecords: SocialRecords::default(),
-                teleportrockinfo: TeleportRockInfo::default(),
-                newyearcards: ShroomList16::default(),
-                questrecordsexpired: ShroomList16::default(),
-                questcompleteold: ShroomList16::default(),
-                visitorquestloginfo: ShroomList16::default(),
-            };
-
-            Either::Left(FieldCharData {
-                seed: CrcSeed {
-                    s1: 1,
-                    s2: 2,
-                    s3: 3,
-                },
-                logout_gift_config: LogoutGiftConfig {
-                    predict_quit: 0,
-                    gift_commodity_id: [0; 3],
-                },
-                char_data_hdr: CharDataHeader {
-                    combat_orders: 0,
-                    extra_data: None.into(),
-                },
-                char_data,
-                char_data_flags: CharDataFlags::all(),
-            })
-        } else {
-            Either::Right(FieldTransferData {
-                revive: false,
-                map: self.field.field_id,
-                portal: sp,
-                hp: self.char().stats.hp.value as u32,
-                chase_target_pos: None.into(),
-            })
-        };
-
-        SetFieldResp {
-            client_option: ShroomList16::default(),
-            channel_id: self.channel_id as u32,
-            has_char_data: field_data.is_left(),
-            char_data: field_data.into(),
-            notifications: NotificationList::default(),
-            old_driver_id: 0,
-            unknown_flag_1: 0,
-            server_time: ShroomTime::now(),
-        }
-    }
-
-*/

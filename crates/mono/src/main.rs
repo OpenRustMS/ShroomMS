@@ -1,11 +1,6 @@
-use std::{
-    net::{IpAddr, SocketAddr},
-    path::PathBuf,
-    sync::Arc,
-    time::Duration,
-};
+use std::{net::IpAddr, path::PathBuf, sync::Arc, time::Duration};
 
-use data::services::{server_info::ServerInfo, Services, GameSystem};
+use data::services::{server_info::ServerInfo, GameSystem, Services, SharedServices};
 use dotenv::dotenv;
 use login::LoginService;
 
@@ -13,8 +8,11 @@ use shroom_net::{
     codec::legacy::{handshake_gen::BasicHandshakeGenerator, LegacyCodec},
     crypto::{ig_cipher::IgContext, CryptoContext},
 };
-use shroom_srv::{rpc::RpcListener, srv::server_system::ServerSystem};
-use tokio::net::TcpListener;
+use shroom_srv::{
+    runtime::{RuntimeConfig, RuntimeHandler, ServerRuntime},
+    srv::server_system::ServerSystem,
+};
+use tokio::net::TcpStream;
 
 use crate::config::Environment;
 
@@ -25,20 +23,6 @@ mod config;
     enable_pin: false,
 };*/
 
-/*
-
-
-server_name: settings.server_name.clone(),
-external_ip: server_addr,
-listen_ip: bind_addr,
-login_port: settings.base_port,
-game_ports: (settings.base_port + 1
-    ..=settings.base_port + 1 + (settings.num_channels as u16)),
-tick_duration: Duration::from_millis(50),
-ping_dur: Duration::from_secs(15),
-migration_delay: Duration::from_secs(10),
-msg_cap: 32,*/
-
 pub struct Mono {
     data_dir: PathBuf,
     env: Environment,
@@ -47,98 +31,6 @@ pub struct Mono {
     game_ports: std::ops::RangeInclusive<u16>,
     server_name: String,
 }
-
-/*
-#[async_trait::async_trait]
-impl ShroomServerHandler for Mono {
-    type Codec = LegacyCodec<TcpStream>;
-
-    type GameHandler = GameHandler;
-
-    type LoginHandler = LoginService;
-
-    type Services = Services;
-
-    async fn build_services(
-        &self,
-        ticker: &shroom_net::server::tick::Ticker,
-        cfg: Arc<ShroomRuntimeConfig>,
-    ) -> anyhow::Result<Self::Services> {
-        let meta = Box::new(meta::MetaService::load_from_dir(
-            self.data_dir.join("game_data/rbin"),
-            meta::MetaOption::Full
-        )?);
-        log::info!("Loaded meta data");
-
-        let static_meta = Box::leak(meta);
-        let tick = ticker.get_tick();
-
-        let servers = [ServerInfo::new(
-            cfg.external_ip,
-            cfg.login_port,
-            cfg.server_name.clone(),
-            cfg.game_ports.clone().count(),
-        )];
-
-        let services = match self.env {
-            Environment::Local => {
-                data::services::Services::seeded_in_memory(servers, tick, static_meta).await?
-            }
-            _ => {
-                // Wait for db to start
-                tokio::time::sleep(Duration::from_secs(5)).await;
-                let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL not set");
-                log::info!("db url: {db_url}");
-                data::services::Services::seeded_in_db(servers, tick, static_meta, &db_url).await?
-            }
-        };
-        match self.env {
-            Environment::Local => {
-                let (acc_id, char_id) = services.seed_acc_char().await?;
-                log::info!("Created test account {acc_id} - char: {char_id}");
-            }
-            _ => {
-                let (acc_id, char_id) = services.seed_acc_char().await?;
-                log::info!("Created test account {acc_id} - char: {char_id}");
-            }
-        }
-
-        Ok(services)
-    }
-
-    fn make_login_handler(
-        &self,
-        services: Arc<Self::Services>,
-        _tick: Tick,
-    ) -> anyhow::Result<
-        <Self::LoginHandler as shroom_net::server::server_conn::ShroomConnHandler>::MakeState,
-    > {
-        Ok(LoginMakeState {
-            services,
-            cfg: Arc::new(LOGIN_CFG.clone()),
-        })
-    }
-
-    fn make_game_handler(
-        &self,
-        services: Arc<Self::Services>,
-        _tick: Tick,
-        channel_id: usize,
-    ) -> anyhow::Result<
-        <Self::GameHandler as shroom_net::server::server_conn::ShroomConnHandler>::MakeState,
-    > {
-        Ok(MakeGameHandler::new(services, channel_id as u16, 0))
-    }
-}
-
-async fn srv_tuf(addr: impl Into<SocketAddr>, tuf_repo: impl Into<PathBuf>) -> anyhow::Result<()> {
-    let p = tuf_repo.into();
-    let metadata = warp::path("metadata").and(warp::fs::dir(p.join("metadata")));
-    let targets = warp::path("targets").and(warp::fs::dir(p.join("targets")));
-    warp::serve(metadata.or(targets)).run(addr).await;
-
-    Ok(())
-}*/
 
 impl Mono {
     async fn build_services(&self) -> anyhow::Result<Services> {
@@ -182,6 +74,15 @@ impl Mono {
 
         Ok(services)
     }
+}
+
+pub struct MonoRuntime {}
+
+impl RuntimeHandler for MonoRuntime {
+    type Ctx = SharedServices;
+    type Codec = LegacyCodec<TcpStream>;
+    type LoginService = LoginService;
+    type System = GameSystem;
 }
 
 #[tokio::main]
@@ -235,45 +136,26 @@ async fn main() -> anyhow::Result<()> {
         server_name: settings.server_name.clone(),
     };
     let services = mono.build_services().await?.as_shared();
-    let mut login = RpcListener::<LoginService>::new(
-        LegacyCodec::new(crypto_ctx.clone(), handshake_gen.clone()),
-        services.clone(),
-    );
-    let login_port = mono.login_port;
+    let cfg = RuntimeConfig {
+        bind_addr: bind_addr,
+        login_port: 8484,
+        game_ports: 8485..=8486,
+    };
+    let cdc = LegacyCodec::new(crypto_ctx.clone(), handshake_gen.clone());
+
+    let svc = services.clone();
+
     tokio::spawn(async move {
-        if let Err(err) = login
-            .run_tcp(SocketAddr::new(
-                bind_addr,
-                login_port,
-            ))
-            .await
-        {
-            log::error!("Login server error: {:?}", err);
+        loop {
+            svc.session_manager.clean().await.expect("Clean");
+            tokio::time::sleep(Duration::from_secs(15)).await;
         }
     });
 
-    let mut sys = ServerSystem::new(GameSystem {
-        services
-    });
-
-    let acceptor = sys.create_acceptor(LegacyCodec::new(crypto_ctx.clone(), handshake_gen.clone()))?;
-
-    let game_listener = TcpListener::bind(SocketAddr::new(
-        bind_addr,
-        login_port + 1,
-    )).await?;
-
-
-    tokio::spawn(async move {
-        if let Err(err) = acceptor
-            .run_tcp(game_listener)
-            .await
-        {
-            log::error!("Game server error: {:?}", err);
-        }
-    });
-
-    sys.run().await?;
+    let svc = services.clone();
+    let sys = ServerSystem::new(GameSystem { services });
+    let runtime = ServerRuntime::<MonoRuntime>::new(cfg, sys, cdc, svc);
+    runtime.run().await?;
     /*
 
     let mut runtime = ShroomServerRuntime::create(

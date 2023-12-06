@@ -10,7 +10,7 @@ use proto95::{
         },
         ObjectId,
     },
-    id::ItemId,
+    id::{ItemId, FieldId},
     shared::{
         char::{AvatarData, Money},
         movement::MovePath,
@@ -60,6 +60,7 @@ pub struct SharedFieldState {
 
 #[derive(Debug)]
 pub struct FieldHandler {
+    field_id: FieldId,
     shared: Arc<SharedFieldState>,
     drop_pool: SimplePool<Drop>,
     mob_pool: MobPool,
@@ -75,18 +76,23 @@ pub struct FieldHandler {
 impl RoomHandler for FieldHandler {
     type Ctx = GameCtx;
     type SessionHandler = GameSession;
+    type RoomId = FieldId;
+
+    fn room_id(&self) -> Self::RoomId {
+        self.field_id
+    }
 
     fn on_enter(
         &mut self,
-        ctx: &mut Self::Ctx,
-        session: &mut ServerSessionData<Self::SessionHandler>,
+        _ctx: &mut Self::Ctx,
+        _session: &mut ServerSessionData<Self::SessionHandler>,
     ) -> anyhow::Result<()> {
         log::info!("Session entering field");
         Ok(())
     }
     fn on_leave(
-        ctx: &mut RoomCtx<'_, Self::SessionHandler>,
-        id: <Self::SessionHandler as RoomSessionHandler>::SessionId,
+        _ctx: &mut RoomCtx<'_, Self::SessionHandler>,
+        _id: <Self::SessionHandler as RoomSessionHandler>::SessionId,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -339,7 +345,7 @@ pub trait FieldRoomCtxExt {
         ctx.room.mob_pool.on_enter(&mut buf)?;
         ctx.room.reactor_pool.on_enter(&mut buf)?;
         log::info!("sending enter field pkt: {}", buf.packets().count());
-        sck.send_buf(buf);
+        sck.send_buf(buf)?;
 
         log::info!("Char entering field3");
 
@@ -397,6 +403,7 @@ impl FieldHandler {
         });
 
         Self {
+            field_id: shared.field_meta.id,
             shared,
             drop_pool: SimplePool::new(meta_svc),
             mob_pool: MobPool::from_spawns(meta_svc, mobs),

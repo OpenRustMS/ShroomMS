@@ -6,6 +6,7 @@ pub mod helper;
 pub mod item;
 pub mod server_info;
 pub mod session;
+pub mod repl;
 
 use std::{sync::Arc, time::Duration};
 
@@ -20,7 +21,7 @@ use server_info::{ServerInfo, ServerService};
 use shroom_pkt::{util::packet_buf::PacketBuf, ShroomPacket, ShroomPacketBytes};
 use shroom_srv::{
     srv::{
-        server_socket::ServerSocketHandle, server_system::{SystemHandler, ServerSystemTx},
+        server_socket::ServerSocketHandle, server_system::{SystemHandler, ServerSystemTx}, server_room::RoomContext,
     },
     util::clock::GameClockRef,
     Context,
@@ -30,7 +31,7 @@ use crate::{
     entities::sea_orm_active_enums::GenderTy,
     services::{
         game::GameSession,
-        session::{shroom_session_backend::ShroomSessionData, ShroomMigrationKey},
+        session::{shroom_session_backend::ShroomSessionData, ShroomMigrationKey}, repl::GameRepl,
     },
 };
 
@@ -103,7 +104,8 @@ impl SystemHandler for GameSystem {
             client_key: req.client_key,
             script_handle: NpcScriptHandle::default(),
             field_id,
-            field_meta: ctx.services.game.meta.get_field_data(field_id).unwrap()
+            field_meta: ctx.services.game.meta.get_field_data(field_id).unwrap(),
+            repl: GameRepl::new()
         };
         Ok(sess)
     }
@@ -158,6 +160,15 @@ pub struct GameCtx {
     pub services: Arc<Services>,
     pub clock: GameClockRef,
     pub tx: ServerSystemTx<GameSystem>
+}
+
+impl RoomContext for GameCtx {
+    type RoomId = FieldId;
+
+    fn send_shutdown_req(&mut self, room_id: Self::RoomId) -> anyhow::Result<()> {
+        self.tx.send(shroom_srv::srv::server_system::SystemMsg::ShutdownRoom(room_id))?;
+        Ok(())
+    }
 }
 
 impl Context for GameCtx {
